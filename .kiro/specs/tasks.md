@@ -18,15 +18,15 @@
 ### TASK-01: Project Setup & Infrastructure
 
 #### TASK-01.1: Inisialisasi Repository & Docker
-- [ ] Buat `docker-compose.yml` dengan services: postgres, pgbouncer, backend, frontend, n8n, nginx
-- [ ] Buat `nginx.conf` — reverse proxy `/api/*` ke FastAPI, `/*` ke Next.js, block akses `/internal/*` dari luar
-- [ ] Buat `.env.example` dengan semua variabel yang dibutuhkan (tanpa nilai sensitif)
-- [ ] Setup `.gitignore` yang benar (exclude `.env`, `__pycache__`, `.next`, `node_modules`, dll)
-- [ ] Verifikasi seluruh service bisa jalan dengan `docker-compose up`
+- [x] Buat `docker-compose.yml` dengan services: postgres, pgbouncer, backend, frontend, n8n, nginx
+- [x] Buat `nginx.conf` — reverse proxy `/api/*` ke FastAPI, `/*` ke Next.js, block akses `/internal/*` dari luar
+- [x] Buat `.env.example` dengan semua variabel yang dibutuhkan (tanpa nilai sensitif)
+- [x] Setup `.gitignore` yang benar (exclude `.env`, `__pycache__`, `.next`, `node_modules`, dll)
+- [-] Verifikasi seluruh service bisa jalan dengan `docker-compose up`
 
 #### TASK-01.2: Backend Setup (FastAPI)
-- [ ] Inisialisasi project FastAPI dengan `uv` atau `pip` + `requirements.txt`
-- [ ] Setup SQLAlchemy + Alembic untuk ORM & migrations
+- [x] Inisialisasi project FastAPI dengan `uv` atau `pip` + `requirements.txt`
+- [x] Setup SQLAlchemy + Alembic untuk ORM & migrations
 - [ ] Konfigurasi `app/core/config.py` — baca semua settings dari environment variables (Pydantic BaseSettings)
 - [ ] Setup database connection pool di `app/db/database.py`
 - [ ] Setup struktur folder sesuai design: `routers/`, `services/`, `models/`, `schemas/`, `core/`

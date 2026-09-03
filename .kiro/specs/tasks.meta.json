@@ -1,0 +1,24 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "Buat `nginx.conf` — reverse proxy `/api/*` ke FastAPI, `/*` ke Next.js, block akses `/internal/*` dari luar": [
+      {
+        "executionId": "460ef447-78c6-4742-8cdd-dd14e1c19f37",
+        "chatSessionId": "sess_43051298-250c-442e-8f6f-e6ed7623c7fd",
+        "timestamp": 1788409071063
+      },
+      {
+        "executionId": "460ef447-78c6-4742-8cdd-dd14e1c19f37",
+        "chatSessionId": "sess_43051298-250c-442e-8f6f-e6ed7623c7fd",
+        "timestamp": 1788409122449
+      }
+    ],
+    "Verifikasi seluruh service bisa jalan dengan `docker-compose up`": [
+      {
+        "executionId": "4ddcbfd8-d622-4477-8e8d-4ccd9798d39c",
+        "chatSessionId": "sess_d83b9e8e-5ee5-42e7-b19b-c300994c9e1a",
+        "timestamp": 1788409629447
+      }
+    ]
+  }
+}

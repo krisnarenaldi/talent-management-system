@@ -1,8 +1,10 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parents[3]
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 
     # App
     ENVIRONMENT: str = "development"
@@ -11,14 +13,16 @@ class Settings(BaseSettings):
     # Database
     POSTGRES_HOST: str = "pgbouncer"
     POSTGRES_PORT: int = 6432
-    POSTGRES_DB: str = "tms_db"
-    POSTGRES_USER: str = "tms_user"
+    POSTGRES_DB: str = "db_talent"
+    POSTGRES_USER: str = "talent26"
     POSTGRES_PASSWORD: str
 
     @property
     def DATABASE_URL(self) -> str:
+        from urllib.parse import quote_plus
+        encoded_password = quote_plus(self.POSTGRES_PASSWORD)
         return (
-            f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"postgresql+psycopg2://{self.POSTGRES_USER}:{encoded_password}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 

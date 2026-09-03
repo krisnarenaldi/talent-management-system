@@ -30,8 +30,8 @@ pdfplumber==0.11.4
 openpyxl==3.1.5
 
 # LLM (Fase 3)
-anthropic==0.34.2
-# openai==1.51.0
+# anthropic==0.34.2
+openai==1.51.0
 
 # Utilities
 python-dotenv==1.0.1

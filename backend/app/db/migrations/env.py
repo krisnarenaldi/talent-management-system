@@ -7,26 +7,21 @@ from sqlalchemy import engine_from_config, pool
 # Import semua model agar autogenerate bisa mendeteksi perubahan tabel
 from app.db.database import Base
 import app.models  # noqa: F401 — trigger import semua model
-
+from app.core.config import settings
 config = context.config
 
-# Baca URL dari environment (override alembic.ini)
-db_url = (
-    f"postgresql+psycopg2://"
-    f"{os.environ['POSTGRES_USER']}:{os.environ['POSTGRES_PASSWORD']}"
-    f"@{os.environ['POSTGRES_HOST']}:{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_DB']}"
-)
-config.set_main_option("sqlalchemy.url", db_url)
+# Escape % in the URL because Alembic's configparser treats % as interpolation
+alembic_db_url = settings.DATABASE_URL.replace("%", "%%")
+config.set_main_option("sqlalchemy.url", alembic_db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 
-
 def run_migrations_offline():
     context.configure(
-        url=db_url,
+        url=settings.DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

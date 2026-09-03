@@ -1,41 +1,100 @@
+# ============================================================
 # Environment files
+# ============================================================
 .env
 .env.local
 .env.*.local
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.production
 
-# Node / Next.js
-node_modules/
-.next/
-out/
-frontend/.next/
-frontend/node_modules/
-
+# ============================================================
 # Python / FastAPI
+# ============================================================
 __pycache__/
-*.pyc
-*.pyo
+**/__pycache__/
+*.py[cod]
+*.pyd
 .venv/
 venv/
 backend/.venv/
 *.egg-info/
+pip-wheel-metadata/
 dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 .pytest_cache/
+*.db
 
-# Database
-*.sql.gz
+# Note: uv.lock should be committed (like package-lock.json for uv)
 
-# OS
-.DS_Store
-Thumbs.db
+# ============================================================
+# Node / Next.js
+# ============================================================
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+frontend/out/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+.npm
+.yarn/
 
-# IDE
-.vscode/
-.idea/
-*.swp
+# Note: yarn.lock and package-lock.json should be committed
 
+# ============================================================
+# Docker
+# ============================================================
+.docker/
+docker-compose.override.yml
+
+# ============================================================
+# Uploads / Temp files
+# ============================================================
+uploads/
+tmp/
+temp/
+*.tmp
+
+# ============================================================
+# Secrets / Keys / Certificates
+# ============================================================
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# ============================================================
 # Logs
+# ============================================================
 *.log
 logs/
 
-# Docker
-.docker/
+# ============================================================
+# Database
+# ============================================================
+*.sql.gz
+
+# ============================================================
+# OS
+# ============================================================
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# ============================================================
+# IDE / Editor
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
