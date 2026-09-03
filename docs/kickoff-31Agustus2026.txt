@@ -1,0 +1,132 @@
+Business objective: 
+  - bangun database kandidat
+  - mempermudah pencarian kandidat
+  - membuat standar cv untuk dikirim ke client
+  - Mengurangi pekerjaan manual HR
+  - Mempercepat proses screening CV
+  - Meningkatkan kualitas kandidat yang dikirim ke client
+  - tracking proses interview
+  - membantu monitoring karyawan outsource di tempat client
+
+
+Data yang ingin disimpan
+ 
+- Tanggal interview hr, tanggal cv diajukan ke pm, tanggal interview user, tanggal psikotest, tanggal offering, tanggal sign contract.
+- Recruiter yang memproses
+- Nama kandidat
+- Nomor telepon
+- Email
+- Posisi yang dilamar
+- Sumber kandidat didapat dari mana? Linkedin, glints, email
+- CV kandidat
+- Pengalaman bekerja
+- Pendidikan (kuliah Dimana, tahun berapa, jurusan apa, ipk berapa)
+- Domisili
+- Current Salary dan expectation salary
+- Notice periode
+- Sertifikat/dokumen pendukung
+- Foto kandidat
+- Riwayat proses rekrutmen
+- Catatan Recruiter
+- Status kandidat (sudah di tahap apa)
+- Berapa lama kontrak
+- KTP, KK, Ijazah, Transkrip
+
+ada field upload kelengkapan dokumen: ktp, ijazah, sertifikat, foto, surat ketarangan lolos bi checking (jika bisa) -> di link EDIT
+ada notifikasi / status / flag jika ada kelengkapan dokumen belum lengkap. (optional)
+ada notifikasi / status / flag jika email / nomor tidak bisa dihubungi
+
+
+Monitoring tahapan rekrutmen
+
+Memonitor status kandidat pada setiap tahapan rekrutmen
+
+- Sedang dijadwalkan interview
+- Konfirmasi kehadiran/interview    
+   => ada status konfirmasi OK atau reschedule (ada form tanggal)
+- Interview HR/Recruiter
+   => jika sudah interview: ada form untuk input gaji saat ini dan gaji diharapkan dan notes (teks bebas) dan radio button: lanjut , not recommended
+- Psikotest (tanggal kapan psikotest)
+   setelah selesai ada status radio button: lolos / tidak lolos
+- Interview oleh User
+- Offering
+   => ada radio button: lolos kontrak / negosiasi, jika status = negosiasi ada radio button: OK/not OK
+- Tanda tangan kontrak –> pada tanggal berapa.
+- Onboarding -> pada tanggal berapa.
+- Existing (sudah jadi karyawan; on going?)
+
+
+Blacklist Candidate
+
+Menampilkan kandidate yang tidak dapat diproses kembali.
+- Status blacklist (ini apa saja ya statusnya?)
+- Alasan blacklist
+- Catatan Recruiter/hr/pm
+- Tanggal blacklist
+- PIC yang memberikan status blacklist
+Apabila kandidat yang sama kembali masuk ke database, sistem diharapkan dapat memberikan
+notifikasi/peringatan bahwa kandidat memiliki status blacklist.
+
+
+ Export dan Kelengkapan Data Kandidat
+
+ Fitur bisa:
+
+    - Export database kandidat ke Excel
+    - Download data kandidat berdasarkan kebutuhan tertentu
+    - Mengetahui data kandidat yang belum lengkap
+    - Melakukan upload dokumen secara manual apabila diperlukan
+Contoh dokumen yang dapat di-upload:
+- Sertifikat
+- CV terbaru
+- Foto
+- Dokumen pendukung lainnya
+
+Sistem diharapkan dapat memberikan indikator kelengkapan data kandidat, sehingga Recruiter dapat
+mengetahui data mana yang masih perlu dilengkapi.
+
+Otomatisasi Pengolahan Foto dan CV
+
+ 1. ambil foto (jika ada) di Cv (pdf) ketika proses ekstrak pdf (oleh pymupdf)
+ 2. apakah bisa mengenali format pdf yang berbeda-beda untuk ambil nama, PII, pendidikan, skill, dll
+ 3. membuat standar cv dengan tidak menyertakan PII (email , no HP, dll)
+ 4. Menyesuaikan layout secara otomatis, akan dilampirkan template standar cv dari client
+ 5. apabila tidak ada foto, layout bisa sesuai
+
+
+AI untuk Screening dan Optimasi CV
+AI diharapkan dapat membantu:
+- Membaca dan memahami CV kandidat
+- Mengidentifikasi pengalaman kerja dan kompetensi kandidat
+- Mencocokkan profil kandidat dengan requirement posisi
+- Memberikan rekomendasi kandidat yang paling sesuai
+- Memberikan scoring/ranking kandidat berdasarkan requirement
+- Membantu mengidentifikasi kandidat yang memiliki potensi paling besar untuk dilanjutkan ke User
+
+buat dashboard analytic kecil-kecilan
+Apakah sistem dapat melakukan tracking dan analisis CV, sehingga dapat diketahui karakteristik
+CV/kandidat yang memiliki kemungkinan lebih besar untuk lolos ke tahap User?
+Contohnya, sistem dapat membantu melihat pola berdasarkan histori rekrutmen sebelumnya, seperti:
+- Kandidat yang lolos User
+- Kandidat yang ditolak User
+- Posisi yang dilamar
+- Pengalaman/kompetensi kandidat
+- Format/isi CV
+
+
+Pengisian dan Editing CV oleh AI
+Pada template CV Altek terdapat kolom "Project". Namun, CV pribadi kandidat terkadang tidak
+mencantumkan project yang pernah dikerjakan.
+Diperlukan fitur yang memungkinkan:
+- AI membaca pengalaman kerja kandidat
+- AI mengidentifikasi kemungkinan project yang pernah dikerjakan berdasarkan pengalaman
+tersebut
+- AI memberikan draft/summary project
+- Recruiter dapat melakukan edit atau input manual
+- Recruiter dapat menyetujui hasil AI sebelum dimasukkan ke CV final
+
+
+Others:
+
+kalau ada orang submit cv > 1 kali, cek email dan no hp, jika hp berubah, buat new row
+ketika generate cv standard, ada optional summary bisa dibuat oleh HR atau AI (dengan pilihan bahasa)
