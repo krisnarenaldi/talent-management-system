@@ -54,9 +54,6 @@ services:
       - pgbouncer
     networks:
       - tms_internal
-    volumes:
-      # Hanya untuk development (hot reload). Hapus di production.
-      - ./backend:/app
     # Port tidak diekspos langsung — diakses via Nginx
 
   # ── Next.js (Frontend) ──────────────────────────────────────
