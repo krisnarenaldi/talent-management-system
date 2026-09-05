@@ -4,9 +4,59 @@
 export type UserRole = "admin" | "hr" | "manager";
 
 export interface AuthUser {
+  id?: string;
   name: string;
   email: string;
   role: UserRole;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Client ---
+export interface Client {
+  id: string;
+  name: string;
+  industry: string | null;
+  pic_name: string | null;
+  pic_contact: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Position ---
+export interface Position {
+  id: string;
+  client_id: string;
+  client_name: string;
+  title: string;
+  requirement: string | null;
+  employment_type: string | null;
+  contract_duration_months: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Master data ---
+export interface BlacklistStatusType {
+  id: string;
+  label: string;
+  is_active: boolean;
+}
+
+export interface AgreementType {
+  id: string;
+  label: string;
+  is_active: boolean;
 }
 
 // --- Candidate ---

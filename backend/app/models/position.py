@@ -21,3 +21,7 @@ class Position(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     client = relationship("Client", backref="positions")
+
+    @property
+    def client_name(self) -> str | None:
+        return self.client.name if self.client else None

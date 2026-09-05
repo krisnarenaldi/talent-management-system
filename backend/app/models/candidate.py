@@ -33,6 +33,7 @@ class Candidate(Base):
         default="aktif",
     )
     possible_duplicate = Column(Boolean, default=False, nullable=False)
+    is_deleted = Column(Boolean, default=False, nullable=False)
     notes = Column(Text)                                 # Catatan bebas recruiter
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

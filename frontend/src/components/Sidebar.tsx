@@ -3,29 +3,43 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useAuthStore } from "@/stores/auth.store";
 
-const NAV_ITEMS = [
+const SIDEBAR_NAV_ITEMS = [
   { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
   { href: "/candidates", icon: "group", label: "Candidates" },
-  { href: "/applications", icon: "work", label: "Jobs" },
-  { href: "/interviews", icon: "calendar_today", label: "Interviews" },
-  { href: "/analytics", icon: "bar_chart", label: "Reports" },
+  { href: "/applications", icon: "work", label: "Applications" },
+  { href: "/employees", icon: "people", label: "Employees" },
+  { href: "/blacklist", icon: "box", label: "Blacklist" },
+  { href: "/analytics", icon: "bar_chart", label: "Reports" },  
+  { href: "/search", icon: "search", label: "Search" },  
+
 ] as const;
 
-const BOTTOM_ITEMS = [
+const SIDEBAR_ADMIN_ITEMS = [  
+  { href: "/admin/clients", icon: "people", label: "Clients" },
+  { href: "/admin/positions", icon: "work", label: "Positions" },
+  { href: "/admin/blacklist-status-types", icon: "gavel", label: "Blacklist Statuses" },
+  { href: "/admin/agreement-types", icon: "description", label: "Agreement Types" },
+  { href: "/admin/users", icon: "manage_accounts", label: "Users" },
+] as const;
+
+const SIDEBAR_BOTTOM_ITEMS = [
   { href: "/settings", icon: "settings", label: "Settings" },
 ] as const;
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const isRole = useAuthStore((state) => state.isRole);
 
   const handleLogout = async () => {
     try {
       await api.post("/api/v1/auth/logout");
     } catch {
-      // ignore
+      // Backend tidak tersedia — tetap clear local state & redirect
     } finally {
+      useAuthStore.getState().logout();
       router.push("/login");
     }
   };
@@ -52,7 +66,7 @@ export default function Sidebar() {
 
       {/* Main nav */}
       <div className="flex-1 overflow-y-auto space-y-1">
-        {NAV_ITEMS.map((item) => {
+        {SIDEBAR_NAV_ITEMS.map((item) => {
           const active = isActive(item.href);
           return (
             <Link
@@ -70,8 +84,33 @@ export default function Sidebar() {
           );
         })}
 
+        {isRole("admin") && (
+          <div className="pt-2 mt-2 border-t border-outline-variant space-y-1">
+            <p className="px-3 text-label-xs text-on-surface-variant/50 uppercase tracking-wider">
+              Admin
+            </p>
+            {SIDEBAR_ADMIN_ITEMS.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
+                    active
+                      ? "bg-secondary-container text-on-secondary-container font-semibold"
+                      : "text-on-surface-variant hover:bg-surface-container-highest"
+                  }`}
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
         <div className="pt-2 mt-2 border-t border-outline-variant space-y-1">
-          {BOTTOM_ITEMS.map((item) => {
+          {SIDEBAR_BOTTOM_ITEMS.map((item) => {
             const active = isActive(item.href);
             return (
               <Link
@@ -101,7 +140,7 @@ export default function Sidebar() {
           Add Candidate
         </Link>
 
-        {/* Logout */}
+        {/* Logout 
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all duration-200 text-body-md"
@@ -109,6 +148,7 @@ export default function Sidebar() {
           <span className="material-symbols-outlined">logout</span>
           <span>Logout</span>
         </button>
+        */}
       </div>
     </nav>
   );

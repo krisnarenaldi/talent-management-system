@@ -17,5 +17,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(Enum(*USER_ROLES, name="user_role_enum"), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    reset_token = Column(String(255), nullable=True, index=True)
+    reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

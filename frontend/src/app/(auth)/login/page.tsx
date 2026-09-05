@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
+import { useAuthStore } from "@/stores/auth.store";
 
 const loginSchema = z.object({
   email: z.string().email("Email tidak valid"),
@@ -18,6 +19,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/dashboard";
+  const setUser = useAuthStore((state) => state.setUser);
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,12 @@ function LoginForm() {
     setLoading(true);
     setError(null);
     try {
-      await api.post("/api/v1/auth/login", data);
+      const response = await api.post("/api/v1/auth/login", data);
+      setUser({
+        name: response.data.name,
+        email: response.data.email,
+        role: response.data.role,
+      });
       setSuccess(true);
       setTimeout(() => {
         router.push(redirectTo);
@@ -148,7 +155,7 @@ function LoginForm() {
                     Kata Sandi / Password
                   </label>
                   <a
-                    href="#"
+                    href="/forgot-password"
                     className="text-body-sm text-primary hover:text-primary-container hover:underline font-medium"
                   >
                     Lupa kata sandi?

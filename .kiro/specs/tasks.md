@@ -34,24 +34,25 @@
 - [ ] Buat health check endpoint `GET /health`
 
 #### TASK-01.3: Frontend Setup (Next.js)
-- [ ] Inisialisasi project Next.js dengan TypeScript + Tailwind CSS + App Router
-- [ ] Install dependencies: `@tanstack/react-query`, `zustand`, `react-hook-form`, `zod`, `axios`
-- [ ] Setup folder struktur sesuai design: `app/`, `components/`, `lib/`, `hooks/`, `stores/`, `types/`
-- [ ] Konfigurasi `lib/api.ts` — axios instance dengan base URL ke FastAPI, interceptor untuk auto-refresh token
-- [ ] Buat layout dasar dengan sidebar navigasi (responsif, mobile-friendly)
-- [ ] Setup font & warna brand di `tailwind.config.ts`
+- [x] Inisialisasi project Next.js dengan TypeScript + Tailwind CSS + App Router
+- [x] Install dependencies: `@tanstack/react-query`, `zustand`, `react-hook-form`, `zod`, `axios` (fix: update `next` dari `15.0.3` → `^15.2.0` + `eslint-config-next` → `^15.2.0` agar kompatibel dengan React 19)
+- [x] Setup folder struktur sesuai design: `app/`, `components/`, `lib/`, `hooks/`, `stores/`, `types/`
+- [x] Konfigurasi `lib/api.ts` — axios instance dengan base URL ke FastAPI, interceptor untuk auto-refresh token (fix: skip refresh logic untuk endpoint auth agar error message login tidak hilang)
+- [x] Buat layout dasar dengan sidebar navigasi (responsif, mobile-friendly)
+- [x] Setup font & warna brand di `tailwind.config.ts`
+- [x] Fix: buat `postcss.config.js` (wajib untuk Tailwind CSS via PostCSS), buat `.env.local` untuk dev proxy, buat `src/app/page.tsx` redirect `/` → `/dashboard`, update middleware redirect `/` → `/dashboard` ketika terautentikasi, migrasi font Inter ke `next/font/google` untuk hindari hydration mismatch
 
 #### TASK-01.4: Database Migrations (Fase 1 Tables)
-- [ ] Buat migration: tabel `user`
-- [ ] Buat migration: tabel `client`
-- [ ] Buat migration: tabel `position`
-- [ ] Buat migration: tabel `candidate`, `candidate_education`, `candidate_experience`, `candidate_document`
-- [ ] Buat migration: tabel `application`, `stage_history`
-- [ ] Buat migration: tabel `blacklist`, `blacklist_status_type`
-- [ ] Buat migration: tabel `employee`, `employee_contract`, `agreement_type`, `employee_document`
-- [ ] Buat migration: tabel `employee_payroll` *(Fase 1 — FR-11, dipakai oleh TASK-08.1)*
-- [ ] Buat seed data: 5 status blacklist default, beberapa agreement type default (PKWT, PKWTT, PPJP)
-- [ ] Buat seed data: 1 user Admin awal untuk bootstrap sistem
+- [x] Buat migration: tabel `user`
+- [x] Buat migration: tabel `client`
+- [x] Buat migration: tabel `position`
+- [x] Buat migration: tabel `candidate`, `candidate_education`, `candidate_experience`, `candidate_document`
+- [x] Buat migration: tabel `application`, `stage_history`
+- [x] Buat migration: tabel `blacklist`, `blacklist_status_type`
+- [x] Buat migration: tabel `employee`, `employee_contract`, `agreement_type`, `employee_document`
+- [x] Buat migration: tabel `employee_payroll` *(Fase 1 — FR-11, dipakai oleh TASK-08.1)*
+- [x] Buat seed data: 5 status blacklist default, beberapa agreement type default (PKWT, PKWTT, PPJP)
+- [x] Buat seed data: 1 user Admin awal untuk bootstrap sistem
 
 > **Catatan tabel yang TIDAK masuk Fase 1:**
 > - `ai_screening_result` → Fase 3 (TASK-11/12, fitur AI screening)
@@ -62,73 +63,73 @@
 ### TASK-02: Autentikasi & User Management (FR-01, FR-02 sebagian)
 
 #### TASK-02.1: Backend Auth
-- [ ] Implementasi `POST /api/v1/auth/login` — validasi email/password, return JWT (access + refresh) sebagai httpOnly cookie
-- [ ] Implementasi `POST /api/v1/auth/logout` — clear cookie
-- [ ] Implementasi `POST /api/v1/auth/refresh` — rotate refresh token, issue access token baru
-- [ ] Buat `core/security.py`: fungsi hash password (bcrypt), verify password, create/decode JWT
-- [ ] Buat `core/dependencies.py`: `get_current_user()`, `require_role()` FastAPI dependencies
-- [ ] RBAC middleware — setiap router mendefinisikan role yang diizinkan
+- [x] Implementasi `POST /api/v1/auth/login` — validasi email/password, return JWT (access + refresh) sebagai httpOnly cookie
+- [x] Implementasi `POST /api/v1/auth/logout` — clear cookie + revoke refresh token di DB
+- [x] Implementasi `POST /api/v1/auth/refresh` — rotate refresh token, issue access token baru
+- [x] Buat `core/security.py`: fungsi hash password (bcrypt), verify password, create/decode JWT
+- [x] Buat `core/dependencies.py`: `get_current_user()`, `require_role()` FastAPI dependencies
+- [x] RBAC middleware — setiap router mendefinisikan role yang diizinkan (`require_role` diterapkan ke semua CRUD endpoint)
 
 #### TASK-02.2: Backend User CRUD (Admin only)
-- [ ] `GET /api/v1/users/` — list semua user (Admin)
-- [ ] `POST /api/v1/users/` — tambah user baru (Admin)
-- [ ] `PUT /api/v1/users/{id}` — edit user (Admin)
-- [ ] `DELETE /api/v1/users/{id}` — nonaktifkan user (Admin, soft delete)
-- [ ] Validasi: email unik, role hanya `admin/hr/manager`
+- [x] `GET /api/v1/users/` — list semua user (Admin) + search, filter role, filter is_active, pagination
+- [x] `POST /api/v1/users/` — tambah user baru (Admin): cek email unik, validasi role, hash password
+- [x] `PUT /api/v1/users/{id}` — edit user (Admin): name, role, is_active, optional password re-hash
+- [x] `DELETE /api/v1/users/{id}` — nonaktifkan user (Admin, soft delete via is_active=False)
+- [x] Validasi: email unik, role hanya `admin/hr/manager`
 
 #### TASK-02.3: Frontend Auth
-- [ ] Halaman `/login` — form email & password, validasi, error message
-- [ ] `middleware.ts` — protect semua route selain `/login`; redirect ke `/login` jika tidak terautentikasi
-- [ ] Auto-refresh token di `lib/api.ts` interceptor (jika 401, coba refresh, retry request)
-- [ ] Logout button di sidebar → clear session, redirect ke `/login`
-- [ ] Halaman `/admin/users` — tabel user, form tambah/edit user (Admin only)
+- [x] Halaman `/login` — form email & password, validasi, error message
+- [x] `middleware.ts` — protect semua route selain `/login`; redirect ke `/login` jika tidak terautentikasi
+- [x] Auto-refresh token di `lib/api.ts` interceptor (jika 401, coba refresh, retry request)
+- [x] Logout button di sidebar → clear session, redirect ke `/login` (fix: tambah `/auth/logout` ke AUTH_ENDPOINTS agar interceptor tidak interferen, tambah `logout()` ke auth.store, clear store state di handleLogout)
+- [x] Halaman `/admin/users` — tabel user, form tambah/edit user (Admin only) (DataTable + Add/Edit modal + search/filter + deactivate/reactivate, dengan React Query & RBAC check)
 
 ---
 
 ### TASK-03: Master Data (FR-02)
 
 #### TASK-03.1: Backend Master Data
-- [ ] CRUD `GET/POST/PUT/DELETE /api/v1/clients/` (Admin)
-- [ ] CRUD `GET/POST/PUT/DELETE /api/v1/positions/` (Admin)
-- [ ] CRUD `GET/POST/PUT/DELETE /api/v1/blacklist-status-types/` (Admin) — soft delete via `is_active`
-- [ ] CRUD `GET/POST/PUT/DELETE /api/v1/agreement-types/` (Admin) — soft delete via `is_active`
+- [x] CRUD `GET/POST/PUT/DELETE /api/v1/clients/` (Admin)
+- [x] CRUD `GET/POST/PUT/DELETE /api/v1/positions/` (Admin)
+- [x] CRUD `GET/POST/PUT/DELETE /api/v1/blacklist-status-types/` (Admin) — soft delete via `is_active`
+- [x] CRUD `GET/POST/PUT/DELETE /api/v1/agreement-types/` (Admin) — soft delete via `is_active`
 
 #### TASK-03.2: Frontend Master Data
-- [ ] Halaman `/admin/clients` — tabel client, form tambah/edit
-- [ ] Halaman `/admin/positions` — tabel posisi per client, form tambah/edit, toggle aktif/nonaktif
-- [ ] Halaman `/admin/blacklist-status-types` — tabel jenis status blacklist, form tambah, toggle aktif
-- [ ] Halaman `/admin/agreement-types` — tabel jenis perjanjian, form tambah, toggle aktif
+- [x] Halaman `/admin/clients` — tabel client, form tambah/edit
+- [x] Halaman `/admin/positions` — tabel posisi per client, form tambah/edit, toggle aktif/nonaktif
+- [x] Halaman `/admin/blacklist-status-types` — tabel jenis status blacklist, form tambah, toggle aktif
+- [x] Halaman `/admin/agreement-types` — tabel jenis perjanjian, form tambah, toggle aktif
 
 ---
 
 ### TASK-04: Manajemen Kandidat (FR-03)
 
 #### TASK-04.1: Backend Kandidat
-- [ ] `GET /api/v1/candidates/` — list kandidat dengan pagination, search (nama/email/phone), filter (status, posisi, sumber)
-- [ ] `POST /api/v1/candidates/` — tambah kandidat baru:
+- [x] `GET /api/v1/candidates/` — list kandidat dengan pagination, search (nama/email/phone), filter (status, posisi, sumber)
+- [x] `POST /api/v1/candidates/` — tambah kandidat baru:
   - Cek duplikat by email & phone (`candidate_service.check_duplicate`)
   - Cek blacklist by email / phone / identity_no (`blacklist_service.check_match`)
   - Return warning flags di response jika ada match
-- [ ] `GET /api/v1/candidates/{id}` — detail kandidat lengkap
-- [ ] `PUT /api/v1/candidates/{id}` — update data kandidat
-- [ ] `DELETE /api/v1/candidates/{id}` — soft delete (Admin only)
-- [ ] CRUD `/api/v1/candidates/{id}/education/` — riwayat pendidikan
-- [ ] CRUD `/api/v1/candidates/{id}/experience/` — riwayat pengalaman kerja
-- [ ] `PATCH /api/v1/candidates/{id}/flags/` — update flag `completeness_status`, `contact_status`
+- [x] `GET /api/v1/candidates/{id}` — detail kandidat lengkap
+- [x] `PUT /api/v1/candidates/{id}` — update data kandidat
+- [x] `DELETE /api/v1/candidates/{id}` — soft delete (Admin only)
+- [x] CRUD `/api/v1/candidates/{id}/education/` — riwayat pendidikan
+- [x] CRUD `/api/v1/candidates/{id}/experience/` — riwayat pengalaman kerja
+- [x] `PATCH /api/v1/candidates/{id}/flags/` — update flag `completeness_status`, `contact_status`
 
 #### TASK-04.2: Backend Dokumen Kandidat (NFR-05)
-- [ ] Buat `services/onedrive_service.py`:
+- [x] Buat `services/onedrive_service.py`:
   - `upload_file(file, folder_path)` → return `drive_item_id` & `file_url`
   - `get_download_url(drive_item_id)` → return pre-authenticated download URL (sementara)
   - `delete_file(drive_item_id)`
   - Handle file >4MB dengan upload session API
-- [ ] `POST /api/v1/candidates/{id}/documents/` — upload dokumen:
+- [x] `POST /api/v1/candidates/{id}/documents/` — upload dokumen:
   - Validasi tipe MIME & ukuran
   - Upload ke OneDrive via `onedrive_service`
   - Simpan referensi ke `candidate_document`
-- [ ] `GET /api/v1/candidates/{id}/documents/` — list dokumen kandidat
-- [ ] `GET /api/v1/candidates/{id}/documents/{doc_id}/download-url` — return pre-authenticated URL
-- [ ] `DELETE /api/v1/candidates/{id}/documents/{doc_id}` — hapus dokumen (soft delete + hapus dari OneDrive)
+- [x] `GET /api/v1/candidates/{id}/documents/` — list dokumen kandidat
+- [x] `GET /api/v1/candidates/{id}/documents/{doc_id}/download-url` — return pre-authenticated URL
+- [x] `DELETE /api/v1/candidates/{id}/documents/{doc_id}` — hapus dokumen (soft delete + hapus dari OneDrive)
 
 #### TASK-04.3: Frontend Kandidat
 - [ ] Halaman `/candidates` — DataTable kandidat (search, filter posisi/status/sumber, pagination)
@@ -153,17 +154,17 @@
 ### TASK-05: Tracking Pipeline Rekrutmen (FR-04)
 
 #### TASK-05.1: Backend Application & Stage
-- [ ] `POST /api/v1/applications/` — buat lamaran baru (candidate_id + position_id + recruiter_id)
-- [ ] `GET /api/v1/applications/` — list lamaran dengan filter (posisi, status, tahapan, recruiter, periode)
-- [ ] `GET /api/v1/applications/{id}` — detail lamaran + stage history
-- [ ] `PATCH /api/v1/applications/{id}/stages/` — update tahapan:
+- [x] `POST /api/v1/applications/` — buat lamaran baru (candidate_id + position_id + recruiter_id)
+- [x] `GET /api/v1/applications/` — list lamaran dengan filter (posisi, status, tahapan, recruiter, periode)
+- [x] `GET /api/v1/applications/{id}` — detail lamaran + stage history
+- [x] `PATCH /api/v1/applications/{id}/stages/` — update tahapan:
   - Validasi transisi tahapan (tidak bisa loncat sembarangan)
   - Simpan event ke `stage_history` dengan `updated_by` & timestamp
   - Jika tahapan = "Existing" → trigger `employee_service.create_from_application(application_id)`
-- [ ] `GET /api/v1/applications/{id}/stages/` — list riwayat tahapan
+- [x] `GET /api/v1/applications/{id}/stages/` — list riwayat tahapan
 
 #### TASK-05.2: Backend Auto-Create Employee (FR-04.4)
-- [ ] `employee_service.create_from_application(application_id)`:
+- [x] `employee_service.create_from_application(application_id)`:
   - Ambil data dari `Candidate` terkait
   - Buat `Employee` record: full_name, identity_no, phone_number dari Candidate
   - Set `employee_status = "aktif"`
@@ -193,11 +194,11 @@
 ### TASK-06: Blacklist (FR-05)
 
 #### TASK-06.1: Backend Blacklist
-- [ ] `GET /api/v1/blacklist/` — list blacklist (search nama/email, filter status type)
-- [ ] `POST /api/v1/blacklist/` — tambah ke blacklist (HR bisa submit, Manager approve)
-- [ ] `PATCH /api/v1/blacklist/{id}/approve` — approve blacklist (Manager only)
-- [ ] `PATCH /api/v1/blacklist/{id}/revoke` — cabut blacklist (Manager only)
-- [ ] `GET /api/v1/blacklist/check` — query param: email, phone, identity_no → return match atau tidak
+- [x] `GET /api/v1/blacklist/` — list blacklist (search nama/email, filter status type)
+- [x] `POST /api/v1/blacklist/` — tambah ke blacklist (HR bisa submit, Manager approve)
+- [x] `PATCH /api/v1/blacklist/{id}/approve` — approve blacklist (Manager only)
+- [x] `PATCH /api/v1/blacklist/{id}/revoke` — cabut blacklist (Manager only)
+- [x] `GET /api/v1/blacklist/check` — query param: email, phone, identity_no → return match atau tidak
 
 #### TASK-06.2: Frontend Blacklist
 - [ ] Halaman `/blacklist` — DataTable: nama kandidat, status type, alasan, tanggal, PIC, status approval

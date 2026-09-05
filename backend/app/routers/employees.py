@@ -5,13 +5,13 @@ from app.core.dependencies import get_current_user, require_role
 router = APIRouter()
 
 
-@router.get("/")
-def list_employees(current_user=Depends(get_current_user)):
+@router.get("")
+def list_employees(current_user=Depends(require_role("hr", "manager", "admin"))):
     return {"message": "TODO: list employees"}
 
 
 @router.get("/{employee_id}")
-def get_employee(employee_id: str, current_user=Depends(get_current_user)):
+def get_employee(employee_id: str, current_user=Depends(require_role("hr", "manager", "admin"))):
     # Tidak termasuk payroll — endpoint terpisah
     return {"message": f"TODO: get employee {employee_id}"}
 
@@ -23,7 +23,7 @@ def update_employee(employee_id: str, current_user=Depends(require_role("hr", "m
 
 # --- Contracts ---
 @router.get("/{employee_id}/contracts/")
-def list_contracts(employee_id: str, current_user=Depends(get_current_user)):
+def list_contracts(employee_id: str, current_user=Depends(require_role("hr", "manager", "admin"))):
     return {"message": "TODO"}
 
 
@@ -45,7 +45,7 @@ def update_payroll(employee_id: str, current_user=Depends(require_role("manager"
 
 # --- Documents ---
 @router.get("/{employee_id}/documents/")
-def list_documents(employee_id: str, current_user=Depends(get_current_user)):
+def list_documents(employee_id: str, current_user=Depends(require_role("hr", "manager", "admin"))):
     return {"message": "TODO"}
 
 

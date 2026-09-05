@@ -66,7 +66,7 @@ const config: Config = {
         full: "9999px",
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       fontSize: {
         display: ["36px", { lineHeight: "44px", letterSpacing: "-0.02em", fontWeight: "700" }],

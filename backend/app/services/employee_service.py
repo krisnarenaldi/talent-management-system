@@ -12,14 +12,34 @@ def create_from_application(db: Session, application_id: str) -> Employee:
     """
     Auto-create Employee record saat Application mencapai tahap 'Existing'.
     Idempotent: skip jika Employee dengan application_id ini sudah ada.
-    TODO: TASK-05.2
     """
     # Cek idempotency
     existing = db.query(Employee).filter(Employee.application_id == application_id).first()
     if existing:
         return existing
 
-    raise NotImplementedError("TODO: implementasi auto-create employee dari application")
+    # Ambil application dan candidate
+    application = db.query(Application).filter(Application.id == application_id).first()
+    if not application:
+        raise ValueError(f"Application {application_id} tidak ditemukan")
+
+    candidate = db.query(Candidate).filter(Candidate.id == application.candidate_id).first()
+    if not candidate:
+        raise ValueError(f"Candidate {application.candidate_id} tidak ditemukan")
+
+    # Buat Employee record
+    employee = Employee(
+        candidate_id=candidate.id,
+        application_id=application_id,
+        full_name=candidate.full_name,
+        identity_no=candidate.identity_no,
+        phone_number=candidate.phone,
+        employee_status="aktif",
+    )
+    db.add(employee)
+    db.commit()
+    db.refresh(employee)
+    return employee
 
 
 def calculate_age(birth_date: date) -> int | None:

@@ -50,5 +50,15 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL: str = "claude-haiku-4-5"
 
+    # Email
+    EMAIL_FROM: str = "noreply@altek.id"
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+
+    # Password reset token expiry (menit)
+    RESET_TOKEN_EXPIRE_MINUTES: int = 15
+
 
 settings = Settings()

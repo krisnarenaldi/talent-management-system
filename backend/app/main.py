@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import auth, users, clients, positions, candidates, applications
 from app.routers import blacklist, employees, export, admin, internal
+from app.routers import agreement_types, blacklist_status_types
 
 app = FastAPI(
     title="TMS API",
@@ -11,6 +12,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url="/api/redoc" if settings.ENVIRONMENT != "production" else None,
+    redirect_slashes=False,  # Hindari redirect otomatis yang memecah CORS
 )
 
 # CORS — hanya izinkan origin frontend
@@ -34,6 +36,8 @@ app.include_router(employees.router,    prefix="/api/v1/employees",            t
 app.include_router(export.router,       prefix="/api/v1/export",               tags=["Export"])
 app.include_router(admin.router,        prefix="/api/v1/admin",                tags=["Admin"])
 app.include_router(internal.router,     prefix="/api/v1/internal",             tags=["Internal"])
+app.include_router(agreement_types.router,    prefix="/api/v1/agreement-types",  tags=["Agreement Types"])
+app.include_router(blacklist_status_types.router, prefix="/api/v1/blacklist-status-types", tags=["Blacklist Status Types"])
 
 
 @app.get("/health", tags=["Health"])
