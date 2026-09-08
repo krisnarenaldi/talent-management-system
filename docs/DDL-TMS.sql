@@ -83,16 +83,34 @@ CREATE TABLE public."user" (
     hashed_password    VARCHAR(255) NOT NULL,
     role               user_role_enum NOT NULL,
     is_active          BOOLEAN NOT NULL DEFAULT TRUE,
+    reset_token        VARCHAR(255),
+    reset_token_expires_at TIMESTAMP WITH TIME ZONE,
     created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_user_email UNIQUE (email)
 );
 
 CREATE INDEX idx_user_email ON public."user" (email);
+CREATE INDEX ix_user_reset_token ON public."user" (reset_token);
 
 COMMENT ON TABLE  public."user"                IS 'Pengguna sistem (Admin, HR, Manager)';
 COMMENT ON COLUMN public."user".hashed_password IS 'Password di-hash dengan bcrypt (passlib), JANGAN simpan plain text';
 COMMENT ON COLUMN public."user".role           IS 'Role RBAC: admin/hr/manager';
+
+-- ----------------------------------------------------------------------------
+-- 2.1b REFRESH_TOKEN  (Token refresh autentikasi)
+-- ----------------------------------------------------------------------------
+CREATE TABLE public.refresh_token (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL,
+    token       VARCHAR(512) NOT NULL UNIQUE,
+    expires_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+    revoked     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_refresh_token_token ON public.refresh_token (token);
+CREATE INDEX ix_refresh_token_user_id ON public.refresh_token (user_id);
 
 -- -----------------------------------------------------------------------------
 -- 2.2 CLIENT  (Perusahaan klien Altek, mis. Bank ABC)
@@ -175,6 +193,7 @@ CREATE TABLE public.candidate (
     completeness_status   completeness_status_enum DEFAULT 'belum_lengkap',
     contact_status        contact_status_enum DEFAULT 'aktif',
     possible_duplicate    BOOLEAN NOT NULL DEFAULT FALSE,
+    is_deleted            BOOLEAN NOT NULL DEFAULT FALSE,
     notes                 TEXT,
     created_at            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
