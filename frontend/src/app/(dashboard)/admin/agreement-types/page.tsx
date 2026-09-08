@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -23,9 +25,36 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function AgreementTypesPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const isRole = useAuthStore((state) => state.isRole);
+  const { user } = useAuthStore();
   const showToast = useToastStore((state) => state.showToast);
+
+  useEffect(() => {
+    if (user && !isRole("admin")) {
+      router.replace("/dashboard");
+    }
+  }, [user, isRole, router]);
+
+  if (!user || !isRole("admin")) {
+    return (
+      <div className="p-container-padding">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-error-container">
+                lock
+              </span>
+              <p className="text-body-sm text-on-error-container">
+                Akses ditolak. Hanya Admin yang dapat mengelola jenis perjanjian.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const [statusFilter, setStatusFilter] = useState("");
   const [editing, setEditing] = useState<AgreementType | null>(null);
   const [showForm, setShowForm] = useState(false);

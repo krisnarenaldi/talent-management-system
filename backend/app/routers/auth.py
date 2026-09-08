@@ -74,9 +74,8 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
 
 
 @router.post("/logout")
-def logout(response: Response, db: Session = Depends(get_db)):
+def logout(response: Response, db: Session = Depends(get_db), token: str | None = Depends(Cookie(default=None))):
     # Revoke semua refresh token yang aktif
-    token: str | None = Cookie(default=None)
     if token:
         db.query(RefreshToken).filter(
             RefreshToken.token == token,
@@ -93,7 +92,7 @@ def logout(response: Response, db: Session = Depends(get_db)):
 def refresh(
     response: Response,
     db: Session = Depends(get_db),
-    old_refresh_token: str | None = Cookie(default=None),
+    old_refresh_token: str | None = Depends(Cookie(default=None)),
 ):
     """
     Rotate refresh token:

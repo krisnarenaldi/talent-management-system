@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 import { useAuthStore } from "@/stores/auth.store";
@@ -15,9 +15,18 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const logout = useAuthStore((s) => s.logout);
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const isAdmin = user?.role === "admin";
+
+  useEffect(() => {
+    if (!authLoading && user && pathname.startsWith("/admin") && !isAdmin) {
+      router.replace("/dashboard");
+    }
+  }, [authLoading, isAdmin, pathname, router, user]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -46,6 +55,9 @@ export default function DashboardLayout({
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  const isUnauthorizedAdminRoute =
+    !authLoading && pathname.startsWith("/admin") && !isAdmin;
 
   return (
     <AuthProvider>
@@ -114,7 +126,20 @@ export default function DashboardLayout({
 
           {/* Scrollable page content */}
           <main className="flex-1 overflow-y-auto mt-16 bg-surface-bright">
-            {children}
+            {isUnauthorizedAdminRoute ? (
+              <div className="p-container-padding">
+                <div className="max-w-2xl mx-auto bg-error-container border border-error/20 rounded-xl px-4 py-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-on-error-container">
+                    lock
+                  </span>
+                  <p className="text-body-sm text-on-error-container">
+                    Akses ditolak. Hanya Admin yang dapat mengakses halaman ini.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              children
+            )}
           </main>
         </div>
       </div>

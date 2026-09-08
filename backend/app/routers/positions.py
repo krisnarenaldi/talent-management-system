@@ -15,7 +15,7 @@ def list_positions(
     is_active: bool | None = Query(None),
     search: str | None = Query(None),
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin", "hr", "manager")),
+    current_user=Depends(require_role("admin")),
 ):
     query = db.query(Position).join(Client, Position.client_id == Client.id).options(
         joinedload(Position.client)

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -58,8 +60,10 @@ async function fetchUsers(params?: Record<string, unknown>): Promise<UsersRespon
 }
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const { isRole } = useAuthStore();
+  const isRole = useAuthStore((state) => state.isRole);
+  const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -67,6 +71,31 @@ export default function AdminUsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
   const showToast = useToastStore((state) => state.showToast);
+
+  useEffect(() => {
+    if (user && !isRole("admin")) {
+      router.replace("/dashboard");
+    }
+  }, [user, isRole, router]);
+
+  if (!user || !isRole("admin")) {
+    return (
+      <div className="p-container-padding">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-error-container">
+                lock
+              </span>
+              <p className="text-body-sm text-on-error-container">
+                Akses ditolak. Hanya Admin yang dapat mengelola pengguna.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const {
     data: usersData,
