@@ -6,7 +6,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Detail Karyawan</h1>
       {/* Tabs: Data Pribadi / Kontrak / Payroll / Dokumen */}
       <div className="bg-white rounded-xl shadow-sm border p-4">
-        <p className="text-gray-400 text-sm">TODO: EmployeeTabView (ID: {params.id}) (TASK-08.2)</p>
+        <p className="text-gray-400 text-sm">TODO: EmployeeTabView (ID: {id}) (TASK-08.2)</p>
       </div>
     </div>
   );
