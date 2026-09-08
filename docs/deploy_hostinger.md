@@ -241,22 +241,23 @@ docker compose logs postgres   # cek error DB
 
 ---
 
-### **STEP 8 — Jalankan Database Migration & Seed Data**
+### **STEP 8 — Buat Schema Database & Seed Data**
 
-Jalankan Alembic migration di dalam container backend:
+Migration `0001_init` di versi ini adalah migration hasil autogenerate terhadap schema yang sudah ada, bukan migration bootstrap untuk database kosong. Untuk deployment pertama, import DDL terlebih dahulu lalu tandai schema sebagai versi Alembic terbaru:
 ```bash
-# Masuk ke container backend
-docker exec -it tms_backend bash
+cd /opt/tms
 
-# Di dalam container:
-alembic upgrade head
+# Jalankan hanya pada database baru/kosong.
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < docs/DDL-TMS.sql
 
-# Jalankan seed data (jika ada) — cek dulu file seed.py:
-python -m app.db.seed
+# Schema sudah dibuat oleh DDL; jangan jalankan 0001_init lagi.
+docker compose exec backend alembic stamp head
 
-# Keluar container
-exit
+# Isi data awal (idempotent)
+docker compose exec backend python -m app.db.seed
 ```
+
+Jangan gunakan `docker compose down -v`, karena perintah tersebut menghapus volume PostgreSQL.
 
 ---
 
