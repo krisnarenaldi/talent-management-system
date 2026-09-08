@@ -1,5 +1,6 @@
 // Detail karyawan dengan tab — TODO: TASK-08.2
-export default function EmployeeDetailPage({ params }: { params: { id: string } }) {
+export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Detail Karyawan</h1>

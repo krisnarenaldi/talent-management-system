@@ -1,5 +1,6 @@
 // Detail kandidat dengan tab — TODO: TASK-04.3
-export default function CandidateDetailPage({ params }: { params: { id: string } }) {
+export default async function CandidateDetailPage({ params }: { params: Promise<{ id: string }>; }) {
+  const { id } = await params;
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Detail Kandidat</h1>
