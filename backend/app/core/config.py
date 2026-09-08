@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # Database
     POSTGRES_HOST: str = "pgbouncer"
-    POSTGRES_PORT: int = 6432
+    POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "db_talent"
     POSTGRES_USER: str = "talent26"
     POSTGRES_PASSWORD: str

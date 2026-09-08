@@ -410,7 +410,7 @@ Next.js  FastAPI    n8n UI      /api/v1/internal/*
    │       │
    └───┬───┘
        ▼
-   PgBouncer (port 6432) ← Connection Pooling
+    PgBouncer (port 5432 internal) ← Connection Pooling
        │
        ▼
    PostgreSQL 17 (port 5432)
@@ -425,7 +425,7 @@ Next.js  FastAPI    n8n UI      /api/v1/internal/*
 |---|---|
 | Halaman web tidak bisa dibuka | `docker compose ps` → pastikan `tms_nginx` running |
 | Error 502 Bad Gateway | `docker compose logs backend` atau `docker compose logs frontend` |
-| Backend error "connection refused" ke DB | Pastikan `POSTGRES_HOST=pgbouncer` dan `POSTGRES_PORT=6432` di .env |
+| Backend error "connection refused" ke DB | Pastikan `POSTGRES_HOST=pgbouncer` dan `POSTGRES_PORT=5432` di backend/container |
 | Halaman Next.js blank putih | `docker compose logs frontend` cek error build |
 | n8n tidak bisa diakses | Cek path harus `/n8n/` (dengan trailing slash) |
 
@@ -501,7 +501,7 @@ Sudah diatur di [config.py](file:///Users/krisnarenaldi/Documents/Projects/freel
 ### 4. Connection Pooling (PgBouncer) WAJIB Aktif
 Kalau tanpa PgBouncer, ketiga komponen (FastAPI + n8n + nanti Next.js API route) masing-masing buka koneksi sendiri ke Postgres → cepet habis koneksi → error DB.
 
-Di [docker-compose.yml line 24-40](file:///Users/krisnarenaldi/Documents/Projects/freelance/Talent%20Management%20System/docker-compose.yml#L24-L40), service `pgbouncer` **sudah include**. Backend connect ke `pgbouncer:6432`, bukan langsung ke `postgres:5432`. ✅
+Di [docker-compose.yml](file:///Users/krisnarenaldi/Documents/Projects/freelance/Talent%20Management%20System/docker-compose.yml), service `pgbouncer` **sudah include**. Backend connect ke `pgbouncer:5432` (listener internal image), bukan langsung ke `postgres:5432`. ✅
 
 ---
 
