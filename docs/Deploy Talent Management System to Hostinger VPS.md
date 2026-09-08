@@ -425,7 +425,7 @@ Next.js  FastAPI    n8n UI      /api/v1/internal/*
 |---|---|
 | Halaman web tidak bisa dibuka | `docker compose ps` → pastikan `tms_nginx` running |
 | Error 502 Bad Gateway | `docker compose logs backend` atau `docker compose logs frontend` |
-| Backend error "connection refused" ke DB | Pastikan `POSTGRES_HOST=pgbouncer` dan `POSTGRES_PORT=5432` di backend/container |
+| Backend error koneksi DB | Pastikan `POSTGRES_HOST=pgbouncer`, `POSTGRES_PORT=5432`, dan PgBouncer memakai `AUTH_TYPE=scram-sha-256` |
 | Halaman Next.js blank putih | `docker compose logs frontend` cek error build |
 | n8n tidak bisa diakses | Cek path harus `/n8n/` (dengan trailing slash) |
 
