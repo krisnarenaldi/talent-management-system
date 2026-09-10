@@ -1,8 +1,10 @@
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_db, get_current_user, require_role
@@ -23,9 +25,43 @@ from app.schemas.candidate import (
     ExperienceUpdate,
 )
 from app.services import candidate_service
-from app.services.onedrive_service import onedrive_service
+from app.services.storage_service import get_storage_service
 
 router = APIRouter()
+
+# Dokumen wajib untuk status "lengkap"
+REQUIRED_DOC_TYPES = {"Foto", "KTP", "Ijazah", "Transkrip", "CV_asli", "Sertifikat"}
+
+
+def _recalc_completeness(candidate_id: str, db: Session) -> str:
+    """Hitung kelengkapan berdasarkan dokumen yang ada."""
+    docs = (
+        db.query(CandidateDocument)
+        .filter(
+            CandidateDocument.candidate_id == candidate_id,
+            CandidateDocument.is_deleted == False,
+        )
+        .all()
+    )
+    types_present = {d.doc_type for d in docs}
+    required_present = REQUIRED_DOC_TYPES.issubset(types_present)
+    return "lengkap" if required_present else "belum_lengkap"
+
+
+# ── Static file serving (local storage) ───────────────────────────────────────
+
+@router.get("/files/{path:path}")
+async def serve_uploaded_file(path: str):
+    """Serve uploaded files from local storage."""
+    from app.core.config import settings
+    upload_root = Path(settings.UPLOAD_DIR)
+    file_path = (upload_root / path).resolve()
+    # Block directory traversal
+    if not str(file_path).startswith(str(upload_root.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(str(file_path))
 
 
 # ── List ─────────────────────────────────────────────────────────────────────
@@ -52,7 +88,14 @@ def list_candidates(
         query = query.filter(Candidate.source_channel == source_channel)
     if completeness_status:
         query = query.filter(Candidate.completeness_status == completeness_status)
-    return query.offset(skip).limit(limit).all()
+    candidates = query.offset(skip).limit(limit).all()
+    # Re-compute & persist freshness for each returned candidate
+    for c in candidates:
+        new_status = _recalc_completeness(str(c.id), db)
+        if c.completeness_status != new_status:
+            c.completeness_status = new_status
+    db.commit()
+    return candidates
 
 
 # ── Create ───────────────────────────────────────────────────────────────────
@@ -104,7 +147,25 @@ def get_candidate(candidate_id: str, db: Session = Depends(get_db), current_user
     )
     if not candidate:
         raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+    # Override stored status dengan computed status dari dokumen
+    candidate.completeness_status = _recalc_completeness(candidate_id, db)
     return candidate
+
+
+@router.post("/{candidate_id}/completeness/recalculate", response_model=dict)
+def recalculate_completeness(
+    candidate_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    status = _recalc_completeness(candidate_id, db)
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+    candidate.completeness_status = status
+    db.commit()
+    db.refresh(candidate)
+    return {"completeness_status": status}
 
 
 # ── Update ───────────────────────────────────────────────────────────────────
@@ -179,6 +240,7 @@ def patch_flags(
 
 # ── Education CRUD ───────────────────────────────────────────────────────────
 
+@router.get("/{candidate_id}/education", response_model=list[EducationResponse])
 @router.get("/{candidate_id}/education/", response_model=list[EducationResponse])
 def list_education(
     candidate_id: str,
@@ -189,6 +251,7 @@ def list_education(
     return db.query(CandidateEducation).filter(CandidateEducation.candidate_id == candidate_id).all()
 
 
+@router.post("/{candidate_id}/education", response_model=EducationResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/{candidate_id}/education/", response_model=EducationResponse, status_code=status.HTTP_201_CREATED)
 def add_education(
     candidate_id: str,
@@ -205,6 +268,7 @@ def add_education(
 
 
 @router.put("/{candidate_id}/education/{edu_id}", response_model=EducationResponse)
+@router.put("/{candidate_id}/education/{edu_id}/", response_model=EducationResponse)
 def update_education(
     candidate_id: str,
     edu_id: str,
@@ -226,6 +290,7 @@ def update_education(
 
 
 @router.delete("/{candidate_id}/education/{edu_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{candidate_id}/education/{edu_id}/", status_code=status.HTTP_204_NO_CONTENT)
 def delete_education(
     candidate_id: str,
     edu_id: str,
@@ -244,6 +309,7 @@ def delete_education(
 
 # ── Experience CRUD ──────────────────────────────────────────────────────────
 
+@router.get("/{candidate_id}/experience", response_model=list[ExperienceResponse])
 @router.get("/{candidate_id}/experience/", response_model=list[ExperienceResponse])
 def list_experience(
     candidate_id: str,
@@ -254,6 +320,7 @@ def list_experience(
     return db.query(CandidateExperience).filter(CandidateExperience.candidate_id == candidate_id).all()
 
 
+@router.post("/{candidate_id}/experience", response_model=ExperienceResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/{candidate_id}/experience/", response_model=ExperienceResponse, status_code=status.HTTP_201_CREATED)
 def add_experience(
     candidate_id: str,
@@ -270,6 +337,7 @@ def add_experience(
 
 
 @router.put("/{candidate_id}/experience/{exp_id}", response_model=ExperienceResponse)
+@router.put("/{candidate_id}/experience/{exp_id}/", response_model=ExperienceResponse)
 def update_experience(
     candidate_id: str,
     exp_id: str,
@@ -315,6 +383,7 @@ def _raise_404(msg: str) -> None:
 
 # ── Document CRUD ─────────────────────────────────────────────────────────────
 
+@router.get("/{candidate_id}/documents", response_model=list[DocumentResponse])
 @router.get("/{candidate_id}/documents/", response_model=list[DocumentResponse])
 def list_documents(
     candidate_id: str,
@@ -329,6 +398,7 @@ def list_documents(
     )
 
 
+@router.post("/{candidate_id}/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/{candidate_id}/documents/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     candidate_id: str,
@@ -347,7 +417,8 @@ async def upload_document(
         raise HTTPException(status_code=413, detail="Ukuran file maksimal 10MB")
 
     folder = f"Candidates/{candidate_id}"
-    result = await onedrive_service.upload_file(
+    storage = get_storage_service()
+    result = await storage.upload(
         file_content=content,
         filename=file.filename or f"{doc_type}.pdf",
         folder=folder,
@@ -357,11 +428,18 @@ async def upload_document(
         candidate_id=candidate_id,
         doc_type=doc_type,
         file_url=result["file_url"],
-        drive_item_id=result["drive_item_id"],
+        drive_item_id=None,  # local storage — drive_item_id tidak dipakai
     )
     db.add(doc)
     db.commit()
     db.refresh(doc)
+
+    # Recalculate kelengkapan kandidat
+    new_status = _recalc_completeness(candidate_id, db)
+    if candidate.completeness_status != new_status:
+        candidate.completeness_status = new_status
+        db.commit()
+
     return doc
 
 
@@ -379,11 +457,36 @@ async def get_download_url(
     ).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
-    if not doc.drive_item_id:
-        raise HTTPException(status_code=400, detail="Dokumen belum diupload ke OneDrive")
+    if not doc.file_url:
+        raise HTTPException(status_code=400, detail="File belum diupload")
 
-    url = await onedrive_service.get_download_url(doc.drive_item_id)
+    storage = get_storage_service()
+    # Local storage: file_url sudah berupa path relatif, return langsung
+    if doc.drive_item_id:
+        url = await storage.get_download_url(doc.drive_item_id)
+    else:
+        url = doc.file_url
     return {"download_url": url}
+
+
+@router.patch("/{candidate_id}/documents/{doc_id}/verify", response_model=DocumentResponse)
+def toggle_verify_document(
+    candidate_id: str,
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    doc = db.query(CandidateDocument).filter(
+        CandidateDocument.id == doc_id,
+        CandidateDocument.candidate_id == candidate_id,
+        CandidateDocument.is_deleted == False,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    doc.is_verified = not doc.is_verified
+    db.commit()
+    db.refresh(doc)
+    return doc
 
 
 @router.delete("/{candidate_id}/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -400,10 +503,25 @@ async def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
     doc.is_deleted = True
-    if doc.drive_item_id:
+    storage = get_storage_service()
+    # Hapus file fisik untuk local storage
+    if not doc.drive_item_id and doc.file_url:
         try:
-            await onedrive_service.delete_file(doc.drive_item_id)
+            await storage.delete(doc.file_url)
         except Exception:
-            pass  # biarkan soft-delete lokal meskipun hapus OneDrive gagal
+            pass
+    # Hapus dari OneDrive jika ada drive_item_id (migration scenario)
+    elif doc.drive_item_id:
+        try:
+            await storage.delete_file(doc.drive_item_id)
+        except Exception:
+            pass  # biarkan soft-delete lokal meskipun hapus cloud gagal
     db.commit()
+
+    # Recalculate kelengkapan kandidat
+    new_status = _recalc_completeness(candidate_id, db)
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if candidate and candidate.completeness_status != new_status:
+        candidate.completeness_status = new_status
+        db.commit()
 

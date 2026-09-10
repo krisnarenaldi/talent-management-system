@@ -1,10 +1,27 @@
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.core.config import settings
 from app.routers import auth, users, clients, positions, candidates, applications
 from app.routers import blacklist, employees, export, admin, internal
 from app.routers import agreement_types, blacklist_status_types
+
+
+def _serve_uploaded_file(path: str):
+    """Serve files from the app upload directory at the path expected by stored URLs."""
+    upload_root = Path(settings.UPLOAD_DIR)
+    file_path = (upload_root / path).resolve()
+
+    if not str(file_path).startswith(str(upload_root.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(str(file_path))
+
 
 app = FastAPI(
     title="TMS API",
@@ -23,6 +40,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Static file endpoints used by stored document/photo URLs.
+@app.get("/api/v1/files/{path:path}")
+async def serve_uploaded_file(path: str):
+    return _serve_uploaded_file(path)
+
+
+@app.get("/api/v1/candidates/files/{path:path}")
+async def serve_uploaded_file_legacy(path: str):
+    # Backward-compatible alias for older stored URLs generated before the route was moved to /api/v1/files.
+    return _serve_uploaded_file(path)
+
 
 # Register routers
 app.include_router(auth.router,         prefix="/api/v1/auth",                 tags=["Auth"])

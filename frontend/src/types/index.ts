@@ -118,12 +118,17 @@ export type ApplicationStatus = "active" | "rejected" | "hired" | "withdrawn";
 export interface Application {
   id: string;
   candidate_id: string;
+  candidate_name?: string;
   position_id: string;
+  position_title?: string;
+  client_name?: string;
   recruiter_id?: string;
+  recruiter_name?: string;
   current_stage: string;
   status: ApplicationStatus;
   cv_submitted_to_pm_date?: string;
   created_at: string;
+  updated_at?: string;
   candidate?: Pick<Candidate, "id" | "full_name" | "email">;
 }
 

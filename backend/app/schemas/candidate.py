@@ -66,6 +66,7 @@ class CandidateCreate(BaseModel):
     phone: str | None = None
     identity_no: str | None = None
     domicile: str | None = None
+    photo_url: str | None = None
     source_channel: str | None = None
     current_salary: Decimal | None = None
     expected_salary: Decimal | None = None
@@ -78,6 +79,7 @@ class CandidateUpdate(BaseModel):
     phone: str | None = None
     identity_no: str | None = None
     domicile: str | None = None
+    photo_url: str | None = None
     source_channel: str | None = None
     current_salary: Decimal | None = None
     expected_salary: Decimal | None = None

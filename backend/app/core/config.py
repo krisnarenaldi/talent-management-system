@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     ONEDRIVE_DRIVE_ID: str = ""
     ONEDRIVE_ROOT_FOLDER: str = "TMS_Documents"
 
+    # Storage backend — "local" (default) atau "onedrive"
+    STORAGE_BACKEND: str = "local"
+    UPLOAD_DIR: str = str(BASE_DIR / "uploads")
+    STORAGE_BASE_URL: str = ""  # kosong = relative path; isi = base URL saat production
+
     # n8n
     N8N_WEBHOOK_CV_PARSER: str = ""
     N8N_WEBHOOK_AI_SCREENING: str = ""

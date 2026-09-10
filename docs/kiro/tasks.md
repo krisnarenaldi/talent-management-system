@@ -172,12 +172,12 @@
   - Return `employee_id`
 
 #### TASK-05.3: Frontend Pipeline
-- [x] Halaman `/applications` — list semua lamaran:
+- [ ] Halaman `/applications` — list semua lamaran:
   - Filter: posisi, client, status, tahapan, recruiter, tanggal
   - Setiap baris: nama kandidat, posisi, client, tahapan saat ini, tanggal update, recruiter
   - Link ke detail lamaran
   - Tombol "Buat Lamaran Baru"
-- [x] Halaman `/applications/[id]` — detail lamaran:
+- [ ] Halaman `/applications/[id]` — detail lamaran:
   - Panel kiri: ringkasan kandidat + posisi
   - Panel kanan: timeline tahapan (riwayat dari Stage_History)
   - `StageUpdateForm` — form dinamis berdasarkan tahapan aktif:

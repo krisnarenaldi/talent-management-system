@@ -5,7 +5,7 @@
 
 ---
 
-## 1. Ringkasan Eksekutif
+## 1. Ringkasan Eksekutif 
 
 *Catatan istilah: "Altek" merujuk pada perusahaan penyedia jasa rekrutmen (pemilik sistem ini). "Client" merujuk pada perusahaan yang menerima talent dari Altek (mayoritas Bank) — dua pihak yang berbeda, dipakai konsisten sepanjang dokumen ini.*
 
@@ -52,6 +52,7 @@ Fase 1 bisa langsung dipakai operasional sambil Fase 2–4 dikembangkan paralel/
 - Riwayat pendidikan (bisa lebih dari satu entri): institusi, jurusan, tahun lulus, IPK
 - Riwayat pengalaman kerja (bisa lebih dari satu entri)
 - Upload dokumen: CV, foto, KTP, KK, Ijazah, Transkrip, Sertifikat, Surat Keterangan BI Checking (opsional)
+- **Bulk Upload CV (AI-Assisted Entry):** HR dapat mengunggah banyak CV sekaligus (multi-file) langsung ke suatu posisi lamaran di UI. Sistem memprosesnya di *background* dengan AI untuk mengekstrak data dan otomatis membuat profil kandidat, sehingga HR terbebas dari proses input manual satu per satu.
 - **Deduplikasi:** saat kandidat submit CV berulang kali, sistem cek berdasarkan email & no. HP. Jika no. HP berbeda tapi email sama (atau sebaliknya) → dibuat baris baru namun ditandai sebagai kemungkinan duplikat untuk direview manual (deteksi otomatis 100% akurat tidak realistis, lihat bagian 8)
 - Indikator kelengkapan dokumen (flag "belum lengkap")
 - Flag jika email/no. HP tidak dapat dihubungi
