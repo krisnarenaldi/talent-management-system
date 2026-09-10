@@ -17,6 +17,7 @@ COPY . .
 
 # Non-root user untuk keamanan
 RUN adduser --disabled-password --gecos "" appuser
+RUN mkdir -p /uploads && chown -R appuser:appuser /uploads
 USER appuser
 
 EXPOSE 8000
