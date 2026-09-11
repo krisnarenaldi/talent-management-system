@@ -5,6 +5,7 @@
  * - Interceptor: auto-refresh token jika response 401 (kecuali pada endpoint auth)
  */
 import axios from "axios";
+import { refreshToken } from "./tokenRefresh";
 
 const AUTH_ENDPOINTS = ["/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/me"];
 
@@ -30,13 +31,14 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        await axios.post("/api/v1/auth/refresh", {}, { withCredentials: true });
+        await refreshToken();
         return api(originalRequest);
-      } catch {
+      } catch (refreshError) {
         // Refresh gagal → redirect ke login
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
+        return Promise.reject(refreshError);
       }
     }
 

@@ -100,7 +100,7 @@ def logout(
 def refresh(
     response: Response,
     db: Session = Depends(get_db),
-    old_refresh_token: str | None = Cookie(default=None),
+    old_refresh_token: str | None = Cookie(default=None, alias="refresh_token"),
 ):
     """
     Rotate refresh token:

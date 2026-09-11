@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
+import TokenRefreshProvider from "@/components/TokenRefreshProvider";
 import { useAuthStore } from "@/stores/auth.store";
 import api from "@/lib/api";
 
@@ -68,7 +69,8 @@ export default function DashboardLayout({
     !authLoading && pathname.startsWith("/admin") && !isAdmin;
 
   return (
-    <AuthProvider>
+    <TokenRefreshProvider>
+      <AuthProvider>
       <div className="flex h-full bg-surface text-on-surface overflow-hidden">
         <Sidebar />
 
@@ -152,5 +154,6 @@ export default function DashboardLayout({
         </div>
       </div>
     </AuthProvider>
+    </TokenRefreshProvider>
   );
 }
