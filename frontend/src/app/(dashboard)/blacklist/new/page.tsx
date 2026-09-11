@@ -29,7 +29,7 @@ export default function NewBlacklistPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const showToast = useToastStore((state) => state.showToast);
-  const { user } = useAuthStore((state) => ({ user: state.user }));
+  const user = useAuthStore((state) => state.user);
   const isPM = user?.role === "pm";
   const isHRorManager = user?.role === "hr" || user?.role === "manager";
 
