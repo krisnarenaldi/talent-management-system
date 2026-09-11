@@ -527,7 +527,10 @@ async def delete_document(
     # Recalculate kelengkapan kandidat
     new_status = _recalc_completeness(candidate_id, db)
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if candidate and candidate.completeness_status != new_status:
-        candidate.completeness_status = new_status
+    if candidate:
+        if doc.doc_type == "Foto":
+            candidate.photo_url = None
+        if candidate.completeness_status != new_status:
+            candidate.completeness_status = new_status
         db.commit()
 

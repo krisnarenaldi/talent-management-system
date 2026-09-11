@@ -75,6 +75,7 @@ export default function DocumentUploader({ candidateId }: { candidateId: string 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["candidate-documents", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
       showToast("success", "Dokumen berhasil dihapus.");
     },
     onError: (error: unknown) => {
