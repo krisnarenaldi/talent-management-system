@@ -56,7 +56,6 @@ services:
     volumes:
       - ./backend/uploads:/uploads
     # Port tidak diekspos langsung — diakses via Nginx
-    command: ["/bin/sh","-c","chown -R appuser:appuser /uploads && exec /app/entrypoint.sh uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 
   # ── Next.js (Frontend) ──────────────────────────────────────
   frontend:
