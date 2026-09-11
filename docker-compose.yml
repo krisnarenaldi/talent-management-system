@@ -45,6 +45,7 @@ services:
       dockerfile: Dockerfile
     container_name: tms_backend
     restart: unless-stopped
+    user: "root"
     env_file: .env
     environment:
       POSTGRES_HOST: pgbouncer
