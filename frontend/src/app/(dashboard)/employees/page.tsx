@@ -123,7 +123,7 @@ export default function EmployeesPage() {
                 employees.map((emp) => {
                   const isContractUrgent =
                     emp.contract_duration_running != null && expiryWithin > 0
-                      ? emp.contract_duration_running <= expiryDays
+                      ? emp.contract_duration_running <= expiryWithin
                       : false;
 
                   return (
