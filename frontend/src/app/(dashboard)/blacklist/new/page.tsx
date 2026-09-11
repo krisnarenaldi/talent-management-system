@@ -144,9 +144,9 @@ export default function NewBlacklistPage() {
   });
 
   const handleSelectTarget = (target: Candidate | Employee) => {
-    setSelectedTarget(target as Candidate);
-    setValue("target_id", (target as Candidate).id);
-    setSearchTerm((target as Candidate).full_name);
+    setSelectedTarget(target);
+    setValue("target_id", target.id);
+    setSearchTerm(target.full_name);
     setShowDropdown(false);
   };
 
@@ -282,12 +282,19 @@ export default function NewBlacklistPage() {
 
           {selectedTarget && (
             <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
-              <p className="font-medium text-blue-900">{(selectedTarget as Candidate).full_name}</p>
+              <p className="font-medium text-blue-900">{selectedTarget.full_name}</p>
               <p className="text-blue-700 text-xs mt-1">
-                {(selectedTarget as Candidate).email && `Email: ${(selectedTarget as Candidate).email}  •  `}
-                {(selectedTarget as Candidate).phone && `HP: ${(selectedTarget as Candidate).phone}`}
-                {(selectedTarget as Employee).office_email && `Email Kantor: ${(selectedTarget as Employee).office_email}  •  `}
-                {(selectedTarget as Employee).phone_number && `HP: ${(selectedTarget as Employee).phone_number}`}
+                {targetType === "candidate" ? (
+                  <>
+                    {(selectedTarget as Candidate).email && `Email: ${(selectedTarget as Candidate).email}  •  `}
+                    {(selectedTarget as Candidate).phone && `HP: ${(selectedTarget as Candidate).phone}`}
+                  </>
+                ) : (
+                  <>
+                    {(selectedTarget as Employee).office_email && `Email Kantor: ${(selectedTarget as Employee).office_email}  •  `}
+                    {(selectedTarget as Employee).phone_number && `HP: ${(selectedTarget as Employee).phone_number}`}
+                  </>
+                )}
               </p>
             </div>
           )}
