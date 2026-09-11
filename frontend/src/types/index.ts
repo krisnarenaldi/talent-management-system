@@ -1,7 +1,7 @@
 // Tipe-tipe TypeScript utama — diselaraskan dengan model database
 // TODO: generate otomatis dari OpenAPI schema FastAPI (opsional)
 
-export type UserRole = "admin" | "hr" | "manager";
+export type UserRole = "admin" | "hr" | "manager" | "pm";
 
 export interface AuthUser {
   id?: string;
@@ -184,6 +184,29 @@ export interface EmployeeContract {
   status: string;
   // Computed
   months_running?: number;
+}
+
+// --- Blacklist ---
+export interface Blacklist {
+  id: string;
+  candidate_id?: string;
+  employee_id?: string;
+  status_type_id: string;
+  reason: string | null;
+  notes: string | null;
+  blacklisted_date: string | null;
+  pic_user_id: string | null;
+  is_approved: boolean;
+  approved_by: string | null;
+  is_active: boolean;
+  created_at: string;
+  // Target details (either candidate or employee)
+  target_name: string;
+  target_email?: string | null;
+  target_phone?: string | null;
+  target_type: "candidate" | "employee";
+  status_type_label: string;
+  pic_name?: string | null;
 }
 
 // --- Pagination ---

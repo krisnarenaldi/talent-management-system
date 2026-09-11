@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 
 from app.core.config import settings
 from app.routers import auth, users, clients, positions, candidates, applications
-from app.routers import blacklist, employees, export, admin, internal
+from app.routers import blacklist, employee, employees, export, admin, internal
 from app.routers import agreement_types, blacklist_status_types
 
 
@@ -61,6 +61,7 @@ app.include_router(positions.router,    prefix="/api/v1/positions",            t
 app.include_router(candidates.router,   prefix="/api/v1/candidates",           tags=["Candidates"])
 app.include_router(applications.router, prefix="/api/v1/applications",         tags=["Applications"])
 app.include_router(blacklist.router,    prefix="/api/v1/blacklist",            tags=["Blacklist"])
+app.include_router(employee.router,     prefix="/api/v1/employee",             tags=["Employee Search"])
 app.include_router(employees.router,    prefix="/api/v1/employees",            tags=["Employees"])
 app.include_router(export.router,       prefix="/api/v1/export",               tags=["Export"])
 app.include_router(admin.router,        prefix="/api/v1/admin",                tags=["Admin"])

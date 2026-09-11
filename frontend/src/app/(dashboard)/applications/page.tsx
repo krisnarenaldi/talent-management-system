@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
+import { useAuthStore } from "@/stores/auth.store";
 import type { Application } from "@/types";
 
 async function fetchApplications(params?: Record<string, string | undefined>) {
@@ -30,31 +31,38 @@ const stageOptions = [
 function statusBadgeClass(status: string) {
   switch (status) {
     case "active":
-      return "bg-emerald-100 text-emerald-700";
+      return "border border-emerald-200 bg-emerald-100 text-emerald-800";
     case "rejected":
-      return "bg-red-100 text-red-700";
+      return "border border-red-200 bg-red-100 text-red-800";
     case "hired":
-      return "bg-blue-100 text-blue-700";
+      return "border border-blue-200 bg-blue-100 text-blue-800";
     case "withdrawn":
-      return "bg-gray-100 text-gray-700";
+      return "border border-slate-300 bg-slate-200 text-slate-800";
     default:
-      return "bg-slate-100 text-slate-700";
+      return "border border-slate-200 bg-slate-100 text-slate-800";
   }
 }
 
-function stageBadgeClass(stage: string) {
-  if (stage.includes("Interview")) return "bg-violet-100 text-violet-700";
-  if (stage.includes("Offering") || stage.includes("Kontrak") || stage.includes("Onboarding") || stage === "Existing") {
-    return "bg-blue-100 text-blue-700";
+function stageBadgeClass(stage: string | null | undefined) {
+  const normalizedStage = stage ?? "";
+  if (normalizedStage.includes("Interview")) return "border border-violet-200 bg-violet-100 text-violet-800";
+  if (normalizedStage.includes("Offering") || normalizedStage.includes("Kontrak") || normalizedStage.includes("Onboarding") || normalizedStage === "Existing") {
+    return "border border-blue-200 bg-blue-100 text-blue-800";
   }
-  if (stage.includes("Rejected") || stage.includes("Withdrawn")) return "bg-red-100 text-red-700";
-  return "bg-amber-100 text-amber-700";
+  if (normalizedStage.includes("Rejected") || normalizedStage.includes("Withdrawn")) return "border border-red-200 bg-red-100 text-red-800";
+  return "border border-amber-200 bg-amber-100 text-amber-800";
 }
 
-function formatStageLabel(stage: string) {
-  return stage
+function formatStageLabel(stage: string | null | undefined) {
+  const normalizedStage = stage ?? "";
+  return normalizedStage
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "-";
+}
+
+function normalizeRole(role: string | undefined): string {
+  if (!role) return "";
+  return role.split(".").pop()?.toLowerCase() || role;
 }
 
 export default function ApplicationsPage() {
@@ -62,6 +70,8 @@ export default function ApplicationsPage() {
   const [stageFilter, setStageFilter] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const user = useAuthStore((state) => state.user);
+  const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
 
   const { data: applications = [], isLoading } = useQuery({
     queryKey: ["applications", { statusFilter, stageFilter, startDate, endDate }],
@@ -81,12 +91,14 @@ export default function ApplicationsPage() {
           <p className="text-sm font-medium text-gray-500">Recruitment pipeline</p>
           <h1 className="text-2xl font-bold text-gray-900">Pipeline Rekrutmen</h1>
         </div>
-        <Link
-          href="/candidates"
-          className="inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700"
-        >
-          + Buat Lamaran Baru
-        </Link>
+        {canCreateApplication && (
+          <Link
+            href="/applications/new"
+            className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
+          >
+            + Tambah Lamaran
+          </Link>
+        )}
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -200,7 +212,7 @@ export default function ApplicationsPage() {
                     <td className="px-4 py-3 text-right">
                       <Link
                         href={`/applications/${application.id}`}
-                        className="inline-flex items-center rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-100"
+                        className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
                       >
                         Lihat detail
                       </Link>

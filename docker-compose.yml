@@ -54,7 +54,7 @@ services:
     networks:
       - tms_internal
     volumes:
-      - tms_uploads:/uploads
+      - ./backend/uploads:/uploads
     # Port tidak diekspos langsung — diakses via Nginx
 
   # ── Next.js (Frontend) ──────────────────────────────────────
@@ -119,7 +119,6 @@ services:
 volumes:
   postgres_data:
   n8n_data:
-  tms_uploads:
 
 networks:
   tms_internal:

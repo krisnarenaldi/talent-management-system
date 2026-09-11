@@ -76,12 +76,12 @@ export default function AdminPositionsPage() {
   const showToast = useToastStore((state) => state.showToast);
 
   useEffect(() => {
-    if (user && !isRole("admin")) {
+    if (user && !isRole("admin", "hr", "manager")) {
       router.replace("/dashboard");
     }
   }, [user, isRole, router]);
 
-  if (!user || !isRole("admin")) {
+  if (!user || !isRole("admin", "hr", "manager")) {
     return (
       <div className="p-container-padding">
         <div className="max-w-2xl mx-auto">

@@ -35,7 +35,7 @@ export default function CandidatesPage() {
         </div>
         <Link
           href="/candidates/new"
-          className="inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700"
+          className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
         >
           + Tambah Kandidat
         </Link>
@@ -133,10 +133,10 @@ export default function CandidatesPage() {
                     <td className="px-4 py-3">{candidate.source_channel || "-"}</td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
                           candidate.contact_status === "aktif"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-amber-100 text-amber-700"
+                            ? "border-emerald-200 bg-emerald-100 text-emerald-800"
+                            : "border-amber-200 bg-amber-100 text-amber-800"
                         }`}
                       >
                         {candidate.contact_status === "aktif" ? "Aktif" : "Tidak bisa dihubungi"}
@@ -144,10 +144,10 @@ export default function CandidatesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
                           candidate.completeness_status === "lengkap"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-orange-100 text-orange-700"
+                            ? "border-sky-200 bg-sky-100 text-sky-800"
+                            : "border-orange-200 bg-orange-100 text-orange-800"
                         }`}
                       >
                         {candidate.completeness_status === "lengkap" ? "Lengkap" : "Belum lengkap"}
@@ -156,7 +156,7 @@ export default function CandidatesPage() {
                     <td className="px-4 py-3 text-right">
                       <Link
                         href={`/candidates/${candidate.id}`}
-                        className="inline-flex items-center rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-100"
+                        className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
                       >
                         Lihat detail
                       </Link>

@@ -86,7 +86,7 @@ export default function ProfilePage() {
           <p className="text-title-sm text-on-surface font-medium">{user?.name}</p>
           <p className="text-body-sm text-on-surface-variant">{user?.email}</p>
           <span className="inline-block mt-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container capitalize">
-            {user?.role}
+            {(user?.role || "").split(".").pop()?.toLowerCase()}
           </span>
         </div>
       </div>

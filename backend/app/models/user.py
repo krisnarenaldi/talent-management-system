@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.database import Base
 
-USER_ROLES = ("admin", "hr", "manager")
+USER_ROLES = ("admin", "hr", "manager", "pm")
 
 
 class User(Base):

@@ -21,6 +21,21 @@ STAGE_NAMES = (
     "Existing",
 )
 
+VALID_TRANSITIONS = {
+    "Dijadwalkan_Interview": ["Konfirmasi_Kehadiran"],
+    "Konfirmasi_Kehadiran": ["Interview_HR"],
+    "Interview_HR": ["Psikotest", "Interview_User"],
+    "Psikotest": ["Interview_User"],
+    "Interview_User": ["Offering", "Rejected"],
+    "Offering": ["Tanda_Tangan_Kontrak"],
+    "Tanda_Tangan_Kontrak": ["Onboarding"],
+    "Onboarding": ["Existing"],
+    "Existing": [],
+}
+
+TERMINAL_STATUSES = ("rejected", "withdrawn", "hired")  # status ini tidak bisa lanjut/update stage lagi
+TERMINAL_STAGES = ("Rejected", "Withdrawn", "Existing")  # stage terminal (Existing = sudah hired)
+
 
 class Application(Base):
     __tablename__ = "application"
@@ -44,6 +59,37 @@ class Application(Base):
     recruiter = relationship("User", foreign_keys=[recruiter_id])
     stage_histories = relationship("StageHistory", back_populates="application", cascade="all, delete-orphan")
     ai_screening_result = relationship("AIScreeningResult", back_populates="application", uselist=False)
+
+    @property
+    def candidate_name(self) -> str | None:
+        return self.candidate.full_name if self.candidate else None
+
+    @property
+    def position_title(self) -> str | None:
+        return self.position.title if self.position else None
+
+    @property
+    def client_name(self) -> str | None:
+        return self.position.client_name if self.position else None
+
+    @property
+    def recruiter_name(self) -> str | None:
+        return self.recruiter.name if self.recruiter else None
+
+    @property
+    def stage_history(self) -> list:
+        return self.stage_histories or []
+
+    @property
+    def next_possible_stages(self) -> list[str]:
+        # Jika sudah terminal (status rejected/withdrawn/hired) atau stage-nya terminal,
+        # tidak ada stage lanjutan yang valid
+        if self.status in ("rejected", "withdrawn", "hired"):
+            return []
+        if self.current_stage in ("Rejected", "Withdrawn", "Existing"):
+            return []
+        transitions = VALID_TRANSITIONS.get(self.current_stage, [])
+        return transitions + ["Rejected", "Withdrawn"]
 
 
 class StageHistory(Base):

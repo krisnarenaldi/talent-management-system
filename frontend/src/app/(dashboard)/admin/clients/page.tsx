@@ -61,7 +61,7 @@ export default function AdminClientsPage() {
     }
   }, [user, isRole, router]);
 
-  if (!user || !isRole("admin")) {
+  if (!user || !isRole("admin", "hr", "manager")) {
     return (
       <div className="p-container-padding">
         <div className="max-w-2xl mx-auto">

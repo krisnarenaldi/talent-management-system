@@ -183,8 +183,14 @@ def update_candidate(
 
     # Reduplicate check (hanya jika field berubah)
     if payload.email != candidate.email or payload.phone != candidate.phone or payload.identity_no != candidate.identity_no:
-        dup = candidate_service.check_duplicate(db, payload.email, payload.phone, payload.identity_no)
-        if dup["is_duplicate"] and dup["existing_id"] != candidate_id:
+        dup = candidate_service.check_duplicate(
+            db,
+            payload.email,
+            payload.phone,
+            payload.identity_no,
+            exclude_candidate_id=str(candidate_id),
+        )
+        if dup["is_duplicate"]:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Email/phone/NIK sudah digunakan kandidat lain (ID: {dup['existing_id']})",

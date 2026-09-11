@@ -40,6 +40,7 @@ class Employee(Base):
     personal_email = Column(String(255))
     office_email = Column(String(255))
     phone_number = Column(String(50))
+    identity_no = Column(String(20))       # NIK KTP
     placement = Column(String(255))        # Site/divisi di client
     role_level = Column(String(255))
     employee_status = Column(

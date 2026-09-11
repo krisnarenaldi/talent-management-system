@@ -3,10 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 import { useAuthStore } from "@/stores/auth.store";
 import api from "@/lib/api";
+
+function normalizeRole(role: string | undefined): string {
+  if (!role) return "";
+  return role.split(".").pop()?.toLowerCase() || role;
+}
 
 export default function DashboardLayout({
   children,
@@ -17,10 +23,11 @@ export default function DashboardLayout({
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
   const logout = useAuthStore((s) => s.logout);
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const isAdmin = user?.role === "admin";
+  const isAdmin = normalizeRole(user?.role) === "admin";
 
   useEffect(() => {
     if (!authLoading && user && pathname.startsWith("/admin") && !isAdmin) {
@@ -45,6 +52,7 @@ export default function DashboardLayout({
     } catch {
       // ignore
     }
+    queryClient.clear();
     logout();
     router.replace("/login");
   };

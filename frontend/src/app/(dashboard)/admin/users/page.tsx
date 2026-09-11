@@ -321,7 +321,7 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="py-3 px-4">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary-container/20 text-secondary border border-secondary-container/30">
-                          {USER_ROLE_LABELS[user.role] ?? user.role}
+                          {USER_ROLE_LABELS[user.role.split(".").pop()?.toLowerCase() || user.role] ?? user.role}
                         </span>
                       </td>
                       <td className="py-3 px-4">

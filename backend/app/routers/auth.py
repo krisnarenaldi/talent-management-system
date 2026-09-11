@@ -50,6 +50,10 @@ def _revoke_refresh_token(db: Session, user_id: UUID, token: str):
     db.commit()
 
 
+def _role_value(role: object) -> str:
+    return role.value if hasattr(role, "value") else str(role)
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email, User.is_active == True).first()
@@ -59,7 +63,7 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
             detail="Email atau password salah.",
         )
 
-    token_data = {"sub": str(user.id), "role": user.role}
+    token_data = {"sub": str(user.id), "role": _role_value(user.role)}
     access_token = create_access_token(token_data)
     refresh_token_val = create_refresh_token(token_data)
 
@@ -70,21 +74,25 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     response.set_cookie("access_token", access_token, max_age=60 * 15, **COOKIE_SETTINGS)
     response.set_cookie("refresh_token", refresh_token_val, max_age=60 * 60 * 24 * 7, **COOKIE_SETTINGS)
 
-    return TokenResponse(id=str(user.id), name=user.name, role=user.role, email=user.email)
+    return TokenResponse(id=str(user.id), name=user.name, role=_role_value(user.role), email=user.email)
 
 
 @router.post("/logout")
-def logout(response: Response, db: Session = Depends(get_db), token: str | None = Cookie(default=None)):
+def logout(
+    response: Response,
+    db: Session = Depends(get_db),
+    refresh_token: str | None = Cookie(default=None),
+):
     # Revoke semua refresh token yang aktif
-    if token:
+    if refresh_token:
         db.query(RefreshToken).filter(
-            RefreshToken.token == token,
+            RefreshToken.token == refresh_token,
             RefreshToken.revoked == False,
         ).update({"revoked": True})
         db.commit()
 
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+    response.delete_cookie("access_token", path="/", httponly=True, samesite="lax")
+    response.delete_cookie("refresh_token", path="/", httponly=True, samesite="lax")
     return {"message": "Logout berhasil."}
 
 
@@ -142,7 +150,7 @@ def refresh(
     db.commit()
 
     # Buat token baru
-    token_data = {"sub": str(user.id), "role": user.role}
+    token_data = {"sub": str(user.id), "role": _role_value(user.role)}
     new_access_token = create_access_token(token_data)
     new_refresh_token = create_refresh_token(token_data)
     new_expire = datetime.now(timezone.utc) + timedelta(days=7)
@@ -151,12 +159,12 @@ def refresh(
     response.set_cookie("access_token", new_access_token, max_age=60 * 15, **COOKIE_SETTINGS)
     response.set_cookie("refresh_token", new_refresh_token, max_age=60 * 60 * 24 * 7, **COOKIE_SETTINGS)
 
-    return TokenResponse(id=str(user.id), name=user.name, role=user.role, email=user.email)
+    return TokenResponse(id=str(user.id), name=user.name, role=_role_value(user.role), email=user.email)
 
 
 @router.get("/me", response_model=TokenResponse)
 def me(current_user: User = Depends(get_current_user)):
-    return TokenResponse(id=str(current_user.id), name=current_user.name, role=current_user.role, email=current_user.email)
+    return TokenResponse(id=str(current_user.id), name=current_user.name, role=_role_value(current_user.role), email=current_user.email)
 
 
 @router.patch("/me", response_model=TokenResponse)
@@ -179,7 +187,7 @@ def update_me(
         setattr(current_user, key, value)
     db.commit()
     db.refresh(current_user)
-    return TokenResponse(id=str(current_user.id), name=current_user.name, role=current_user.role, email=current_user.email)
+    return TokenResponse(id=str(current_user.id), name=current_user.name, role=_role_value(current_user.role), email=current_user.email)
 
 
 @router.post("/forgot-password")

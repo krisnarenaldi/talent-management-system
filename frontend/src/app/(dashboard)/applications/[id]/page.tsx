@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
+import { useAuthStore } from "@/stores/auth.store";
 import type { Application, StageHistory } from "@/types";
 
 async function fetchApplication(id: string) {
@@ -23,10 +24,20 @@ async function updateStage(id: string, payload: Record<string, string | number |
   return response.data;
 }
 
-function formatStageLabel(stage: string) {
-  return stage
+function formatStageLabel(stage: string | null | undefined) {
+  const normalizedStage = stage ?? "";
+  return normalizedStage
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "-";
+}
+
+function formatSafeDate(dateValue: string | null | undefined, pattern: string) {
+  if (!dateValue) return "-";
+
+  const parsedDate = new Date(dateValue);
+  if (Number.isNaN(parsedDate.getTime())) return "-";
+
+  return format(parsedDate, pattern, { locale: idLocale });
 }
 
 function statusBadgeClass(status: string) {
@@ -46,7 +57,9 @@ function statusBadgeClass(status: string) {
 
 export default function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const trimmedId = id.trim();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuthStore();
   const [selectedStage, setSelectedStage] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [result, setResult] = useState("");
@@ -55,25 +68,25 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [notes, setNotes] = useState("");
 
   const { data: application, isLoading } = useQuery({
-    queryKey: ["application", id],
-    queryFn: () => fetchApplication(id),
+    queryKey: ["application", trimmedId],
+    queryFn: () => fetchApplication(trimmedId),
   });
 
   const { data: stageHistory = [] } = useQuery({
-    queryKey: ["application-stages", id],
-    queryFn: () => fetchStageHistory(id),
+    queryKey: ["application-stages", trimmedId],
+    queryFn: () => fetchStageHistory(trimmedId),
   });
 
   useEffect(() => {
     if (!application) return;
-    setSelectedStage(application.next_possible_stages?.[0] ?? "");
+    setSelectedStage(application.current_stage ?? application.next_possible_stages?.[0] ?? "");
   }, [application]);
 
   const mutation = useMutation({
-    mutationFn: (payload: Record<string, string | number | null | undefined>) => updateStage(id, payload),
+    mutationFn: (payload: Record<string, string | number | null | undefined>) => updateStage(trimmedId, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["application", id] });
-      queryClient.invalidateQueries({ queryKey: ["application-stages", id] });
+      queryClient.invalidateQueries({ queryKey: ["application", trimmedId] });
+      queryClient.invalidateQueries({ queryKey: ["application-stages", trimmedId] });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       setScheduledDate("");
       setResult("");
@@ -84,6 +97,16 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   });
 
   const nextStages = application?.next_possible_stages ?? [];
+  const currentStage = application?.current_stage ?? "";
+  const stageList = currentStage ? [currentStage, ...nextStages] : nextStages;
+  const allStageOptions: string[] = Array.from(new Set(stageList)).filter(
+    (stage) => stage !== ""
+  );
+
+  // Check if current user is allowed to edit this application
+  const isRecruiter = currentUser?.role === "hr";
+  const isOwner = application?.recruiter_id === currentUser?.id;
+  const canEdit = !isRecruiter || isOwner;
 
   const handleSubmit = () => {
     if (!selectedStage) return;
@@ -154,11 +177,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             <div className="space-y-3 text-sm text-gray-700">
               <div className="flex items-center justify-between gap-3">
                 <span>Created</span>
-                <span>{format(new Date(application.created_at), "dd MMM yyyy", { locale: idLocale })}</span>
+                <span>{formatSafeDate(application.created_at, "dd MMM yyyy")}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span>Updated</span>
-                <span>{format(new Date(application.updated_at ?? application.created_at), "dd MMM yyyy", { locale: idLocale })}</span>
+                <span>{formatSafeDate(application.updated_at ?? application.created_at, "dd MMM yyyy")}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span>Status</span>
@@ -183,13 +206,16 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               <p className="text-sm text-gray-500">Belum ada riwayat tahap.</p>
             ) : (
               <div className="space-y-4">
-                {stageHistory.map((history) => (
-                  <div key={history.id} className="relative rounded-lg border border-gray-200 p-4 pl-8">
+                {stageHistory.map((history, index) => (
+                  <div
+                    key={history.id ?? `${history.stage_name ?? "stage"}-${history.created_at ?? index}`}
+                    className="relative rounded-lg border border-gray-200 p-4 pl-8"
+                  >
                     <div className="absolute left-3 top-5 h-2.5 w-2.5 rounded-full bg-primary-500" />
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <p className="font-medium text-gray-900">{formatStageLabel(history.stage_name)}</p>
                       <span className="text-xs text-gray-500">
-                        {format(new Date(history.created_at), "dd MMM yyyy, HH:mm", { locale: idLocale })}
+                        {formatSafeDate(history.created_at, "dd MMM yyyy, HH:mm")}
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
@@ -204,22 +230,34 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Update Tahapan</h2>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-gray-900">Update Tahapan</h2>
+              {canEdit ? null : (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                  Hanya recruiter yang ditugaskan yang dapat mengedit
+                </span>
+              )}
+            </div>
 
-            {nextStages.length === 0 ? (
+            {allStageOptions.length === 0 ? (
               <p className="text-sm text-gray-500">Tidak ada tahapan berikutnya yang tersedia.</p>
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Tahapan berikutnya</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Tahapan yang akan disimpan
+                  </label>
                   <select
                     value={selectedStage}
                     onChange={(e) => setSelectedStage(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                    disabled={!canEdit}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
-                    {nextStages.map((stage) => (
+                    {allStageOptions.map((stage) => (
                       <option key={stage} value={stage}>
-                        {formatStageLabel(stage)}
+                        {stage === currentStage
+                          ? `${formatStageLabel(stage)} (Tahap saat ini — update jadwal/catatan)`
+                          : formatStageLabel(stage)}
                       </option>
                     ))}
                   </select>
@@ -309,7 +347,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     rows={4}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                    disabled={!canEdit}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Tambahkan catatan atau keputusan interview..."
                   />
                 </div>
@@ -324,8 +363,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   <button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={mutation.isPending}
-                    className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    disabled={mutation.isPending || !canEdit}
+                    className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md disabled:cursor-not-allowed disabled:bg-gray-300"
                   >
                     {mutation.isPending ? "Menyimpan..." : "Simpan update"}
                   </button>

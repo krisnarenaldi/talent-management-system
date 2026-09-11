@@ -12,7 +12,7 @@ router = APIRouter()
 def list_blacklist_status_types(
     is_active: bool | None = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin")),
+    current_user=Depends(require_role("admin", "manager", "hr")),
 ):
     query = db.query(BlacklistStatusType)
     if is_active is not None:

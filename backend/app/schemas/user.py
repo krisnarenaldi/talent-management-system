@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 from app.core.pydantic_utils import AutoStrUUID
 
@@ -28,6 +28,13 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, value: object) -> str:
+        if hasattr(value, "value"):
+            return value.value
+        return str(value)
 
     class Config:
         from_attributes = True

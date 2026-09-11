@@ -5,21 +5,33 @@ from app.models.blacklist import Blacklist, BlacklistStatusType
 from app.models.candidate import Candidate
 
 
-def check_duplicate(db: Session, email: str | None, phone: str | None, identity_no: str | None) -> dict:
+def check_duplicate(
+    db: Session,
+    email: str | None,
+    phone: str | None,
+    identity_no: str | None,
+    exclude_candidate_id: str | None = None,
+) -> dict:
     """
     Cek duplikat kandidat berdasarkan email, phone, atau identity_no (KTP).
     Return: { "is_duplicate": bool, "existing_id": str | None }
     """
     existing = None
+    candidate_id_to_exclude = str(exclude_candidate_id) if exclude_candidate_id else None
+
     if email:
         existing = db.query(Candidate).filter(Candidate.email == email).first()
     if not existing and phone:
         existing = db.query(Candidate).filter(Candidate.phone == phone).first()
     if not existing and identity_no:
         existing = db.query(Candidate).filter(Candidate.identity_no == identity_no).first()
+
+    if existing and candidate_id_to_exclude and str(existing.id) == candidate_id_to_exclude:
+        existing = None
+
     return {
         "is_duplicate": existing is not None,
-        "existing_id": existing.id if existing else None,
+        "existing_id": str(existing.id) if existing else None,
     }
 
 

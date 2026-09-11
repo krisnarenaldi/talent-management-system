@@ -201,11 +201,11 @@
 - [x] `GET /api/v1/blacklist/check` — query param: email, phone, identity_no → return match atau tidak
 
 #### TASK-06.2: Frontend Blacklist
-- [ ] Halaman `/blacklist` — DataTable: nama kandidat, status type, alasan, tanggal, PIC, status approval
+- [x] Halaman `/blacklist` — DataTable: nama kandidat, status type, alasan, tanggal, PIC, status approval
   - Filter: status type, status approval
   - Tombol "Tambah ke Blacklist"
-- [ ] Halaman `/blacklist/new` — form: pilih kandidat (autocomplete), pilih status type, isi alasan & catatan
-- [ ] Manager: tombol "Approve" / "Cabut" di setiap baris
+- [x] Halaman `/blacklist/new` — form: pilih kandidat (autocomplete), pilih status type, isi alasan & catatan
+- [x] Manager: tombol "Approve" / "Cabut" di setiap baris
 
 ---
 

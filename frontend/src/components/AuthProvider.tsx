@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import type { AuthUser } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
@@ -12,38 +12,49 @@ async function fetchCurrentUser(): Promise<AuthUser> {
 }
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const setUser = useAuthStore((state) => state.setUser);
   const setLoading = useAuthStore((state) => state.setLoading);
+  const user = useAuthStore((state) => state.user);
   const isLoading = useAuthStore((state) => state.isLoading);
 
-  const { data, isError } = useQuery({
+  const { data, isError, isFetching } = useQuery({
     queryKey: ["auth.me"],
     queryFn: fetchCurrentUser,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     retry: false,
+    enabled: !!user,
   });
 
   useEffect(() => {
-    setLoading(true);
-  }, []);
+    if (!user) {
+      queryClient.removeQueries({ queryKey: ["auth.me"] });
+      setLoading(false);
+    }
+  }, [user, queryClient, setLoading]);
 
   useEffect(() => {
     if (data) {
       setUser(data);
+    }
+  }, [data, setUser]);
+
+  useEffect(() => {
+    if (!isFetching && (data || user)) {
       setLoading(false);
     }
-  }, [data, setUser, setLoading]);
+  }, [data, isFetching, setLoading, user]);
 
   useEffect(() => {
     if (isError) {
       setUser(null);
+      queryClient.removeQueries({ queryKey: ["auth.me"] });
       setLoading(false);
-      // Refresh halaman agar middleware bisa redirect ke login
       if (typeof window !== "undefined") {
         window.location.href = "/login";
       }
     }
-  }, [isError, setUser, setLoading]);
+  }, [isError, setUser, queryClient, setLoading]);
 
   if (isLoading) {
     return null;

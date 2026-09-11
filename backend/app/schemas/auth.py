@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -25,3 +25,10 @@ class TokenResponse(BaseModel):
     name: str
     role: str
     email: str
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, value: object) -> str:
+        if hasattr(value, "value"):
+            return value.value
+        return str(value)

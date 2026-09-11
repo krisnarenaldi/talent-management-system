@@ -13,7 +13,7 @@ def list_clients(
     search: str | None = Query(None),
     is_active: bool | None = Query(None, description="Filter: hanya aktif / hanya nonaktif"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin")),
+    current_user=Depends(require_role("hr", "manager", "admin")),
 ):
     query = db.query(Client)
     if search:

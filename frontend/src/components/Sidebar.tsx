@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
 
@@ -31,6 +32,7 @@ const SIDEBAR_BOTTOM_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isRole = useAuthStore((state) => state.isRole);
 
   const handleLogout = async () => {
@@ -39,6 +41,7 @@ export default function Sidebar() {
     } catch {
       // Backend tidak tersedia — tetap clear local state & redirect
     } finally {
+      queryClient.clear();
       useAuthStore.getState().logout();
       router.push("/login");
     }
@@ -83,6 +86,31 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {isRole("hr", "manager") && (
+          <div className="pt-2 mt-2 border-t border-outline-variant space-y-1">
+            <p className="px-3 text-label-xs text-on-surface-variant/50 uppercase tracking-wider">
+              HR & Manager
+            </p>
+            {SIDEBAR_ADMIN_ITEMS.slice(0, 2).map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
+                    active
+                      ? "bg-secondary-container text-on-secondary-container font-semibold"
+                      : "text-on-surface-variant hover:bg-surface-container-highest"
+                  }`}
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
 
         {isRole("admin") && (
           <div className="pt-2 mt-2 border-t border-outline-variant space-y-1">

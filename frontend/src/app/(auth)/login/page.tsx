@@ -38,6 +38,7 @@ function LoginForm() {
     try {
       const response = await api.post("/api/v1/auth/login", data);
       setUser({
+        id: response.data.id,
         name: response.data.name,
         email: response.data.email,
         role: response.data.role,

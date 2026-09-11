@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
+from app.models.employee import Employee
 
 
 class BlacklistStatusType(Base):
@@ -23,7 +24,8 @@ class Blacklist(Base):
     __tablename__ = "blacklist"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidate.id"), nullable=False, index=True)
+    candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidate.id"), nullable=True, index=True)
+    employee_id = Column(UUID(as_uuid=True), ForeignKey("employee.id"), nullable=True, index=True)
     status_type_id = Column(UUID(as_uuid=True), ForeignKey("blacklist_status_type.id"), nullable=False)
     reason = Column(String(500))
     notes = Column(Text)
@@ -36,6 +38,7 @@ class Blacklist(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     candidate = relationship("Candidate", back_populates="blacklists")
+    employee = relationship("Employee")
     status_type = relationship("BlacklistStatusType")
     pic = relationship("User", foreign_keys=[pic_user_id])
     approver = relationship("User", foreign_keys=[approved_by])
