@@ -65,6 +65,10 @@ class CandidateCreate(BaseModel):
     email: str | None = None
     phone: str | None = None
     identity_no: str | None = None
+    birth_date: datetime | None = None
+    birth_place: str | None = None
+    gender: str | None = None
+    blood_type: str | None = None
     domicile: str | None = None
     photo_url: str | None = None
     source_channel: str | None = None
@@ -78,6 +82,10 @@ class CandidateUpdate(BaseModel):
     email: str | None = None
     phone: str | None = None
     identity_no: str | None = None
+    birth_date: datetime | None = None
+    birth_place: str | None = None
+    gender: str | None = None
+    blood_type: str | None = None
     domicile: str | None = None
     photo_url: str | None = None
     source_channel: str | None = None
@@ -98,6 +106,10 @@ class CandidateResponse(BaseModel):
     email: str | None
     phone: str | None
     identity_no: str | None
+    birth_date: datetime | None
+    birth_place: str | None
+    gender: str | None
+    blood_type: str | None
     domicile: str | None
     photo_url: str | None
     source_channel: str | None

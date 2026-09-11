@@ -33,6 +33,10 @@ const candidateFormSchema = z.object({
   email: z.string().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   identity_no: z.string().optional().or(z.literal("")),
+  birth_date: z.string().optional().or(z.literal("")),
+  birth_place: z.string().optional().or(z.literal("")),
+  gender: z.string().optional().or(z.literal("")),
+  blood_type: z.string().optional().or(z.literal("")),
   domicile: z.string().optional().or(z.literal("")),
   source_channel: z.string().optional().or(z.literal("")),
   current_salary: z.string().optional().or(z.literal("")),
@@ -106,6 +110,10 @@ export default function CandidateForm({
       email: "",
       phone: "",
       identity_no: "",
+      birth_date: "",
+      birth_place: "",
+      gender: "",
+      blood_type: "",
       domicile: "",
       source_channel: "",
       current_salary: "",
@@ -155,6 +163,10 @@ export default function CandidateForm({
           email: candidate.email || "",
           phone: candidate.phone || "",
           identity_no: candidate.identity_no || "",
+          birth_date: candidate.birth_date ? candidate.birth_date.slice(0, 10) : "",
+          birth_place: candidate.birth_place || "",
+          gender: candidate.gender || "",
+          blood_type: candidate.blood_type || "",
           domicile: candidate.domicile || "",
           source_channel: candidate.source_channel || "",
           current_salary: candidate.current_salary != null ? String(candidate.current_salary) : "",
@@ -391,6 +403,36 @@ export default function CandidateForm({
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">NIK</label>
               <input {...form.register("identity_no")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Tempat Lahir</label>
+              <input {...form.register("birth_place")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal Lahir</label>
+              <input {...form.register("birth_date")} type="date" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Jenis Kelamin</label>
+              <select {...form.register("gender")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
+                <option value="">Pilih</option>
+                <option value="Laki-laki">Laki-laki</option>
+                <option value="Perempuan">Perempuan</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Golongan Darah</label>
+              <select {...form.register("blood_type")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
+                <option value="">Pilih</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="AB">AB</option>
+                <option value="O">O</option>
+              </select>
             </div>
 
             <div>

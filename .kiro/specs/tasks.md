@@ -54,6 +54,8 @@
 - [x] Buat seed data: 5 status blacklist default, beberapa agreement type default (PKWT, PKWTT, PPJP)
 - [x] Buat seed data: 1 user Admin awal untuk bootstrap sistem
 
+---
+
 > **Catatan tabel yang TIDAK masuk Fase 1:**
 > - `ai_screening_result` → Fase 3 (TASK-11/12, fitur AI screening)
 > - `generated_cv` → Fase 2 (TASK-10, generate CV standar)
@@ -134,7 +136,7 @@
 #### TASK-04.3: Frontend Kandidat
 - [x] Halaman `/candidates` — DataTable kandidat (search, filter posisi/status/sumber, pagination)
   - Badge status: aktif, duplikat suspected, blacklisted
-  - Tombol "Tambah Kandidat"
+- [x] Tombol "Tambah Kandidat"
 - [x] Halaman `/candidates/new` — form multi-step atau multi-section:
   - Seksi 1: Data Pribadi (nama, email, phone, NIK, domisili, sumber, gaji, notice period)
   - Seksi 2: Pendidikan (bisa tambah lebih dari 1 entri)
@@ -160,7 +162,7 @@
 - [x] `PATCH /api/v1/applications/{id}/stages/` — update tahapan:
   - Validasi transisi tahapan (tidak bisa loncat sembarangan)
   - Simpan event ke `stage_history` dengan `updated_by` & timestamp
-  - Jika tahapan = "Existing" → trigger `employee_service.create_from_application(application_id)`
+- [x] `Jika tahapan = "Existing" → trigger `employee_service.create_from_application(application_id)`
 - [x] `GET /api/v1/applications/{id}/stages/` — list riwayat tahapan
 
 #### TASK-05.2: Backend Auto-Create Employee (FR-04.4)
@@ -175,8 +177,7 @@
 - [x] Halaman `/applications` — list semua lamaran:
   - Filter: posisi, client, status, tahapan, recruiter, tanggal
   - Setiap baris: nama kandidat, posisi, client, tahapan saat ini, tanggal update, recruiter
-  - Link ke detail lamaran
-  - Tombol "Buat Lamaran Baru"
+- [x] Link ke detail lamaran
 - [x] Halaman `/applications/[id]` — detail lamaran:
   - Panel kiri: ringkasan kandidat + posisi
   - Panel kanan: timeline tahapan (riwayat dari Stage_History)
@@ -203,7 +204,7 @@
 #### TASK-06.2: Frontend Blacklist
 - [x] Halaman `/blacklist` — DataTable: nama kandidat, status type, alasan, tanggal, PIC, status approval
   - Filter: status type, status approval
-  - Tombol "Tambah ke Blacklist"
+- [x] Tombol "Tambah ke Blacklist"
 - [x] Halaman `/blacklist/new` — form: pilih kandidat (autocomplete), pilih status type, isi alasan & catatan
 - [x] Manager: tombol "Approve" / "Cabut" di setiap baris
 
@@ -227,25 +228,25 @@
 ### TASK-08: Modul Karyawan / Monitoring Outsource (FR-11)
 
 #### TASK-08.1: Backend Employee
-- [ ] `GET /api/v1/employees/` — list karyawan (filter: status, penempatan, contract expiry)
-- [ ] `GET /api/v1/employees/{id}` — detail karyawan (tanpa payroll)
-- [ ] `PUT /api/v1/employees/{id}` — update data karyawan
-- [ ] CRUD `/api/v1/employees/{id}/contracts/` — riwayat kontrak
-- [ ] `GET /api/v1/employees/{id}/payroll` — get payroll (Manager + Admin only)
-- [ ] `PUT /api/v1/employees/{id}/payroll` — update payroll (Manager + Admin only)
-- [ ] CRUD `/api/v1/employees/{id}/documents/` — dokumen karyawan (pola sama dengan dokumen kandidat)
-- [ ] Kalkulasi otomatis di response: `age` dari `birth_date`, `contract_duration_running` dari `join_date`
+- [x] `GET /api/v1/employees/` — list karyawan (filter: status, penempatan, contract expiry)
+- [x] `GET /api/v1/employees/{id}` — detail karyawan (tanpa payroll)
+- [x] `PUT /api/v1/employees/{id}` — update data karyawan
+- [x] CRUD `/api/v1/employees/{id}/contracts/` — riwayat kontrak
+- [x] `GET /api/v1/employees/{id}/payroll` — get payroll (Manager + Admin only)
+- [x] `PUT /api/v1/employees/{id}/payroll` — update payroll (Manager + Admin only)
+- [x] CRUD `/api/v1/employees/{id}/documents/` — dokumen karyawan (pola sama dengan dokumen kandidat)
+- [x] Kalkulasi otomatis di response: `age` dari `birth_date`, `contract_duration_running` dari `join_date`
 
 #### TASK-08.2: Frontend Employee
-- [ ] Halaman `/employees` — DataTable karyawan:
+- [x] Halaman `/employees` — DataTable karyawan:
   - Filter: status, penempatan, contract expiry dalam 30 hari
   - Badge: kontrak hampir habis (< 30 hari)
-- [ ] Halaman `/employees/[id]` — detail dengan tab:
+- [x] Halaman `/employees/[id]` — detail dengan tab:
   - **Data Pribadi**: info identitas, status, penempatan; usia dihitung & ditampilkan otomatis
   - **Kontrak**: list riwayat kontrak, tombol "Tambah Kontrak Baru"; masa berjalan ditampilkan otomatis
   - **Payroll**: hanya tampil jika role Manager/Admin; form THP, rekening, BPJS, NPWP
   - **Dokumen**: list dokumen + DocumentUploader
-- [ ] Setelah auto-create dari Application "Existing": redirect ke `/employees/[id]` dengan toast "Karyawan berhasil dibuat, lengkapi data berikut"
+- [x] Setelah auto-create dari Application "Existing": redirect ke `/employees/[id]` dengan toast "Karyawan berhasil dibuat, lengkapi data berikut"
 
 ---
 
@@ -289,7 +290,7 @@
 
 - [ ] Setup `services/n8n_service.py` — kirim webhook ke n8n dengan payload yang diperlukan
 - [ ] Buat `routers/internal.py` — endpoint `/internal/ai/extraction-result` (dilindungi shared secret):
-  - Terima hasil ekstraksi dari n8n
+  - Terima hasil ekstrakti dari n8n
   - Simpan ke `ai_screening_result`
   - Tandai kandidat perlu review
 - [ ] n8n Workflow "CV Parser":

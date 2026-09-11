@@ -69,6 +69,10 @@ export interface Candidate {
   email?: string;
   phone?: string;
   identity_no?: string;
+  birth_date?: string;
+  birth_place?: string;
+  gender?: string;
+  blood_type?: string;
   domicile?: string;
   photo_url?: string;
   source_channel?: string;
@@ -162,6 +166,7 @@ export interface Employee {
   personal_email?: string;
   office_email?: string;
   phone_number?: string;
+  identity_no?: string;
   placement?: string;
   role_level?: string;
   employee_status: EmployeeStatus;
@@ -169,8 +174,11 @@ export interface Employee {
   resign_date?: string;
   resign_reason?: string;
   notes?: string;
-  // Computed di frontend dari birth_date
+  // Computed
   age?: number;
+  contract_duration_running?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface EmployeeContract {
@@ -183,7 +191,34 @@ export interface EmployeeContract {
   end_date?: string;
   status: string;
   // Computed
-  months_running?: number;
+  contract_duration_running?: number;
+  created_at?: string;
+}
+
+export interface EmployeePayroll {
+  id: string;
+  employee_id: string;
+  thp?: number;
+  allowance_used?: string;
+  payroll_bank?: string;
+  bank_account_number?: string;
+  bpjs_tk_status?: string;
+  bpjs_tk_number?: string;
+  bpjs_kesehatan_status?: string;
+  bpjs_kesehatan_number?: string;
+  npwp_number?: string;
+  updated_at?: string;
+}
+
+export interface EmployeeDocument {
+  id: string;
+  employee_id: string;
+  doc_type: string;
+  file_url?: string;
+  drive_item_id?: string;
+  is_verified: boolean;
+  is_deleted?: boolean;
+  uploaded_at?: string;
 }
 
 // --- Blacklist ---

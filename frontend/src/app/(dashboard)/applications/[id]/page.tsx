@@ -7,6 +7,8 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
+import { useToastStore } from "@/stores/toast.store";
+import { useRouter } from "next/navigation";
 import type { Application, StageHistory } from "@/types";
 
 async function fetchApplication(id: string) {
@@ -60,6 +62,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const trimmedId = id.trim();
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuthStore();
+  const router = useRouter();
   const [selectedStage, setSelectedStage] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [result, setResult] = useState("");
@@ -93,6 +96,18 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       setSalaryCurrent("");
       setSalaryExpected("");
       setNotes("");
+      
+      // If stage was updated to "Existing", show toast and redirect to employee detail
+      if (selectedStage === "Existing") {
+        // Give backend a moment to create the employee, then show toast and redirect
+        setTimeout(() => {
+          const showToast = useToastStore.getState().showToast;
+          showToast("success", "Karyawan berhasil dibuat, silahkan lengkapi data berikut");
+          // Redirect to employees list - in a more advanced implementation, 
+          // we would redirect to the specific employee detail page
+          router.push("/employees");
+        }, 1000);
+      }
     },
   });
 

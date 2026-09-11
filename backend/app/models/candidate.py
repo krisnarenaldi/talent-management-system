@@ -18,6 +18,10 @@ class Candidate(Base):
     email = Column(String(255), index=True)
     phone = Column(String(50), index=True)
     identity_no = Column(String(20), index=True)        # NIK KTP
+    birth_date = Column(Date)
+    birth_place = Column(String(255))
+    gender = Column(String(20))
+    blood_type = Column(String(5))
     domicile = Column(String(255))
     photo_url = Column(String(500))
     source_channel = Column(String(100))                 # LinkedIn/Glints/Email/dll
