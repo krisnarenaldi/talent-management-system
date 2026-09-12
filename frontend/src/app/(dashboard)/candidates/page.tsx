@@ -119,9 +119,22 @@ export default function CandidatesPage() {
                 candidates.map((candidate) => (
                   <tr key={candidate.id} className="border-t border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <div>
-                        <p className="font-semibold text-gray-900">{candidate.full_name}</p>
-                        <p className="text-xs text-gray-500">{candidate.identity_no || "-"}</p>
+                      <div className="flex items-center gap-3">
+                        {candidate.photo_url ? (
+                          <img
+                            src={candidate.photo_url}
+                            alt={candidate.full_name}
+                            className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 text-sm font-medium">
+                            ?
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-semibold text-gray-900">{candidate.full_name}</p>
+                          <p className="text-xs text-gray-500">{candidate.identity_no || "-"}</p>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
