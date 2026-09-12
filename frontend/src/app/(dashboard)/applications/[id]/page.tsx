@@ -8,6 +8,7 @@ import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import type { Application, StageHistory } from "@/types";
 
@@ -370,7 +371,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
 
                 {mutation.isError && (
                   <p className="text-sm text-red-600">
-                    {(mutation.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Gagal memperbarui tahapan."}
+                    {getErrorMessage(mutation.error, "Gagal memperbarui tahapan.")}
                   </p>
                 )}
 

@@ -182,16 +182,21 @@ def add_to_blacklist(
     if not status_type:
         raise HTTPException(status_code=404, detail="Status type tidak ditemukan.")
 
-    # Check duplicate: same target already active
-    existing = db.execute(
-        select(Blacklist).where(
-            or_(
+    # Check duplicate: same target already active (only check the relevant FK)
+    if payload.candidate_id:
+        existing = db.execute(
+            select(Blacklist).where(
                 Blacklist.candidate_id == payload.candidate_id,
+                Blacklist.is_active == True,
+            )
+        ).scalar_one_or_none()
+    else:
+        existing = db.execute(
+            select(Blacklist).where(
                 Blacklist.employee_id == payload.employee_id,
-            ),
-            Blacklist.is_active == True,
-        )
-    ).scalar_one_or_none()
+                Blacklist.is_active == True,
+            )
+        ).scalar_one_or_none()
     if existing:
         raise HTTPException(
             status_code=409,

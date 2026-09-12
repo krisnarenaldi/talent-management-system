@@ -61,26 +61,7 @@ def seed_candidates(db):
                 contact_status="aktif",
             )
             db.add(candidate)
-            db.flush()  # To get the ID
-
-            # Blacklist some candidates (e.g., indices 0, 5, 10)
-            if i % 5 == 0 and status_types and admin:
-                blacklist_entry = Blacklist(
-                    id=uuid.uuid4(),
-                    candidate_id=candidate.id,
-                    status_type_id=random.choice(status_types).id,
-                    reason="Seed data for testing blacklist menu",
-                    notes="Testing blacklist feature from seed script",
-                    blacklisted_date=date.today(),
-                    pic_user_id=admin.id,
-                    is_approved=True,
-                    approved_by=admin.id,
-                    is_active=True
-                )
-                db.add(blacklist_entry)
-                print(f"✓ Seed: Candidate {data['full_name']} created and blacklisted")
-            else:
-                print(f"✓ Seed: Candidate {data['full_name']} created")
+            db.flush()  # To get the ID            
     
     db.commit()
 

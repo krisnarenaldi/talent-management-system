@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, model_validator
 from app.core.pydantic_utils import AutoStrUUID
 
 
@@ -14,16 +14,11 @@ class BlacklistCreate(BaseModel):
     blacklisted_date: date | None = None
     pic_user_id: Optional[AutoStrUUID] = None
 
-    @field_validator('candidate_id', 'employee_id')
-    @classmethod
-    def at_least_one_target(cls, v, info):
-        # If the other field is set, this is fine.
-        data = info.data if hasattr(info, 'data') else {}
-        candidate_id = data.get('candidate_id')
-        employee_id = data.get('employee_id')
-        if not candidate_id and not employee_id:
-            raise ValueError('Either candidate_id or employee_id must be provided')
-        return v
+    @model_validator(mode="after")
+    def at_least_one_target(self) -> "BlacklistCreate":
+        if not self.candidate_id and not self.employee_id:
+            raise ValueError("Either candidate_id or employee_id must be provided")
+        return self
 
 
 class BlacklistApproval(BaseModel):

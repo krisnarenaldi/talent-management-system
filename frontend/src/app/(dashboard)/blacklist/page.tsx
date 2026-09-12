@@ -7,11 +7,8 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import api from "@/lib/api";
 import { blacklistApi } from "@/lib/api/blacklist";
+import { getErrorMessage } from "@/lib/errors";
 import type { Blacklist, BlacklistStatusType } from "@/types";
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || fallback;
-}
 
 export default function BlacklistPage() {
   const queryClient = useQueryClient();

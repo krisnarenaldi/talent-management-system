@@ -13,6 +13,7 @@ import api from "@/lib/api";
 import type { Client } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
 
 const clientCreateSchema = z.object({
   name: z.string().min(1, "Nama klien wajib diisi"),
@@ -96,10 +97,7 @@ export default function AdminClientsPage() {
       showToast("success", "Klien berhasil ditambahkan.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menambahkan klien.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menambahkan klien."));
     },
   });
 
@@ -112,10 +110,7 @@ export default function AdminClientsPage() {
       showToast("success", "Klien berhasil diperbarui.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal memperbarui klien.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal memperbarui klien."));
     },
   });
 
@@ -127,10 +122,7 @@ export default function AdminClientsPage() {
       showToast("success", "Klien berhasil dinonaktifkan.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menonaktifkan klien.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menonaktifkan klien."));
     },
   });
 

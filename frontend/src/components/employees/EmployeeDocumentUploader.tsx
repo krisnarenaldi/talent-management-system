@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
 import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
 import type { EmployeeDocument } from "@/types";
 
 async function fetchDocuments(employeeId: string): Promise<EmployeeDocument[]> {
@@ -45,10 +46,7 @@ export default function EmployeeDocumentUploader({ employeeId }: { employeeId: s
       showToast("success", "Dokumen berhasil diupload.");
     },
     onError: (error: unknown) => {
-      const msg =
-        (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal mengupload dokumen.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(error, "Gagal mengupload dokumen."));
     },
   });
 
@@ -61,10 +59,7 @@ export default function EmployeeDocumentUploader({ employeeId }: { employeeId: s
       showToast("success", "Dokumen berhasil dihapus.");
     },
     onError: (error: unknown) => {
-      const msg =
-        (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menghapus dokumen.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(error, "Gagal menghapus dokumen."));
     },
   });
 

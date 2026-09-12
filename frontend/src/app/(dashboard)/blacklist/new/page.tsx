@@ -11,6 +11,7 @@ import api from "@/lib/api";
 import { blacklistApi } from "@/lib/api/blacklist";
 import { useToastStore } from "@/stores/toast.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { getErrorMessage } from "@/lib/errors";
 import type { BlacklistStatusType, Candidate, Employee } from "@/types";
 
 const formSchema = z.object({
@@ -122,10 +123,7 @@ export default function NewBlacklistPage() {
       router.push("/blacklist");
     },
     onError: (err) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menambahkan blacklist.";
-      showToast("error", message);
+      showToast("error", getErrorMessage(err, "Gagal menambahkan blacklist."));
     },
   });
 

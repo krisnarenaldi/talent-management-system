@@ -9,6 +9,7 @@ import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
 import type { Candidate, CandidateEducation, CandidateExperience } from "@/types";
 
 const educationItemSchema = z.object({
@@ -198,10 +199,7 @@ export default function CandidateForm({
               : [defaultExperience],
         });
       } catch (error) {
-        const message =
-          (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-          "Gagal memuat data kandidat.";
-        showToast("error", message);
+        showToast("error", getErrorMessage(error, "Gagal memuat data kandidat."));
       } finally {
         setIsLoadingData(false);
       }
@@ -320,10 +318,7 @@ export default function CandidateForm({
       queryClient.invalidateQueries({ queryKey: ["candidate-applications", targetId] });
       router.push(`/candidates/${targetId}`);
     } catch (error) {
-      const message =
-        (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menyimpan data kandidat.";
-      showToast("error", message);
+      showToast("error", getErrorMessage(error, "Gagal menyimpan data kandidat."));
     } finally {
       setIsSubmitting(false);
     }

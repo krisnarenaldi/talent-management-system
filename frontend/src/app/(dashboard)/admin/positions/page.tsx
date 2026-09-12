@@ -13,6 +13,7 @@ import api from "@/lib/api";
 import type { AgreementType, Position, Client } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
 
 const positionCreateSchema = z.object({
   client_id: z.string().min(1, "Klien wajib dipilih"),
@@ -129,10 +130,7 @@ export default function AdminPositionsPage() {
       showToast("success", "Posisi berhasil ditambahkan.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menambahkan posisi.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menambahkan posisi."));
     },
   });
 
@@ -145,10 +143,7 @@ export default function AdminPositionsPage() {
       showToast("success", "Posisi berhasil diperbarui.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal memperbarui posisi.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal memperbarui posisi."));
     },
   });
 

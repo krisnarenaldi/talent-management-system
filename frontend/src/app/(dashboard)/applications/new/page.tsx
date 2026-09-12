@@ -10,6 +10,7 @@ import { z } from "zod";
 import api from "@/lib/api";
 import { useToastStore } from "@/stores/toast.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { getErrorMessage } from "@/lib/errors";
 import type { Candidate, Position } from "@/types";
 
 const formSchema = z.object({
@@ -85,10 +86,7 @@ export default function NewApplicationPage() {
       router.push(`/applications/${response.data.id}`);
     },
     onError: (err) => {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal membuat lamaran.";
-      showToast("error", message);
+      showToast("error", getErrorMessage(err, "Gagal membuat lamaran."));
     },
   });
 

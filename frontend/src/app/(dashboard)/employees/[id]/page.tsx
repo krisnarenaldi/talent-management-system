@@ -8,6 +8,7 @@ import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
 import {
   fetchEmployee,
   updateEmployee,
@@ -49,8 +50,7 @@ function PersonalDataTab({
       showToast("success", "Data karyawan berhasil diperbarui.");
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Gagal menyimpan.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menyimpan."));
     },
   });
 
@@ -157,8 +157,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
       showToast("success", "Kontrak baru berhasil ditambahkan.");
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Gagal menambah kontrak.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menambah kontrak."));
     },
   });
 
@@ -169,8 +168,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
       showToast("success", "Kontrak berhasil dihapus.");
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Gagal menghapus kontrak.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menghapus kontrak."));
     },
   });
 
@@ -345,8 +343,7 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
       showToast("success", "Data payroll berhasil diperbarui.");
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Gagal menyimpan payroll.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menyimpan payroll."));
     },
   });
 

@@ -13,6 +13,7 @@ import api from "@/lib/api";
 import type { User } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
 
 const USER_ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -112,10 +113,7 @@ export default function AdminUsersPage() {
       showToast("success", "Pengguna berhasil ditambahkan.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menambahkan pengguna.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menambahkan pengguna."));
     },
   });
 
@@ -128,10 +126,7 @@ export default function AdminUsersPage() {
       showToast("success", "Pengguna berhasil diperbarui.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal memperbarui pengguna.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal memperbarui pengguna."));
     },
   });
 
@@ -142,10 +137,7 @@ export default function AdminUsersPage() {
       showToast("success", "Pengguna berhasil dinonaktifkan.");
     },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Gagal menonaktifkan pengguna.";
-      showToast("error", msg);
+      showToast("error", getErrorMessage(err, "Gagal menonaktifkan pengguna."));
     },
   });
 
