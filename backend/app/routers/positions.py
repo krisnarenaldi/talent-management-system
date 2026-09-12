@@ -34,7 +34,7 @@ def list_positions(
 def create_position(
     payload: PositionCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin")),
+    current_user=Depends(require_role("admin", "manager")),  # create: admin + manager
 ):
     from app.models.client import Client
 
@@ -53,7 +53,7 @@ def update_position(
     position_id: str,
     payload: PositionUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin")),
+    current_user=Depends(require_role("admin", "manager")),  # edit: admin + manager
 ):
     from app.models.client import Client
 

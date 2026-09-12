@@ -15,35 +15,30 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const queryClient = useQueryClient();
   const setUser = useAuthStore((state) => state.setUser);
   const setLoading = useAuthStore((state) => state.setLoading);
-  const user = useAuthStore((state) => state.user);
   const isLoading = useAuthStore((state) => state.isLoading);
 
+  // Selalu fetch /auth/me saat mount — tidak bergantung pada Zustand user
+  // sehingga hard refresh (store kosong) tetap bisa hydrate user dari cookie
   const { data, isError, isFetching } = useQuery({
     queryKey: ["auth.me"],
     queryFn: fetchCurrentUser,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000, // cache 5 menit
     retry: false,
-    enabled: !!user,
   });
-
-  useEffect(() => {
-    if (!user) {
-      queryClient.removeQueries({ queryKey: ["auth.me"] });
-      setLoading(false);
-    }
-  }, [user, queryClient, setLoading]);
 
   useEffect(() => {
     if (data) {
       setUser(data);
-    }
-  }, [data, setUser]);
-
-  useEffect(() => {
-    if (!isFetching && (data || user)) {
       setLoading(false);
     }
-  }, [data, isFetching, setLoading, user]);
+  }, [data, setUser, setLoading]);
+
+  useEffect(() => {
+    if (!isFetching && !data) {
+      // fetch selesai tapi tidak ada data → tidak ada sesi aktif
+      setLoading(false);
+    }
+  }, [isFetching, data, setLoading]);
 
   useEffect(() => {
     if (isError) {

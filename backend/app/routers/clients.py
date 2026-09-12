@@ -30,7 +30,7 @@ def list_clients(
 def create_client(
     payload: ClientCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin")),
+    current_user=Depends(require_role("admin")),  # create: admin only
 ):
     client = Client(**payload.model_dump())
     db.add(client)
@@ -44,7 +44,7 @@ def update_client(
     client_id: str,
     payload: ClientUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin")),
+    current_user=Depends(require_role("admin", "manager")),  # edit: admin + manager
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
@@ -60,7 +60,7 @@ def update_client(
 def delete_client(
     client_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("admin")),
+    current_user=Depends(require_role("admin")),  # deactivate: admin only
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:

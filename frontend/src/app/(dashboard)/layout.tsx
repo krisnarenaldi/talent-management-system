@@ -15,6 +15,25 @@ function normalizeRole(role: string | undefined): string {
   return role.split(".").pop()?.toLowerCase() || role;
 }
 
+// Route /admin/* yang hanya boleh diakses admin — hr/manager boleh akses clients & positions
+const ADMIN_ONLY_ROUTES = [
+  "/admin/users",
+  "/admin/blacklist-status-types",
+  "/admin/agreement-types",
+  "/admin/cv-templates",
+];
+
+function isAdminOnlyRoute(pathname: string): boolean {
+  return ADMIN_ONLY_ROUTES.some((r) => pathname.startsWith(r));
+}
+
+// Routes yang diizinkan untuk PM (hanya blacklist + settings)
+const PM_ALLOWED_PREFIXES = ["/blacklist", "/settings"];
+
+function isPMAllowedRoute(pathname: string): boolean {
+  return PM_ALLOWED_PREFIXES.some((r) => pathname.startsWith(r));
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -29,12 +48,20 @@ export default function DashboardLayout({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isAdmin = normalizeRole(user?.role) === "admin";
+  const isPM = normalizeRole(user?.role) === "pm";
 
   useEffect(() => {
-    if (!authLoading && user && pathname.startsWith("/admin") && !isAdmin) {
+    if (!authLoading && user && isAdminOnlyRoute(pathname) && !isAdmin) {
       router.replace("/dashboard");
     }
   }, [authLoading, isAdmin, pathname, router, user]);
+
+  // PM hanya boleh akses /blacklist dan /settings
+  useEffect(() => {
+    if (!authLoading && user && isPM && !isPMAllowedRoute(pathname)) {
+      router.replace("/blacklist");
+    }
+  }, [authLoading, isPM, pathname, router, user]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -66,7 +93,7 @@ export default function DashboardLayout({
     .slice(0, 2);
 
   const isUnauthorizedAdminRoute =
-    !authLoading && pathname.startsWith("/admin") && !isAdmin;
+    !authLoading && isAdminOnlyRoute(pathname) && !isAdmin && !isPM;
 
   return (
     <TokenRefreshProvider>

@@ -75,36 +75,14 @@ export default function AdminPositionsPage() {
   const { user } = useAuthStore();
   const showToast = useToastStore((state) => state.showToast);
 
-  useEffect(() => {
-    if (user && !isRole("admin", "hr", "manager")) {
-      router.replace("/dashboard");
-    }
-  }, [user, isRole, router]);
-
-  if (!user || !isRole("admin", "hr", "manager")) {
-    return (
-      <div className="p-container-padding">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-on-error-container">
-                lock
-              </span>
-              <p className="text-body-sm text-on-error-container">
-                Akses ditolak. Hanya Admin yang dapat mengelola posisi.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // — semua hooks wajib di atas early return —
   const [searchTerm, setSearchTerm] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+
+  const authorized = !!user && isRole("admin", "hr", "manager");
 
   const {
     data: positionsData,
@@ -124,16 +102,19 @@ export default function AdminPositionsPage() {
               ? false
               : undefined,
       }),
+    enabled: authorized,
   });
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
     queryFn: fetchClients,
+    enabled: authorized,
   });
 
   const { data: agreementTypes = [] } = useQuery({
     queryKey: ["agreement-types", "active"],
     queryFn: fetchAgreementTypes,
+    enabled: authorized,
   });
 
   const positions = positionsData?.data ?? [];
@@ -178,6 +159,31 @@ export default function AdminPositionsPage() {
     });
   };
 
+  useEffect(() => {
+    if (user && !isRole("admin", "hr", "manager")) {
+      router.replace("/dashboard");
+    }
+  }, [user, isRole, router]);
+
+  if (!authorized) {
+    return (
+      <div className="p-container-padding">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-error-container">
+                lock
+              </span>
+              <p className="text-body-sm text-on-error-container">
+                Akses ditolak. Hanya Admin yang dapat mengelola posisi.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isError) {
     const status = (error as { response?: { status?: number } })?.response?.status;
     if (status === 403) {
@@ -208,7 +214,7 @@ export default function AdminPositionsPage() {
           <h1 className="text-headline-lg font-bold text-on-surface">
             Kelola Posisi
           </h1>
-          {isRole("admin") && (
+          {isRole("admin", "manager") && (
             <button
               onClick={() => setShowAddModal(true)}
               className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center gap-2"
@@ -352,7 +358,7 @@ export default function AdminPositionsPage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-1">
-                          {isRole("admin") && (
+                          {isRole("admin", "manager") && (
                             <>
                               <button
                                 onClick={() => setEditingPosition(position)}

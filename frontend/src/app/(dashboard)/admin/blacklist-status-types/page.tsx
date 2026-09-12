@@ -28,33 +28,12 @@ export default function BlacklistStatusTypesPage() {
   const { user } = useAuthStore();
   const showToast = useToastStore((state) => state.showToast);
 
-  useEffect(() => {
-    if (user && !isRole("admin")) {
-      router.replace("/dashboard");
-    }
-  }, [user, isRole, router]);
-
-  if (!user || !isRole("admin")) {
-    return (
-      <div className="p-container-padding">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-on-error-container">
-                lock
-              </span>
-              <p className="text-body-sm text-on-error-container">
-                Akses ditolak. Hanya Admin yang dapat mengelola jenis status blacklist.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // — semua hooks wajib di atas early return —
   const [statusFilter, setStatusFilter] = useState("");
   const [editing, setEditing] = useState<BlacklistStatusType | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  const authorized = !!user && isRole("admin");
 
   const { data = [], isLoading, isError, error } = useQuery<BlacklistStatusType[]>({
     queryKey: ["blacklist-status-types", statusFilter],
@@ -66,6 +45,7 @@ export default function BlacklistStatusTypesPage() {
       });
       return response.data;
     },
+    enabled: authorized,
   });
 
   const saveMutation = useMutation({
@@ -91,6 +71,31 @@ export default function BlacklistStatusTypesPage() {
     },
     onError: (mutationError: unknown) => showToast("error", getErrorMessage(mutationError, "Gagal mengubah status.")),
   });
+
+  useEffect(() => {
+    if (user && !isRole("admin")) {
+      router.replace("/dashboard");
+    }
+  }, [user, isRole, router]);
+
+  if (!authorized) {
+    return (
+      <div className="p-container-padding">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-error-container">
+                lock
+              </span>
+              <p className="text-body-sm text-on-error-container">
+                Akses ditolak. Hanya Admin yang dapat mengelola jenis status blacklist.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isError && (error as ApiError)?.response?.status === 403) {
     return <AccessDenied resource="jenis status blacklist" />;

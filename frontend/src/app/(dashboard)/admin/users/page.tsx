@@ -18,12 +18,13 @@ const USER_ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   hr: "HR",
   manager: "Manager",
+  pm: "PM (Project Manager)",
 };
 
 const userCreateSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
   email: z.string().email("Email tidak valid"),
-  role: z.enum(["admin", "hr", "manager"], { message: "Role wajib dipilih" }),
+  role: z.enum(["admin", "hr", "manager", "pm"], { message: "Role wajib dipilih" }),
   password: z.string().min(6, "Password minimal 6 karakter"),
 });
 
@@ -32,7 +33,7 @@ const userUpdateSchema = z
     name: z.string().min(1, "Nama wajib diisi").optional(),
     email: z.string().email("Email tidak invalid").optional(),
     role: z
-      .enum(["admin", "hr", "manager"], { message: "Role tidak valid" })
+      .enum(["admin", "hr", "manager", "pm"], { message: "Role tidak valid" })
       .optional(),
     password: z
       .string()
@@ -64,38 +65,17 @@ export default function AdminUsersPage() {
   const queryClient = useQueryClient();
   const isRole = useAuthStore((state) => state.isRole);
   const { user } = useAuthStore();
+  const showToast = useToastStore((state) => state.showToast);
+
+  // — semua hooks wajib di atas early return —
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
-  const showToast = useToastStore((state) => state.showToast);
 
-  useEffect(() => {
-    if (user && !isRole("admin")) {
-      router.replace("/dashboard");
-    }
-  }, [user, isRole, router]);
-
-  if (!user || !isRole("admin")) {
-    return (
-      <div className="p-container-padding">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-on-error-container">
-                lock
-              </span>
-              <p className="text-body-sm text-on-error-container">
-                Akses ditolak. Hanya Admin yang dapat mengelola pengguna.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const authorized = !!user && isRole("admin");
 
   const {
     data: usersData,
@@ -117,6 +97,7 @@ export default function AdminUsersPage() {
         skip: 0,
         limit: 100,
       }),
+    enabled: authorized,
   });
 
   const users = usersData?.data ?? [];
@@ -178,6 +159,31 @@ export default function AdminUsersPage() {
       payload: { is_active: true },
     });
   };
+
+  useEffect(() => {
+    if (user && !isRole("admin")) {
+      router.replace("/dashboard");
+    }
+  }, [user, isRole, router]);
+
+  if (!authorized) {
+    return (
+      <div className="p-container-padding">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-error-container">
+                lock
+              </span>
+              <p className="text-body-sm text-on-error-container">
+                Akses ditolak. Hanya Admin yang dapat mengelola pengguna.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     const status = (error as { response?: { status?: number } })?.response?.status;
@@ -466,7 +472,7 @@ function UserFormModal({
       : {
           name: user?.name ?? "",
           email: user?.email ?? "",
-          role: (user?.role as "admin" | "hr" | "manager") ?? "hr",
+          role: (user?.role as "admin" | "hr" | "manager" | "pm") ?? "hr",
           password: "",
           is_active: user?.is_active ?? true,
         },
@@ -540,6 +546,7 @@ function UserFormModal({
               <option value="admin">Admin</option>
               <option value="hr">HR</option>
               <option value="manager">Manager</option>
+              <option value="pm">PM (Project Manager)</option>
             </select>
             {errors.role && (
               <p className="text-error text-xs mt-1">{errors.role.message}</p>

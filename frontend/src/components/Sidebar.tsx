@@ -34,6 +34,7 @@ export default function Sidebar() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const isRole = useAuthStore((state) => state.isRole);
+  const isPM = isRole("pm");
 
   const handleLogout = async () => {
     try {
@@ -69,6 +70,32 @@ export default function Sidebar() {
 
       {/* Main nav */}
       <div className="flex-1 overflow-y-auto space-y-1">
+        {/* PM: only shows Blacklist */}
+        {isPM ? (
+          <>
+            <p className="px-3 text-label-xs text-on-surface-variant/50 uppercase tracking-wider mb-1">
+              Monitoring Outsource
+            </p>
+            {[{ href: "/blacklist", icon: "gavel", label: "Blacklist" }].map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
+                    active
+                      ? "bg-secondary-container text-on-secondary-container font-semibold"
+                      : "text-on-surface-variant hover:bg-surface-container-highest"
+                  }`}
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </>
+        ) : (
+          <>
         {SIDEBAR_NAV_ITEMS.map((item) => {
           const active = isActive(item.href);
           return (
@@ -156,10 +183,13 @@ export default function Sidebar() {
             );
           })}
         </div>
+          </>
+        )}
       </div>
 
-      {/* Add Candidate CTA */}
+      {/* Add Candidate CTA — hidden for PM */}
       <div className="mt-stack-md space-y-2">
+        {!isPM && (
         <Link
           href="/candidates/new"
           className="w-full bg-primary hover:bg-primary/90 text-on-primary py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-body-md"
@@ -167,6 +197,7 @@ export default function Sidebar() {
           <span className="material-symbols-outlined text-lg">add</span>
           Add Candidate
         </Link>
+        )}
 
         {/* Logout 
         <button

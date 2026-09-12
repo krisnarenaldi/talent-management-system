@@ -55,36 +55,14 @@ export default function AdminClientsPage() {
   const { user } = useAuthStore();
   const showToast = useToastStore((state) => state.showToast);
 
-  useEffect(() => {
-    if (user && !isRole("admin")) {
-      router.replace("/dashboard");
-    }
-  }, [user, isRole, router]);
-
-  if (!user || !isRole("admin", "hr", "manager")) {
-    return (
-      <div className="p-container-padding">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-on-error-container">
-                lock
-              </span>
-              <p className="text-body-sm text-on-error-container">
-                Akses ditolak. Hanya Admin yang dapat mengelola klien.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // — semua hooks wajib di atas early return —
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deleteConfirmClient, setDeleteConfirmClient] = useState<Client | null>(null);
+
+  const authorized = !!user && isRole("admin", "hr", "manager");
 
   const {
     data: clientsData,
@@ -103,6 +81,7 @@ export default function AdminClientsPage() {
               ? false
               : undefined,
       }),
+    enabled: authorized,
   });
 
   const clients = clientsData?.data ?? [];
@@ -161,6 +140,31 @@ export default function AdminClientsPage() {
       payload: { is_active: true },
     });
   };
+
+  useEffect(() => {
+    if (user && !isRole("admin", "hr", "manager")) {
+      router.replace("/dashboard");
+    }
+  }, [user, isRole, router]);
+
+  if (!authorized) {
+    return (
+      <div className="p-container-padding">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-error-container">
+                lock
+              </span>
+              <p className="text-body-sm text-on-error-container">
+                Akses ditolak. Hanya Admin yang dapat mengelola klien.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isError) {
     const status = (error as { response?: { status?: number } })?.response?.status;
@@ -319,17 +323,19 @@ export default function AdminClientsPage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-1">
+                          {isRole("admin", "manager") && (
+                            <button
+                              onClick={() => setEditingClient(client)}
+                              className="p-1 text-on-surface-variant hover:text-primary transition-colors"
+                              title="Edit"
+                            >
+                              <span className="material-symbols-outlined text-lg">
+                                edit
+                              </span>
+                            </button>
+                          )}
                           {isRole("admin") && (
                             <>
-                              <button
-                                onClick={() => setEditingClient(client)}
-                                className="p-1 text-on-surface-variant hover:text-primary transition-colors"
-                                title="Edit"
-                              >
-                                <span className="material-symbols-outlined text-lg">
-                                  edit
-                                </span>
-                              </button>
                               {client.is_active ? (
                                 <button
                                   onClick={() => setDeleteConfirmClient(client)}

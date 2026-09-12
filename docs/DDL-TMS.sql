@@ -32,7 +32,8 @@ SET row_security = off;
 CREATE TYPE user_role_enum AS ENUM (
     'admin',
     'hr',
-    'manager'
+    'manager',
+    'pm'
 );
 
 CREATE TYPE completeness_status_enum AS ENUM (
@@ -95,7 +96,7 @@ CREATE INDEX ix_user_reset_token ON public."user" (reset_token);
 
 COMMENT ON TABLE  public."user"                IS 'Pengguna sistem (Admin, HR, Manager)';
 COMMENT ON COLUMN public."user".hashed_password IS 'Password di-hash dengan bcrypt (passlib), JANGAN simpan plain text';
-COMMENT ON COLUMN public."user".role           IS 'Role RBAC: admin/hr/manager';
+COMMENT ON COLUMN public."user".role           IS 'Role RBAC: admin/hr/manager/pm';
 
 -- ----------------------------------------------------------------------------
 -- 2.1b REFRESH_TOKEN  (Token refresh autentikasi)
