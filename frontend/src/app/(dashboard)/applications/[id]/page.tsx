@@ -22,7 +22,7 @@ async function fetchStageHistory(id: string) {
 }
 
 async function updateStage(id: string, payload: Record<string, string | number | null | undefined>) {
-  const response = await api.patch(`/api/v1/applications/${id}/stages/`, payload);
+  const response = await api.patch(`/api/v1/applications/${id}/stages`, payload);
   return response.data;
 }
 

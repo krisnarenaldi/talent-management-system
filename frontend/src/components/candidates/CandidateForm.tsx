@@ -291,7 +291,7 @@ export default function CandidateForm({
 
         for (const item of normalizedEducation) {
           if (!item.id) {
-            await api.post(`/api/v1/candidates/${candidateId}/education/`, item);
+            await api.post(`/api/v1/candidates/${candidateId}/education`, item);
           } else if (existingEducationIds.has(item.id)) {
             await api.put(`/api/v1/candidates/${candidateId}/education/${item.id}`, item);
           }
@@ -299,17 +299,17 @@ export default function CandidateForm({
 
         for (const item of normalizedExperience) {
           if (!item.id) {
-            await api.post(`/api/v1/candidates/${candidateId}/experience/`, item);
+            await api.post(`/api/v1/candidates/${candidateId}/experience`, item);
           } else if (existingExperienceIds.has(item.id)) {
             await api.put(`/api/v1/candidates/${candidateId}/experience/${item.id}`, item);
           }
         }
       } else {
         for (const item of normalizedEducation) {
-          await api.post(`/api/v1/candidates/${targetId}/education/`, item);
+          await api.post(`/api/v1/candidates/${targetId}/education`, item);
         }
         for (const item of normalizedExperience) {
-          await api.post(`/api/v1/candidates/${targetId}/experience/`, item);
+          await api.post(`/api/v1/candidates/${targetId}/experience`, item);
         }
       }
 

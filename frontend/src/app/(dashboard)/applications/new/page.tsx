@@ -78,7 +78,7 @@ export default function NewApplicationPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (payload: FormValues) => api.post("/api/v1/applications/", payload),
+    mutationFn: (payload: FormValues) => api.post("/api/v1/applications", payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       showToast("success", "Lamaran berhasil dibuat.");

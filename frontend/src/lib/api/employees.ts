@@ -17,7 +17,7 @@ export async function fetchEmployees(params?: {
   skip?: number;
   limit?: number;
 }): Promise<Employee[]> {
-  const response = await api.get("/api/v1/employees/", { params });
+  const response = await api.get("/api/v1/employees", { params });
   return response.data as Employee[];
 }
 
@@ -36,7 +36,7 @@ export async function updateEmployee(
 
 // ── Contracts ────────────────────────────────────────────────────────────────────
 export async function fetchContracts(employeeId: string): Promise<EmployeeContract[]> {
-  const response = await api.get(`/api/v1/employees/${employeeId}/contracts/`);
+  const response = await api.get(`/api/v1/employees/${employeeId}/contracts`);
   return response.data as EmployeeContract[];
 }
 
@@ -45,7 +45,7 @@ export async function addContract(
   payload: Partial<EmployeeContract>,
 ): Promise<EmployeeContract> {
   const response = await api.post(
-    `/api/v1/employees/${employeeId}/contracts/`,
+    `/api/v1/employees/${employeeId}/contracts`,
     payload,
   );
   return response.data as EmployeeContract;
@@ -86,7 +86,7 @@ export async function updatePayroll(
 
 // ── Documents ────────────────────────────────────────────────────────────────────
 export async function fetchDocuments(employeeId: string): Promise<EmployeeDocument[]> {
-  const response = await api.get(`/api/v1/employees/${employeeId}/documents/`);
+  const response = await api.get(`/api/v1/employees/${employeeId}/documents`);
   return response.data as EmployeeDocument[];
 }
 
@@ -99,7 +99,7 @@ export async function uploadDocument(
   formData.append("file", file);
 
   const response = await api.post(
-    `/api/v1/employees/${employeeId}/documents/?doc_type=${encodeURIComponent(docType)}`,
+    `/api/v1/employees/${employeeId}/documents?doc_type=${encodeURIComponent(docType)}`,
     formData,
     { headers: { "Content-Type": "multipart/form-data" } },
   );

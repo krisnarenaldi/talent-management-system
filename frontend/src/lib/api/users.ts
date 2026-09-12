@@ -50,12 +50,12 @@ export const userApi = {
   },
 
   create: async (payload: UserCreatePayload): Promise<User> => {
-    const response = await api.post("/api/v1/users/", payload);
+    const response = await api.post("/api/v1/users", payload);
     return response.data;
   },
 
   update: async (id: string, payload: UserUpdatePayload): Promise<User> => {
-    const response = await api.put(`/api/v1/users/${id}/`, payload);
+    const response = await api.put(`/api/v1/users/${id}`, payload);
     return response.data;
   },
 

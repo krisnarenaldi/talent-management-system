@@ -17,12 +17,12 @@ export const blacklistApi = {
     status_type_id?: string;
     approval_status?: "pending" | "approved" | "all";
   }): Promise<Blacklist[]> => {
-    const response = await api.get("/api/v1/blacklist/", { params });
+    const response = await api.get("/api/v1/blacklist", { params });
     return response.data as Blacklist[];
   },
 
   create: async (payload: BlacklistCreatePayload): Promise<Blacklist> => {
-    const response = await api.post("/api/v1/blacklist/", payload);
+    const response = await api.post("/api/v1/blacklist", payload);
     return response.data as Blacklist;
   },
 

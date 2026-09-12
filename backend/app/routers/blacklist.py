@@ -60,7 +60,7 @@ def _fetch_target_details(db: Session, blacklist: Blacklist) -> dict:
 
 
 # ── GET /api/v1/blacklist/ ────────────────────────────────────────────────────
-@router.get("/", response_model=list[BlacklistResponse])
+@router.get("", response_model=list[BlacklistResponse])
 def list_blacklist(
     search: str | None = Query(None, description="Filter berdasarkan nama target"),
     status_type_id: Optional[AutoStrUUID] = Query(None),
@@ -154,7 +154,7 @@ def list_blacklist(
 
 
 # ── POST /api/v1/blacklist/ ───────────────────────────────────────────────────
-@router.post("/", response_model=BlacklistResponse, status_code=201)
+@router.post("", response_model=BlacklistResponse, status_code=201)
 def add_to_blacklist(
     payload: BlacklistCreate,
     db: Session = Depends(get_db),

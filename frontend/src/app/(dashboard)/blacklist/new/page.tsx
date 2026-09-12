@@ -137,6 +137,7 @@ export default function NewBlacklistPage() {
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      target_type: "candidate",
       reason: "",
       notes: "",
       pic_user_id: isPM ? user?.id : undefined,
@@ -187,6 +188,7 @@ export default function NewBlacklistPage() {
                   checked={targetType === "candidate"}
                   onChange={() => {
                     setTargetType("candidate");
+                    setValue("target_type", "candidate");
                     setSearchTerm("");
                     setSelectedTarget(null);
                     setValue("target_id", "");
@@ -202,6 +204,7 @@ export default function NewBlacklistPage() {
                   checked={targetType === "employee"}
                   onChange={() => {
                     setTargetType("employee");
+                    setValue("target_type", "employee");
                     setSearchTerm("");
                     setSelectedTarget(null);
                     setValue("target_id", "");
