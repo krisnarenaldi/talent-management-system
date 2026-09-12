@@ -11,7 +11,7 @@ import api from "@/lib/api";
 import type { AgreementType } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
-import { getErrorMessage } from "@/lib/errors";
+import { getErrorMessage, type ApiError } from "@/lib/errors";
 
 const formSchema = z.object({
   label: z.string().trim().min(1, "Label wajib diisi"),

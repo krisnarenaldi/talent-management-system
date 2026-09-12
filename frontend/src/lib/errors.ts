@@ -8,8 +8,9 @@
  * Passing an array directly to React as a child causes "Objects are not valid
  * as a React child" (Error #31).  This helper always returns a plain string.
  */
-type ApiError = {
+export type ApiError = {
   response?: {
+    status?: number;
     data?: {
       detail?: string | Array<{ msg?: string; loc?: (string | number)[] }>;
     };

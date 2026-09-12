@@ -11,7 +11,7 @@ import api from "@/lib/api";
 import type { BlacklistStatusType } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
-import { getErrorMessage } from "@/lib/errors";
+import { getErrorMessage, type ApiError } from "@/lib/errors";
 
 const formSchema = z.object({ label: z.string().trim().min(1, "Label wajib diisi") });
 type FormValues = z.infer<typeof formSchema>;
