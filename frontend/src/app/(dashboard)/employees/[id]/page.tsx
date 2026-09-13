@@ -62,20 +62,17 @@ function PersonalDataTab({
     updateMutation.mutate(form);
   };
 
-  const fields: { key: keyof Employee; label: string; span?: string }[] = [
+  const textFields: { key: keyof Employee; label: string }[] = [
     { key: "full_name", label: "Nama Lengkap" },
     { key: "employee_nip", label: "NIP" },
     { key: "identity_no", label: "NIK / No. Identitas" },
     { key: "birth_place", label: "Tempat Lahir" },
     { key: "birth_date", label: "Tanggal Lahir" },
-    { key: "gender", label: "Jenis Kelamin" },
-    { key: "blood_type", label: "Golongan Darah" },
     { key: "personal_email", label: "Email Pribadi" },
     { key: "office_email", label: "Email Kantor" },
     { key: "phone_number", label: "No. HP" },
     { key: "placement", label: "Penempatan" },
     { key: "role_level", label: "Level Jabatan" },
-    { key: "notes", label: "Catatan" },
   ];
 
   return (
@@ -103,28 +100,66 @@ function PersonalDataTab({
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold text-gray-900">Data Pribadi</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          {fields.map(({ key, label, span }) => (
-            <div key={key} className={span ?? ""}>
+          {textFields.map(({ key, label }) => (
+            <div key={key}>
               <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
                 {label}
               </label>
-              {key === "notes" ? (
-                <textarea
-                  value={form[key] ?? ""}
-                  onChange={(e) => handleChange(key, e.target.value)}
-                  rows={3}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
-                />
-              ) : (
-                <input
-                  type={key.includes("date") ? "date" : "text"}
-                  value={form[key] ?? ""}
-                  onChange={(e) => handleChange(key, e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
-                />
-              )}
+              <input
+                type={key.includes("date") ? "date" : "text"}
+                value={form[key] ?? ""}
+                onChange={(e) => handleChange(key, e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              />
             </div>
           ))}
+
+          {/* Jenis Kelamin */}
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Jenis Kelamin
+            </label>
+            <select
+              value={form.gender ?? ""}
+              onChange={(e) => handleChange("gender", e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            >
+              <option value="">Pilih</option>
+              <option value="Laki-laki">Laki-laki</option>
+              <option value="Perempuan">Perempuan</option>
+            </select>
+          </div>
+
+          {/* Golongan Darah */}
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Golongan Darah
+            </label>
+            <select
+              value={form.blood_type ?? ""}
+              onChange={(e) => handleChange("blood_type", e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            >
+              <option value="">Pilih</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="AB">AB</option>
+              <option value="O">O</option>
+            </select>
+          </div>
+
+          {/* Catatan */}
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Catatan
+            </label>
+            <textarea
+              value={form.notes ?? ""}
+              onChange={(e) => handleChange("notes", e.target.value)}
+              rows={3}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            />
+          </div>
         </div>
         <div className="mt-4 flex justify-end">
           <button
@@ -141,13 +176,30 @@ function PersonalDataTab({
   );
 }
 
+const EMPTY_CONTRACT = {
+  agreement_type_id: "",
+  contract_number: "",
+  duration_months: "",
+  join_date: "",
+  end_date: "",
+};
+
 function ContractsTab({ employeeId }: { employeeId: string }) {
   const queryClient = useQueryClient();
   const showToast = useToastStore((s) => s.showToast);
+  const [contractForm, setContractForm] = useState(EMPTY_CONTRACT);
 
   const { data: contracts = [], isLoading } = useQuery({
     queryKey: ["contracts", employeeId],
     queryFn: () => fetchContracts(employeeId),
+  });
+
+  const { data: agreementTypes = [] } = useQuery({
+    queryKey: ["agreement-types", "active"],
+    queryFn: async () => {
+      const res = await api.get("/api/v1/admin/agreement-types", { params: { is_active: true } });
+      return res.data as { id: string; label: string }[];
+    },
   });
 
   const addMutation = useMutation({
@@ -155,6 +207,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts", employeeId] });
       showToast("success", "Kontrak baru berhasil ditambahkan.");
+      setContractForm(EMPTY_CONTRACT);
     },
     onError: (err: unknown) => {
       showToast("error", getErrorMessage(err, "Gagal menambah kontrak."));
@@ -172,6 +225,17 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
     },
   });
 
+  const handleAddContract = () => {
+    addMutation.mutate({
+      agreement_type_id: contractForm.agreement_type_id || undefined,
+      contract_number: contractForm.contract_number || undefined,
+      duration_months: contractForm.duration_months ? Number(contractForm.duration_months) : undefined,
+      join_date: contractForm.join_date || undefined,
+      end_date: contractForm.end_date || undefined,
+      status: "aktif",
+    });
+  };
+
   return (
     <div className="space-y-5">
       {/* Add contract form */}
@@ -182,11 +246,16 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
               Jenis Perjanjian
             </label>
-            <input
-              placeholder="PKWT / PKWTT"
-              onChange={(e) => addMutation.mutate({ agreement_type_id: e.target.value })}
+            <select
+              value={contractForm.agreement_type_id}
+              onChange={(e) => setContractForm((f) => ({ ...f, agreement_type_id: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
-            />
+            >
+              <option value="">Pilih jenis perjanjian</option>
+              {agreementTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -194,7 +263,8 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             </label>
             <input
               placeholder="Nomor kontrak"
-              onChange={(e) => addMutation.mutate({ contract_number: e.target.value })}
+              value={contractForm.contract_number}
+              onChange={(e) => setContractForm((f) => ({ ...f, contract_number: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
           </div>
@@ -205,7 +275,8 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             <input
               type="number"
               placeholder="12"
-              onChange={(e) => addMutation.mutate({ duration_months: Number(e.target.value) })}
+              value={contractForm.duration_months}
+              onChange={(e) => setContractForm((f) => ({ ...f, duration_months: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
           </div>
@@ -215,7 +286,8 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             </label>
             <input
               type="date"
-              onChange={(e) => addMutation.mutate({ join_date: e.target.value })}
+              value={contractForm.join_date}
+              onChange={(e) => setContractForm((f) => ({ ...f, join_date: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
           </div>
@@ -225,7 +297,8 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             </label>
             <input
               type="date"
-              onChange={(e) => addMutation.mutate({ end_date: e.target.value })}
+              value={contractForm.end_date}
+              onChange={(e) => setContractForm((f) => ({ ...f, end_date: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
           </div>
@@ -233,7 +306,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             <button
               type="button"
               disabled={addMutation.isPending}
-              onClick={() => addMutation.mutate({ status: "aktif" })}
+              onClick={handleAddContract}
               className="w-full rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-secondary/90 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {addMutation.isPending ? "Menyimpan…" : "Tambah Kontrak"}
@@ -417,11 +490,61 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
   );
 }
 
-function DocumentsTab({ employeeId }: { employeeId: string }) {
+function DocumentsTab({ employeeId, candidateId }: { employeeId: string; candidateId: string }) {
+  const { data: candidateDocs = [] } = useQuery({
+    queryKey: ["candidate-documents", candidateId],
+    queryFn: () => api.get(`/api/v1/candidates/${candidateId}/documents/`).then((r) => r.data),
+    enabled: !!candidateId,
+  });
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">Dokumen Karyawan</h2>
-      <EmployeeDocumentUploader employeeId={employeeId} />
+    <div className="space-y-5">
+      {/* Candidate documents (uploaded during recruitment) */}
+      {candidateDocs.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-gray-900">Dokumen Kandidat</h2>
+            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+              Diupload saat rekrutmen
+            </span>
+          </div>
+          <div className="space-y-3">
+            {(candidateDocs as { id: string; doc_type: string; file_url?: string; is_verified: boolean; uploaded_at?: string }[]).map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{doc.doc_type}</p>
+                  {doc.uploaded_at && (
+                    <p className="text-xs text-gray-500">
+                      {format(new Date(doc.uploaded_at), "dd MMM yyyy", { locale: idLocale })}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${doc.is_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-600"}`}>
+                    {doc.is_verified ? "✓ Verified" : "Belum diverifikasi"}
+                  </span>
+                  {doc.file_url && (
+                    <a
+                      href={doc.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Download
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Employee-specific documents */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Dokumen Karyawan</h2>
+        <EmployeeDocumentUploader employeeId={employeeId} />
+      </div>
     </div>
   );
 }
@@ -505,7 +628,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
         {activeTab === "data" && <PersonalDataTab employee={employee} />}
         {activeTab === "contracts" && <ContractsTab employeeId={id} />}
         {activeTab === "payroll" && canViewPayroll && <PayrollTab employeeId={id} />}
-        {activeTab === "documents" && <DocumentsTab employeeId={id} />}
+        {activeTab === "documents" && <DocumentsTab employeeId={id} candidateId={employee.candidate_id} />}
       </div>
     </div>
   );

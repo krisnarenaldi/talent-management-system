@@ -12,9 +12,11 @@ import { getErrorMessage } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import type { Application, StageHistory } from "@/types";
 
+const FAIL_RESULTS = new Set(["fail", "tidak_lolos"]);
+
 async function fetchApplication(id: string) {
   const response = await api.get(`/api/v1/applications/${id}`);
-  return response.data as Application & { next_possible_stages?: string[]; stage_history?: StageHistory[] };
+  return response.data as Application & { next_possible_stages?: string[]; stage_history?: StageHistory[]; last_result?: string | null };
 }
 
 async function fetchStageHistory(id: string) {
@@ -123,6 +125,12 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const isRecruiter = currentUser?.role === "hr";
   const isOwner = application?.recruiter_id === currentUser?.id;
   const canEdit = !isRecruiter || isOwner;
+
+  // Cek apakah current stage sudah punya hasil FAIL → kunci form (kecuali Rejected/Withdrawn)
+  const lastResult = application?.last_result ?? null;
+  const isStageFailed = lastResult !== null && FAIL_RESULTS.has(lastResult);
+  // Stage locked = fail AND selected stage bukan Rejected/Withdrawn
+  const isFormLocked = isStageFailed && selectedStage !== "Rejected" && selectedStage !== "Withdrawn";
 
   const handleSubmit = () => {
     if (!selectedStage) return;
@@ -259,6 +267,20 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               <p className="text-sm text-gray-500">Tidak ada tahapan berikutnya yang tersedia.</p>
             ) : (
               <div className="space-y-4">
+                {/* Banner: stage terkunci karena hasil FAIL */}
+                {isStageFailed && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <p className="font-medium">
+                      Tahap <span className="font-semibold">{formatStageLabel(currentStage)}</span> sudah ditandai{" "}
+                      <span className="font-semibold uppercase">{lastResult}</span>.
+                    </p>
+                    <p className="mt-1 text-red-600">
+                      Form dinonaktifkan. Pilih <span className="font-semibold">Rejected</span> atau{" "}
+                      <span className="font-semibold">Withdrawn</span> untuk menutup lamaran ini.
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Tahapan yang akan disimpan
@@ -269,13 +291,15 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     disabled={!canEdit}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
-                    {allStageOptions.map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage === currentStage
-                          ? `${formatStageLabel(stage)} (Tahap saat ini — update jadwal/catatan)`
-                          : formatStageLabel(stage)}
-                      </option>
-                    ))}
+                    {allStageOptions
+                      .filter((stage) => !isStageFailed || stage === currentStage || stage === "Rejected" || stage === "Withdrawn")
+                      .map((stage) => (
+                        <option key={stage} value={stage}>
+                          {stage === currentStage
+                            ? `${formatStageLabel(stage)} (Tahap saat ini — update jadwal/catatan)`
+                            : formatStageLabel(stage)}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -285,7 +309,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     <select
                       value={result}
                       onChange={(e) => setResult(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                      disabled={isFormLocked}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Pilih hasil</option>
                       {selectedStage === "Konfirmasi_Kehadiran" && (
@@ -327,7 +352,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                       type="date"
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                      disabled={isFormLocked}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -340,7 +366,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                         type="number"
                         value={salaryCurrent}
                         onChange={(e) => setSalaryCurrent(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                        disabled={isFormLocked}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="0"
                       />
                     </div>
@@ -350,7 +377,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                         type="number"
                         value={salaryExpected}
                         onChange={(e) => setSalaryExpected(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                        disabled={isFormLocked}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="0"
                       />
                     </div>
@@ -363,7 +391,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     rows={4}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    disabled={!canEdit}
+                    disabled={!canEdit || isFormLocked}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Tambahkan catatan atau keputusan interview..."
                   />
@@ -379,7 +407,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   <button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={mutation.isPending || !canEdit}
+                    disabled={mutation.isPending || !canEdit || isFormLocked}
                     className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md disabled:cursor-not-allowed disabled:bg-gray-300"
                   >
                     {mutation.isPending ? "Menyimpan..." : "Simpan update"}

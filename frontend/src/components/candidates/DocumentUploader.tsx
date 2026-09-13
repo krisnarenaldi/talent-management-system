@@ -56,6 +56,7 @@ export default function DocumentUploader({ candidateId }: { candidateId: string 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["candidate-documents", candidateId] });
       queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
       setSelectedFile(null);
       if (inputRef.current) inputRef.current.value = "";
       showToast(
@@ -75,6 +76,7 @@ export default function DocumentUploader({ candidateId }: { candidateId: string 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["candidate-documents", candidateId] });
       queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
       showToast("success", "Dokumen berhasil dihapus.");
     },
     onError: (error: unknown) => {

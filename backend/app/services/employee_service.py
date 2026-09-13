@@ -34,6 +34,7 @@ def create_from_application(db: Session, application_id: str) -> Employee:
         application_id=application_id,
         full_name=candidate.full_name,
         identity_no=candidate.identity_no,
+        personal_email=candidate.email,
         phone_number=candidate.phone,
         birth_date=candidate.birth_date,
         birth_place=candidate.birth_place,

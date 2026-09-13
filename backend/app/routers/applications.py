@@ -13,6 +13,7 @@ from app.models.application import (
     STAGE_NAMES,
     TERMINAL_STATUSES,
     VALID_TRANSITIONS,
+    FAIL_RESULTS,
 )
 from app.models.blacklist import Blacklist
 from app.models.candidate import Candidate
@@ -62,6 +63,7 @@ def list_applications(
         .options(
             joinedload(Application.position).joinedload(Position.client),
             joinedload(Application.recruiter),
+            joinedload(Application.stage_histories),
         )
     )
     if position_id:
@@ -91,6 +93,17 @@ def create_application(
     candidate = db.query(Candidate).filter(Candidate.id == payload.candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+
+    # Cek apakah kandidat sudah menjadi karyawan aktif
+    active_employee = db.query(Employee).filter(
+        Employee.candidate_id == payload.candidate_id,
+        Employee.employee_status == "aktif",
+    ).first()
+    if active_employee:
+        raise HTTPException(
+            status_code=400,
+            detail="Kandidat ini sudah menjadi karyawan aktif dan tidak dapat dibuatkan lamaran baru."
+        )
 
     # Cek apakah kandidat ada di blacklist (aktif + disetujui)
     bl_entry = _check_candidate_blacklisted(db, str(payload.candidate_id))
@@ -289,6 +302,17 @@ def update_stage(
             detail=f"Transisi tidak valid dari '{application.current_stage}' ke '{payload.stage_name}'. "
                    f"Stages yang mungkin: {allowed + [application.current_stage + ' (same stage)']}",
         )
+
+    # Guard: jika current stage sudah punya result FAIL, hanya boleh ke Rejected/Withdrawn
+    if not is_same_stage and payload.stage_name not in ("Rejected", "Withdrawn"):
+        current_last_result = application.last_result
+        if current_last_result and current_last_result in FAIL_RESULTS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tahap '{application.current_stage}' sudah ditandai '{current_last_result}'. "
+                       f"Kandidat tidak dapat maju ke tahap berikutnya. "
+                       f"Pilih 'Rejected' atau 'Withdrawn' untuk menutup lamaran ini.",
+            )
 
     # Simpan history
     history = StageHistory(

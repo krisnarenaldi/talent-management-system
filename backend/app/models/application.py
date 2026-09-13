@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -35,6 +36,9 @@ VALID_TRANSITIONS = {
 
 TERMINAL_STATUSES = ("rejected", "withdrawn", "hired")  # status ini tidak bisa lanjut/update stage lagi
 TERMINAL_STAGES = ("Rejected", "Withdrawn", "Existing")  # stage terminal (Existing = sudah hired)
+
+# Hasil yang dianggap "fail hard" — stage terkunci setelah ini, tidak bisa maju
+FAIL_RESULTS = frozenset({"fail", "tidak_lolos"})
 
 
 class Application(Base):
@@ -79,6 +83,16 @@ class Application(Base):
     @property
     def stage_history(self) -> list:
         return self.stage_histories or []
+
+    @property
+    def last_result(self) -> str | None:
+        """Result terbaru dari current_stage (dari stage_history)."""
+        if not self.stage_histories:
+            return None
+        relevant = [h for h in self.stage_histories if h.stage_name == self.current_stage and h.result]
+        if not relevant:
+            return None
+        return sorted(relevant, key=lambda h: h.created_at or datetime.min.replace(tzinfo=timezone.utc))[-1].result
 
     @property
     def next_possible_stages(self) -> list[str]:

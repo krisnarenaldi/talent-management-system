@@ -15,6 +15,7 @@ router = APIRouter()
 @router.get("", response_model=list[dict])
 def list_employees(
     search: str | None = Query(None, description="Search by name, email, or phone"),
+    placement: str | None = Query(None, description="Filter by placement"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("hr", "manager", "admin", "pm")),
 ):
@@ -27,6 +28,8 @@ def list_employees(
                 Employee.phone_number.ilike(f"%{search}%"),
             )
         )
+    if placement:
+        stmt = stmt.where(Employee.placement.ilike(f"%{placement}%"))
     rows = db.execute(stmt).scalars().all()
     return [
         {

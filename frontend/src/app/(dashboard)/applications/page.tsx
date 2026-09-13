@@ -53,6 +53,29 @@ function stageBadgeClass(stage: string | null | undefined) {
   return "border border-amber-200 bg-amber-100 text-amber-800";
 }
 
+const FAIL_RESULTS = new Set(["fail", "tidak_lolos"]);
+
+function resultBadgeClass(result: string) {
+  if (FAIL_RESULTS.has(result)) return "border border-red-200 bg-red-100 text-red-700";
+  return "border border-emerald-200 bg-emerald-100 text-emerald-700";
+}
+
+function formatResultLabel(result: string) {
+  const map: Record<string, string> = {
+    pass: "Pass",
+    fail: "Fail",
+    lolos: "Lolos",
+    tidak_lolos: "Tidak Lolos",
+    ok: "OK",
+    reschedule: "Reschedule",
+    lolos_kontrak: "Lolos Kontrak",
+    negosiasi: "Negosiasi",
+    signed: "Signed",
+    pending: "Pending",
+  };
+  return map[result] ?? result;
+}
+
 function formatStageLabel(stage: string | null | undefined) {
   const normalizedStage = stage ?? "";
   return normalizedStage
@@ -196,9 +219,16 @@ export default function ApplicationsPage() {
                     <td className="px-4 py-3 text-gray-700">{application.position_title || "-"}</td>
                     <td className="px-4 py-3 text-gray-700">{application.client_name || "-"}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${stageBadgeClass(application.current_stage)}`}>
-                        {formatStageLabel(application.current_stage)}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${stageBadgeClass(application.current_stage)}`}>
+                          {formatStageLabel(application.current_stage)}
+                        </span>
+                        {application.last_result && (
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${resultBadgeClass(application.last_result)}`}>
+                            {formatResultLabel(application.last_result)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(application.status)}`}>

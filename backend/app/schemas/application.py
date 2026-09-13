@@ -65,6 +65,7 @@ class ApplicationResponse(BaseModel):
     recruiter_name: str | None
     current_stage: str
     status: str
+    last_result: str | None = None
     cv_submitted_to_pm_date: date | None
     created_at: datetime | None
     updated_at: datetime | None

@@ -130,6 +130,7 @@ export interface Application {
   recruiter_name?: string;
   current_stage: string;
   status: ApplicationStatus;
+  last_result?: string | null;
   cv_submitted_to_pm_date?: string;
   created_at: string;
   updated_at?: string;

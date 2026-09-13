@@ -218,6 +218,10 @@ export default function CandidateForm({
         email: values.email?.trim() || null,
         phone: values.phone?.trim() || null,
         identity_no: values.identity_no?.trim() || null,
+        birth_date: values.birth_date?.trim() || null,
+        birth_place: values.birth_place?.trim() || null,
+        gender: values.gender?.trim() || null,
+        blood_type: values.blood_type?.trim() || null,
         domicile: values.domicile?.trim() || null,
         source_channel: values.source_channel?.trim() || null,
         current_salary: toNumber(values.current_salary),
@@ -312,6 +316,7 @@ export default function CandidateForm({
       }
 
       showToast("success", mode === "create" ? "Kandidat berhasil dibuat." : "Kandidat berhasil diperbarui.");
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
       queryClient.invalidateQueries({ queryKey: ["candidate", targetId] });
       queryClient.invalidateQueries({ queryKey: ["candidate-education", targetId] });
       queryClient.invalidateQueries({ queryKey: ["candidate-experience", targetId] });

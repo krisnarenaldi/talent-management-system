@@ -48,7 +48,7 @@ def list_employees(
     if status:
         query = query.filter(Employee.employee_status == status)
     if placement:
-        query = query.filter(Employee.placement == placement)
+        query = query.filter(Employee.placement.ilike(f"%{placement}%"))
     if contract_expiry_within_days is not None:
         # Gunakan JOIN untuk filter by contract end_date + distinct() agar tidak duplikat
         query = (
@@ -125,6 +125,7 @@ def update_employee(
 
 # ── Contracts CRUD ───────────────────────────────────────────────────────────────
 @router.get("/{employee_id}/contracts/", response_model=list[EmployeeContractResponse])
+@router.get("/{employee_id}/contracts", response_model=list[EmployeeContractResponse])
 def list_contracts(
     employee_id: str,
     db: Session = Depends(get_db),
@@ -135,6 +136,7 @@ def list_contracts(
 
 
 @router.post("/{employee_id}/contracts/", response_model=EmployeeContractResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{employee_id}/contracts", response_model=EmployeeContractResponse, status_code=status.HTTP_201_CREATED)
 def add_contract(
     employee_id: str,
     payload: EmployeeContractCreate,

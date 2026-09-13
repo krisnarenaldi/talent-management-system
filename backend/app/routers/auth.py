@@ -71,7 +71,7 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     expire = datetime.now(timezone.utc) + timedelta(days=7)
     _store_refresh_token(db, user.id, refresh_token_val, expire)
 
-    response.set_cookie("access_token", access_token, max_age=60 * 15, **COOKIE_SETTINGS)
+    response.set_cookie("access_token", access_token, max_age=60 * 15, **COOKIE_SETTINGS)    
     response.set_cookie("refresh_token", refresh_token_val, max_age=60 * 60 * 24 * 7, **COOKIE_SETTINGS)
 
     return TokenResponse(id=str(user.id), name=user.name, role=_role_value(user.role), email=user.email)
