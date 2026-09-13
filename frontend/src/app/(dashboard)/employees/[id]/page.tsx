@@ -14,7 +14,6 @@ import {
   updateEmployee,
   fetchContracts,
   addContract,
-  updateContract,
   deleteContract,
   fetchPayroll,
   updatePayroll,
@@ -73,6 +72,12 @@ function PersonalDataTab({
     { key: "phone_number", label: "No. HP" },
     { key: "placement", label: "Penempatan" },
     { key: "role_level", label: "Level Jabatan" },
+  ];
+
+  const statusOptions: { value: string; label: string }[] = [
+    { value: "aktif", label: "Aktif" },
+    { value: "cuti", label: "Cuti" },
+    { value: "resign", label: "Resign" },
   ];
 
   return (
@@ -161,7 +166,58 @@ function PersonalDataTab({
             />
           </div>
         </div>
-        <div className="mt-4 flex justify-end">
+
+        {/* Status Karyawan */}
+        <div className="mt-6 border-t border-gray-100 pt-6">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Status Karyawan</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                Status
+              </label>
+              <select
+                value={form.employee_status ?? ""}
+                onChange={(e) => handleChange("employee_status", e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              >
+                {statusOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Hanya muncul saat status = Resign */}
+            {form.employee_status === "resign" && (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Tanggal Resign
+                  </label>
+                  <input
+                    type="date"
+                    value={form.resign_date ?? ""}
+                    onChange={(e) => handleChange("resign_date", e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Alasan Resign
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Opsional"
+                    value={form.resign_reason ?? ""}
+                    onChange={(e) => handleChange("resign_reason", e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end">
           <button
             type="button"
             onClick={handleSave}

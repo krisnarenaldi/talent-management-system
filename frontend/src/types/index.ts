@@ -83,6 +83,7 @@ export interface Candidate {
   contact_status: ContactStatus;
   possible_duplicate: boolean;
   notes?: string;
+  skills?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -220,6 +221,38 @@ export interface EmployeeDocument {
   is_verified: boolean;
   is_deleted?: boolean;
   uploaded_at?: string;
+}
+
+// --- Analytics / Dashboard ---
+export interface PipelineBreakdown {
+  stage: string;
+  count: number;
+}
+
+export interface AnalyticsSummary {
+  total_active_candidates: number;
+  pipeline_breakdown: PipelineBreakdown[];
+  total_active_employees: number;
+  contracts_expiring_30d: number;
+}
+
+export interface RecentApplication {
+  id: string;
+  candidate_name: string | null;
+  position_title: string | null;
+  client_name: string | null;
+  current_stage: string;
+  status: string;
+  recruiter_name: string | null;
+  created_at: string | null;
+}
+
+export interface ContractExpiring {
+  contract_id: string;
+  employee_name: string | null;
+  placement: string | null;
+  end_date: string | null;
+  days_remaining: number | null;
 }
 
 // --- Blacklist ---

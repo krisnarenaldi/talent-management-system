@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -45,6 +45,7 @@ const candidateFormSchema = z.object({
   notice_period_days: z.string().optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
   photo_url: z.string().optional().or(z.literal("")),
+  skills: z.array(z.string()).default([]),
   education: z.array(educationItemSchema).default([]),
   experience: z.array(experienceItemSchema).default([]),
 });
@@ -103,6 +104,8 @@ export default function CandidateForm({
   const [isLoadingData, setIsLoadingData] = useState(mode === "edit");
   const [initialEducation, setInitialEducation] = useState<CandidateEducation[]>([]);
   const [initialExperience, setInitialExperience] = useState<CandidateExperience[]>([]);
+  const [skillInput, setSkillInput] = useState("");
+  const skillInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CandidateFormValues>({
     resolver: zodResolver(candidateFormSchema),
@@ -122,6 +125,7 @@ export default function CandidateForm({
       notice_period_days: "",
       notes: "",
       photo_url: "",
+      skills: [],
       education: [defaultEducation],
       experience: [defaultExperience],
     },
@@ -176,6 +180,7 @@ export default function CandidateForm({
             candidate.notice_period_days != null ? String(candidate.notice_period_days) : "",
           notes: candidate.notes || "",
           photo_url: candidate.photo_url || "",
+          skills: candidate.skills ?? [],
           education:
             educations.length > 0
               ? educations.map((item) => ({
@@ -228,6 +233,7 @@ export default function CandidateForm({
         expected_salary: toNumber(values.expected_salary),
         notice_period_days: toNumber(values.notice_period_days),
         notes: values.notes?.trim() || null,
+        skills: values.skills.length > 0 ? values.skills : null,
         ...(photoUrl ? { photo_url: photoUrl } : {}),
       };
 
@@ -470,6 +476,68 @@ export default function CandidateForm({
               <label className="mb-1 block text-sm font-medium text-gray-700">Catatan</label>
               <textarea {...form.register("notes")} rows={4} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
             </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-1 text-lg font-semibold text-gray-900">Skill</h2>
+          <p className="mb-4 text-xs text-gray-500">
+            Ketik skill lalu tekan <kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-xs">Enter</kbd> atau <kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-xs">,</kbd> untuk menambah.
+          </p>
+          <div
+            className="flex min-h-[42px] flex-wrap gap-2 rounded-lg border border-gray-300 px-3 py-2 cursor-text"
+            onClick={() => skillInputRef.current?.focus()}
+          >
+            {form.watch("skills").map((skill, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800"
+              >
+                {skill}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const current = form.getValues("skills");
+                    form.setValue("skills", current.filter((_, i) => i !== index));
+                  }}
+                  className="ml-0.5 text-blue-600 hover:text-blue-900"
+                  aria-label={`Hapus ${skill}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              ref={skillInputRef}
+              type="text"
+              value={skillInput}
+              onChange={(e) => setSkillInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  const trimmed = skillInput.trim().replace(/,$/, "");
+                  if (trimmed && !form.getValues("skills").includes(trimmed)) {
+                    form.setValue("skills", [...form.getValues("skills"), trimmed]);
+                  }
+                  setSkillInput("");
+                } else if (e.key === "Backspace" && skillInput === "") {
+                  const current = form.getValues("skills");
+                  if (current.length > 0) {
+                    form.setValue("skills", current.slice(0, -1));
+                  }
+                }
+              }}
+              onBlur={() => {
+                const trimmed = skillInput.trim().replace(/,$/, "");
+                if (trimmed && !form.getValues("skills").includes(trimmed)) {
+                  form.setValue("skills", [...form.getValues("skills"), trimmed]);
+                }
+                setSkillInput("");
+              }}
+              className="flex-1 min-w-[120px] border-none bg-transparent text-sm outline-none placeholder:text-gray-400"
+              placeholder={form.watch("skills").length === 0 ? "Contoh: PHP, Next.js, Python..." : "Tambah skill..."}
+            />
           </div>
         </div>
 

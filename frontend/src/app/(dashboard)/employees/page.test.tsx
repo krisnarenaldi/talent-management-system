@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EmployeesPage from './page';
 import * as employeesApi from '@/lib/api/employees';
+import type { Employee } from '@/types';
 
 // Mock API
 jest.mock('@/lib/api/employees');
@@ -19,41 +20,46 @@ jest.mock('next/link', () => ({
   },
 }));
 
-const mockEmployees = [
+const mockEmployees: Employee[] = [
   {
     id: 'emp-1',
+    candidate_id: 'cand-1',
     full_name: 'John Doe',
     phone_number: '+628123456789',
     identity_no: '123456789012345678',
     employee_nip: 'NIP001',
     placement: ' Jakarta',
     role_level: ' Senior Developer',
-    employee_status: 'aktif' as const,
+    employee_status: 'aktif',
+    leave_status: '',
     contract_duration_running: 12,
     age: 30,
   },
   {
     id: 'emp-2',
+    candidate_id: 'cand-2',
     full_name: 'Jane Smith',
     phone_number: '+628987654321',
     identity_no: '987654321098765432',
     employee_nip: 'NIP002',
     placement: ' Bandung',
     role_level: ' Project Manager',
-    employee_status: 'cuti' as const,
+    employee_status: 'cuti',
+    leave_status: '',
     contract_duration_running: 6,
     age: 35,
   },
   {
     id: 'emp-3',
+    candidate_id: 'cand-3',
     full_name: 'Bob Wilson',
     phone_number: '+628112233445',
     identity_no: '112233445566778899',
     employee_nip: 'NIP003',
     placement: ' Surabaya',
     role_level: ' HR Manager',
-    employee_status: 'resign' as const,
-    contact_duration_running: null,
+    employee_status: 'resign',
+    leave_status: '',
     age: 28,
   },
 ];
@@ -317,8 +323,10 @@ describe('Employees Page - Test Scenarios', () => {
     it('handles employee with missing optional fields', async () => {
       fetchEmployees.mockResolvedValue([{
         id: 'emp-4',
+        candidate_id: 'cand-4',
         full_name: 'Test User',
         employee_status: 'aktif',
+        leave_status: '',
       }]);
 
       render(EmployeesPage());

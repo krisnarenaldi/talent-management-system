@@ -145,6 +145,21 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                 <InfoRow label="Current salary" value={candidate.current_salary ? `Rp ${Number(candidate.current_salary).toLocaleString("id-ID")}` : "-"} />
                 <InfoRow label="Expected salary" value={candidate.expected_salary ? `Rp ${Number(candidate.expected_salary).toLocaleString("id-ID")}` : "-"} />
               </div>
+              {candidate.skills && candidate.skills.length > 0 && (
+                <div className="mt-4 border-t border-gray-100 pt-4">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Skill</p>
+                  <div className="flex flex-wrap gap-2">
+                    {candidate.skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

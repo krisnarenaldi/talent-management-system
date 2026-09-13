@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -75,6 +75,7 @@ class CandidateCreate(BaseModel):
     current_salary: Decimal | None = None
     expected_salary: Decimal | None = None
     notice_period_days: int | None = None
+    skills: List[str] | None = None
 
 
 class CandidateUpdate(BaseModel):
@@ -93,6 +94,7 @@ class CandidateUpdate(BaseModel):
     expected_salary: Decimal | None = None
     notice_period_days: int | None = None
     notes: str | None = None
+    skills: List[str] | None = None
 
 
 class CandidateFlagsPatch(BaseModel):
@@ -119,6 +121,7 @@ class CandidateResponse(BaseModel):
     completeness_status: str
     contact_status: str
     notes: str | None
+    skills: List[str] | None
     created_at: datetime
     updated_at: datetime
 

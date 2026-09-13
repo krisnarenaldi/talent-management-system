@@ -213,15 +213,15 @@
 ### TASK-07: Export Data (FR-06)
 
 #### TASK-07.1: Backend Export
-- [ ] `GET /api/v1/export/candidates` — export Excel kandidat dengan filter (posisi, status, periode)
+- [x] `GET /api/v1/export/candidates` — export Excel kandidat dengan filter (posisi, status, periode)
   - Gunakan library `openpyxl` untuk generate file
   - Stream response sebagai file download
-- [ ] `GET /api/v1/export/pipeline` — export Excel pipeline per posisi/periode
-- [ ] `GET /api/v1/export/incomplete` — export kandidat dengan data belum lengkap
+- [x] `GET /api/v1/export/pipeline` — export Excel pipeline per posisi/periode
+- [x] `GET /api/v1/export/incomplete` — export kandidat dengan data belum lengkap
 
 #### TASK-07.2: Frontend Export
-- [ ] Komponen `ExportButton` dengan dropdown filter sebelum download
-- [ ] Tambahkan tombol export di halaman `/candidates` dan `/applications`
+- [x] Komponen `ExportButton` dengan dropdown filter sebelum download
+- [x] Tambahkan tombol export di halaman `/candidates` dan `/applications`
 
 ---
 
@@ -252,12 +252,12 @@
 
 ### TASK-09: Dashboard Dasar (FR-10 sebagian)
 
-- [ ] Backend: `GET /api/v1/analytics/summary` — return:
+- [x] Backend: `GET /api/v1/analytics/summary` — return:
   - Total kandidat aktif
   - Total kandidat per tahapan pipeline (grouped)
   - Total karyawan aktif
   - Jumlah kontrak habis dalam 30 hari
-- [ ] Frontend `/dashboard`:
+- [x] Frontend `/dashboard`:
   - Card metrics: total kandidat, total karyawan, kandidat di pipeline, kontrak hampir habis
   - Tabel "Lamaran Terbaru" (5 terbaru)
   - Tabel "Kontrak Hampir Habis" (top 5)

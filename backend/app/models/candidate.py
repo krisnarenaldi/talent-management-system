@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Boolean, Column, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
@@ -39,6 +39,7 @@ class Candidate(Base):
     possible_duplicate = Column(Boolean, default=False, nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
     notes = Column(Text)                                 # Catatan bebas recruiter
+    skills = Column(JSONB, default=list, nullable=True)  # e.g. ["PHP", "Next.js", "Python"]
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

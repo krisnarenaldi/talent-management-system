@@ -8,6 +8,8 @@ import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
 import type { Application } from "@/types";
+import { useExport } from "@/hooks/useExport";
+import ExportButton from "@/components/ExportButton";
 
 async function fetchApplications(params?: Record<string, string | undefined>) {
   const response = await api.get("/api/v1/applications", { params });
@@ -93,8 +95,11 @@ export default function ApplicationsPage() {
   const [stageFilter, setStageFilter] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const user = useAuthStore((state) => state.user);
   const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
+
+  const { exportPipeline } = useExport();
 
   const { data: applications = [], isLoading } = useQuery({
     queryKey: ["applications", { statusFilter, stageFilter, startDate, endDate }],
@@ -107,6 +112,19 @@ export default function ApplicationsPage() {
       }),
   });
 
+  const handleExport = async () => {
+    try {
+      await exportPipeline({
+        status_filter: statusFilter || undefined,
+        current_stage: stageFilter || undefined,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      });
+    } catch (error) {
+      console.error("Export gagal:", error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -114,14 +132,74 @@ export default function ApplicationsPage() {
           <p className="text-sm font-medium text-gray-500">Recruitment pipeline</p>
           <h1 className="text-2xl font-bold text-gray-900">Pipeline Rekrutmen</h1>
         </div>
-        {canCreateApplication && (
-          <Link
-            href="/applications/new"
-            className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
-          >
-            + Tambah Lamaran
-          </Link>
-        )}
+        <div className="flex items-center gap-3">
+          {canCreateApplication && (
+            <Link
+              href="/applications/new"
+              className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
+            >
+              + Tambah Lamaran
+            </Link>
+          )}
+          <ExportButton
+            onExport={handleExport}
+            filters={
+              <div className="space-y-3 border-t border-gray-200 pt-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                    >
+                      <option value="">Semua</option>
+                      <option value="active">Aktif</option>
+                      <option value="rejected">Ditolak</option>
+                      <option value="hired">Diterima</option>
+                      <option value="withdrawn">Ditarik</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-500">Tahap</label>
+                    <select
+                      value={stageFilter}
+                      onChange={(e) => setStageFilter(e.target.value)}
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                    >
+                      <option value="">Semua</option>
+                      {stageOptions.map((stage) => (
+                        <option key={stage} value={stage}>
+                          {formatStageLabel(stage)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal mulai</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal akhir</label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            }
+          />
+        </div>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">

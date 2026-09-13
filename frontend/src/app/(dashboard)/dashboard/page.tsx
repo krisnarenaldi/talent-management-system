@@ -1,308 +1,324 @@
-// Dummy candidates dashboard — sesuai desain dashboard.html
-// Data akan diganti dengan fetch dari API pada implementasi berikutnya
+"use client";
 
-const DUMMY_CANDIDATES = [
-  {
-    id: 1,
-    name: "Elena Rodriguez",
-    position: "Senior Frontend Engineer at TechCorp",
-    experience: "6 yrs",
-    skills: ["React", "TypeScript"],
-    status: "Actively Looking",
-    statusColor: "bg-[#E6F4EA] text-[#137333]",
-    avatar: null,
-    initials: "ER",
-  },
-  {
-    id: 2,
-    name: "Marcus King",
-    position: "Product Manager at StartupX",
-    experience: "4 yrs",
-    skills: ["Agile", "Jira"],
-    status: "Not Looking",
-    statusColor: "bg-[#FCE8E6] text-[#C5221F]",
-    avatar: null,
-    initials: "MK",
-  },
-  {
-    id: 3,
-    name: "David Chen",
-    position: "UX Designer (Freelance)",
-    experience: "8 yrs",
-    skills: ["Figma", "UI/UX"],
-    status: "Open to Offers",
-    statusColor: "bg-[#FEF7E0] text-[#B06000]",
-    avatar: null,
-    initials: "DC",
-  },
-  {
-    id: 4,
-    name: "Sarah Williams",
-    position: "Backend Engineer at CloudBase",
-    experience: "5 yrs",
-    skills: ["Python", "FastAPI"],
-    status: "Actively Looking",
-    statusColor: "bg-[#E6F4EA] text-[#137333]",
-    avatar: null,
-    initials: "SW",
-  },
-  {
-    id: 5,
-    name: "James Park",
-    position: "DevOps Engineer at InfraNet",
-    experience: "7 yrs",
-    skills: ["Kubernetes", "Docker"],
-    status: "Open to Offers",
-    statusColor: "bg-[#FEF7E0] text-[#B06000]",
-    avatar: null,
-    initials: "JP",
-  },
-];
+import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { fetchAnalyticsSummary, fetchRecentApplications, fetchContractsExpiring } from "@/lib/api/analytics";
+import type { AnalyticsSummary, RecentApplication, ContractExpiring } from "@/types";
 
+// ── Stage label helper ────────────────────────────────────────────────────────
+const STAGE_LABELS: Record<string, string> = {
+  Dijadwalkan_Interview: "Interview Terjadwal",
+  Konfirmasi_Kehadiran: "Konfirmasi Kehadiran",
+  Interview_HR: "Interview HR",
+  Psikotest: "Psikotest",
+  Interview_User: "Interview User",
+  Offering: "Offering",
+  Tanda_Tangan_Kontrak: "Tanda Tangan Kontrak",
+  Onboarding: "Onboarding",
+  Existing: "Existing",
+};
+
+function stageLabel(stage: string): string {
+  return STAGE_LABELS[stage] ?? stage;
+}
+
+function stageBadgeColor(stage: string): string {
+  const c: Record<string, string> = {
+    Dijadwalkan_Interview: "bg-blue-100 text-blue-800",
+    Konfirmasi_Kehadiran: "bg-yellow-100 text-yellow-800",
+    Interview_HR: "bg-purple-100 text-purple-800",
+    Psikotest: "bg-green-100 text-green-800",
+    Interview_User: "bg-indigo-100 text-indigo-800",
+    Offering: "bg-orange-100 text-orange-800",
+    Tanda_Tangan_Kontrak: "bg-teal-100 text-teal-800",
+    Onboarding: "bg-pink-100 text-pink-800",
+    Existing: "bg-gray-100 text-gray-800",
+  };
+  return c[stage] ?? "bg-gray-100 text-gray-800";
+}
+
+// ── Metric Card ────────────────────────────────────────────────────────────────
+function MetricCard({
+  title,
+  value,
+  icon,
+  accent,
+}: {
+  title: string;
+  value: number;
+  icon: string;
+  accent: string;
+}) {
+  return (
+    <div
+      className={`${accent} rounded-xl p-5 border border-outline-variant shadow-[0px_4px_12px_rgba(9,30,66,0.08)]`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-label-sm text-on-surface-variant uppercase tracking-wider mb-1">
+            {title}
+          </p>
+          <p className="text-display text-on-surface font-bold">{value}</p>
+        </div>
+        <span
+          className={`material-symbols-outlined text-[28px] ${
+            accent.includes("primary") ? "text-primary" : "text-secondary"
+          }`}
+          data-weight="fill"
+        >
+          {icon}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const { data: summary, isLoading: loadingSummary } = useQuery({
+    queryKey: ["analytics-summary"],
+    queryFn: fetchAnalyticsSummary,
+  });
+
+  const { data: recentApps = [], isLoading: loadingApps } = useQuery({
+    queryKey: ["recent-applications"],
+    queryFn: () => fetchRecentApplications(5),
+  });
+
+  const { data: expiring = [], isLoading: loadingContracts } = useQuery({
+    queryKey: ["contracts-expiring"],
+    queryFn: () => fetchContractsExpiring(5),
+  });
+
+  // Total candidates in pipeline (active applications)
+  const totalPipeline =
+    summary?.pipeline_breakdown?.reduce((s, b) => s + b.count, 0) ?? 0;
+
   return (
     <div className="p-container-padding">
       <div className="max-w-[1400px] mx-auto space-y-stack-md">
-        {/* Search & Filter Section */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-md shadow-[0px_4px_12px_rgba(9,30,66,0.08)]">
-          {/* Keyword search */}
-          <div className="relative mb-stack-md">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
-              search
-            </span>
-            <input
-              type="text"
-              placeholder="Search by name, role, company, or keywords..."
-              className="w-full pl-10 pr-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all text-body-md text-on-surface placeholder:text-on-surface-variant/70"
-            />
-          </div>
-
-          {/* Filters grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter mb-stack-md">
-            <div>
-              <label className="block text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">
-                Position
-              </label>
-              <select className="w-full bg-surface border border-outline-variant rounded-md py-1.5 px-3 text-body-sm focus:ring-1 focus:ring-primary focus:border-primary">
-                <option>All Positions</option>
-                <option>Frontend Engineer</option>
-                <option>Product Manager</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">
-                Skills
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. React, Python"
-                className="w-full bg-surface border border-outline-variant rounded-md py-1.5 px-3 text-body-sm focus:ring-1 focus:ring-primary focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">
-                Experience
-              </label>
-              <select className="w-full bg-surface border border-outline-variant rounded-md py-1.5 px-3 text-body-sm focus:ring-1 focus:ring-primary focus:border-primary">
-                <option>Any</option>
-                <option>1-3 Years</option>
-                <option>3-5 Years</option>
-                <option>5+ Years</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">
-                Location
-              </label>
-              <input
-                type="text"
-                placeholder="City or Remote"
-                className="w-full bg-surface border border-outline-variant rounded-md py-1.5 px-3 text-body-sm focus:ring-1 focus:ring-primary focus:border-primary"
-              />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-between border-t border-outline-variant pt-stack-sm">
-            <button className="text-body-sm font-medium text-on-surface-variant hover:text-primary transition-colors">
-              + More Filters
-            </button>
-            <div className="flex items-center gap-3">
-              <button className="px-4 py-1.5 border border-outline-variant text-on-surface hover:bg-surface-container-highest rounded-md text-body-sm font-medium transition-colors">
-                Reset
-              </button>
-              <button className="px-4 py-1.5 border border-primary text-primary hover:bg-primary/5 rounded-md text-body-sm font-medium flex items-center gap-2 transition-colors">
-                <span className="material-symbols-outlined text-base">
-                  upload_file
-                </span>
-                Import
-              </button>
-              <button className="px-6 py-1.5 bg-primary hover:bg-primary/90 text-on-primary rounded-md text-body-sm font-medium transition-colors shadow-sm">
-                Search
-              </button>
-            </div>
-          </div>
+        {/* ── Metric Cards ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter">
+          <MetricCard
+            title="Kandidat Aktif"
+            value={loadingSummary ? 0 : (summary?.total_active_candidates ?? 0)}
+            icon="person"
+            accent="bg-primary/5 border-primary/10"
+          />
+          <MetricCard
+            title="Karyawan Aktif"
+            value={loadingSummary ? 0 : (summary?.total_active_employees ?? 0)}
+            icon="work"
+            accent="bg-primary/5 border-primary/10"
+          />
+          <MetricCard
+            title="Kandidat di Pipeline"
+            value={loadingSummary ? 0 : totalPipeline}
+            icon="trending_up"
+            accent="bg-secondary/5 border-secondary/10"
+          />
+          <MetricCard
+            title="Kontrak Hampir Habis"
+            value={loadingSummary ? 0 : (summary?.contracts_expiring_30d ?? 0)}
+            icon="warning"
+            accent="bg-error/5 border-error/10"
+          />
         </div>
 
-        {/* Data Table */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden flex flex-col">
-          {/* Table header bar */}
-          <div className="p-stack-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
-            <h3 className="text-headline-sm text-on-surface font-semibold">
-              1,245 Candidates Found
-            </h3>
-            <div className="flex gap-2">
-              <button className="p-1.5 text-on-surface-variant hover:bg-surface-container-high rounded border border-transparent hover:border-outline-variant transition-all">
-                <span className="material-symbols-outlined text-xl">
-                  view_list
-                </span>
-              </button>
-              <button className="p-1.5 text-on-surface-variant hover:bg-surface-container-high rounded border border-transparent hover:border-outline-variant transition-all">
-                <span className="material-symbols-outlined text-xl">
-                  grid_view
-                </span>
-              </button>
+        {/* ── Layout: left = pipeline breakdown, right = two tables ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-gutter">
+          {/* Pipeline Breakdown */}
+          <div className="xl:col-span-1 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden flex flex-col">
+            <div className="p-stack-md border-b border-outline-variant bg-surface-bright">
+              <h3 className="text-headline-sm text-on-surface font-semibold">
+                Pipeline Kandidat
+              </h3>
+            </div>
+            <div className="p-4 space-y-3 flex-1">
+              {loadingSummary ? (
+                <p className="text-body-sm text-on-surface-variant">Memuat...</p>
+              ) : summary?.pipeline_breakdown?.length ? (
+                summary.pipeline_breakdown.map((b) => (
+                  <div key={b.stage} className="flex items-center justify-between">
+                    <span className="text-body-sm text-on-surface-variant">
+                      {stageLabel(b.stage)}
+                    </span>
+                    <span className="text-body-sm font-semibold text-on-surface">
+                      {b.count}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-body-sm text-on-surface-variant">Belum ada data</p>
+              )}
             </div>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto scrollbar-hide">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface-container-low text-label-md text-on-surface-variant border-b border-outline-variant">
-                  <th className="py-3 px-4 font-medium w-12" />
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                    Candidate Name
-                  </th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                    Current Position
-                  </th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                    Exp.
-                  </th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                    Skills
-                  </th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider text-right">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="text-body-sm divide-y divide-outline-variant">
-                {DUMMY_CANDIDATES.map((candidate) => (
-                  <tr
-                    key={candidate.id}
-                    className="hover:bg-surface-container-low/50 transition-colors group cursor-pointer"
-                  >
-                    {/* Avatar */}
-                    <td className="py-3 px-4">
-                      <div className="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant flex items-center justify-center text-on-surface-variant text-xs font-semibold">
-                        {candidate.initials}
-                      </div>
-                    </td>
-
-                    {/* Name */}
-                    <td className="py-3 px-4 font-medium text-on-surface">
-                      {candidate.name}
-                    </td>
-
-                    {/* Position */}
-                    <td className="py-3 px-4 text-on-surface-variant">
-                      {candidate.position}
-                    </td>
-
-                    {/* Experience */}
-                    <td className="py-3 px-4 text-on-surface-variant">
-                      {candidate.experience}
-                    </td>
-
-                    {/* Skills */}
-                    <td className="py-3 px-4">
-                      <div className="flex gap-1 flex-wrap">
-                        {candidate.skills.map((skill) => (
-                          <span
-                            key={skill}
-                            className="px-2 py-0.5 bg-secondary-container/20 text-secondary border border-secondary-container/30 rounded-sm text-[11px] font-medium"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${candidate.statusColor}`}
-                      >
-                        {candidate.status}
-                      </span>
-                    </td>
-
-                    {/* Actions — visible on row hover */}
-                    <td className="py-3 px-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="flex justify-end gap-2">
-                        <button className="text-on-surface-variant hover:text-primary transition-colors">
-                          <span className="material-symbols-outlined text-lg">
-                            visibility
-                          </span>
-                        </button>
-                        <button className="text-on-surface-variant hover:text-primary transition-colors">
-                          <span className="material-symbols-outlined text-lg">
-                            edit
-                          </span>
-                        </button>
-                        <button className="text-on-surface-variant hover:text-primary transition-colors">
-                          <span className="material-symbols-outlined text-lg">
-                            download
-                          </span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="p-4 border-t border-outline-variant flex items-center justify-between bg-surface-bright text-body-sm">
-            <div className="flex items-center gap-2 text-on-surface-variant">
-              <span>Show</span>
-              <select className="border border-outline-variant rounded-md py-1 px-2 text-sm bg-surface">
-                <option>10</option>
-                <option>25</option>
-                <option>50</option>
-              </select>
-              <span>per page</span>
+          {/* Right column: two tables */}
+          <div className="xl:col-span-2 space-y-gutter flex flex-col">
+            {/* Lamaran Terbaru */}
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden flex flex-col">
+              <div className="p-stack-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+                <h3 className="text-headline-sm text-on-surface font-semibold">
+                  Lamaran Terbaru
+                </h3>
+                <Link
+                  href="/applications"
+                  className="text-body-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                >
+                  Lihat Semua →
+                </Link>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-surface-container-low text-label-md text-on-surface-variant border-b border-outline-variant">
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                        Kandidat
+                      </th>
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                        Posisi
+                      </th>
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                        Tahapan
+                      </th>
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                        Tanggal
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-body-sm divide-y divide-outline-variant">
+                    {loadingApps ? (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-on-surface-variant">
+                          Memuat...
+                        </td>
+                      </tr>
+                    ) : recentApps.length ? (
+                      recentApps.map((app) => (
+                        <tr key={app.id} className="hover:bg-surface-container-low/50 transition-colors">
+                          <td className="py-3 px-4 font-medium text-on-surface">
+                            {app.candidate_name ?? "-"}
+                          </td>
+                          <td className="py-3 px-4 text-on-surface-variant">
+                            {app.position_title ?? "-"}
+                            {app.client_name && (
+                              <span className="ml-1 text-on-surface-variant/60 text-xs">
+                                ({app.client_name})
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${stageBadgeColor(app.current_stage)}`}
+                            >
+                              {stageLabel(app.current_stage)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-on-surface-variant">
+                            {app.created_at
+                              ? new Date(app.created_at).toLocaleDateString("id-ID", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "-"}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-on-surface-variant">
+                          Belum ada lamaran terbaru
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button className="p-1 text-on-surface-variant hover:bg-surface-container-low rounded disabled:opacity-50">
-                <span className="material-symbols-outlined text-lg">
-                  chevron_left
-                </span>
-              </button>
-              <button className="px-3 py-1 bg-primary text-on-primary rounded-md font-medium text-body-sm">
-                1
-              </button>
-              <button className="px-3 py-1 text-on-surface-variant hover:bg-surface-container-low rounded-md text-body-sm">
-                2
-              </button>
-              <button className="px-3 py-1 text-on-surface-variant hover:bg-surface-container-low rounded-md text-body-sm">
-                3
-              </button>
-              <span className="px-2 text-on-surface-variant">...</span>
-              <button className="px-3 py-1 text-on-surface-variant hover:bg-surface-container-low rounded-md text-body-sm">
-                125
-              </button>
-              <button className="p-1 text-on-surface-variant hover:bg-surface-container-low rounded">
-                <span className="material-symbols-outlined text-lg">
-                  chevron_right
-                </span>
-              </button>
+
+            {/* Kontrak Hampir Habis */}
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden flex flex-col">
+              <div className="p-stack-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+                <h3 className="text-headline-sm text-on-surface font-semibold">
+                  Kontrak Hampir Habis
+                </h3>
+                <Link
+                  href="/employees?contract_expiry_within_days=30"
+                  className="text-body-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                >
+                  Lihat Semua →
+                </Link>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-surface-container-low text-label-md text-on-surface-variant border-b border-outline-variant">
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                        Nama Karyawan
+                      </th>
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                        Penempatan
+                      </th>
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                        Tanggal Habis
+                      </th>
+                      <th className="py-3 px-4 font-medium uppercase tracking-wider text-right">
+                        Sisa Hari
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-body-sm divide-y divide-outline-variant">
+                    {loadingContracts ? (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-on-surface-variant">
+                          Memuat...
+                        </td>
+                      </tr>
+                    ) : expiring.length ? (
+                      expiring.map((c) => (
+                        <tr key={c.contract_id} className="hover:bg-surface-container-low/50 transition-colors">
+                          <td className="py-3 px-4 font-medium text-on-surface">
+                            {c.employee_name ?? "-"}
+                          </td>
+                          <td className="py-3 px-4 text-on-surface-variant">
+                            {c.placement ?? "-"}
+                          </td>
+                          <td className="py-3 px-4 text-on-surface-variant">
+                            {c.end_date
+                              ? new Date(c.end_date).toLocaleDateString("id-ID", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "-"}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span
+                              className={`inline-flex items-center justify-end px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                (c.days_remaining ?? 0) <= 7
+                                  ? "bg-error/10 text-error"
+                                  : (c.days_remaining ?? 0) <= 14
+                                  ? "bg-warning/10 text-yellow-800"
+                                  : "bg-gray-100 text-gray-700"
+                              }`}
+                            >
+                              {c.days_remaining != null ? `${c.days_remaining} hari` : "-"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-on-surface-variant">
+                          Tidak ada kontrak yang akan habis dalam 30 hari
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
