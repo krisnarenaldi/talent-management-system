@@ -84,6 +84,7 @@ export interface Candidate {
   possible_duplicate: boolean;
   notes?: string;
   skills?: string[];
+  is_blacklisted?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -179,6 +180,7 @@ export interface Employee {
   // Computed
   age?: number;
   contract_duration_running?: number;
+  is_blacklisted?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -255,6 +257,53 @@ export interface ContractExpiring {
   days_remaining: number | null;
 }
 
+/**
+ * Analytics: pipeline breakdown per stage, position, and period (monthly).
+ */
+export interface PipelineAnalyticsItem {
+  stage: string;
+  position_id?: string;
+  position_title?: string;
+  client_name?: string;
+  period: string; // format: YYYY-MM
+  count: number;
+}
+
+/**
+ * Analytics: success rate (lolos/tidak lolos) per position.
+ */
+export interface PositionSuccessRate {
+  position_id: string;
+  position_title: string;
+  client_name: string;
+  total_applications: number;
+  passed_user_interview: number;
+  success_rate: number; // 0-100
+}
+
+/**
+ * Analytics: success rate (lolos/tidak lolos) per source channel.
+ */
+export interface SourceSuccessRate {
+  source_channel: string;
+  total_applications: number;
+  passed_user_interview: number;
+  success_rate: number; // 0-100
+}
+
+/**
+ * Analytics: beban kerja per HR / recruiter (jumlah kandidat aktif yang dipegang,
+ * total aplikasi historis, serta hitung hired dan rejected).
+ */
+export interface RecruiterWorkload {
+  recruiter_id: string;
+  recruiter_name: string;
+  total_applications_all_time: number;
+  active_candidates: number;
+  hired_count: number;
+  rejected_count: number;
+}
+
 // --- Blacklist ---
 export interface Blacklist {
   id: string;
@@ -287,6 +336,36 @@ export interface PaginatedResponse<T> {
     per_page: number;
     total: number;
   };
+}
+
+// --- AI Natural Language Search (TASK-14) ---
+export interface NLSearchFilters {
+  skills?: string[];
+  domicile?: string;
+  gender?: string;
+  source_channel?: string;
+  completeness_status?: string;
+  contact_status?: string;
+  min_current_salary?: number;
+  max_current_salary?: number;
+  min_expected_salary?: number;
+  max_expected_salary?: number;
+  max_notice_period_days?: number;
+  education_major?: string;
+  education_institution?: string;
+  min_gpa?: number;
+  experience_job_title?: string;
+  experience_company?: string;
+  keyword?: string;
+}
+
+export interface NLSearchResponse {
+  query: string;
+  filters_applied: NLSearchFilters;
+  description: string;
+  results: Candidate[];
+  results_count: number; // jumlah hasil yang dikembalikan (≤ 100)
+  has_more: boolean;     // true jika total match > 100
 }
 
 // --- API Error ---

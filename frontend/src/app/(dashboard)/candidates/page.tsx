@@ -18,15 +18,17 @@ export default function CandidatesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [positionFilter, setPositionFilter] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+    const [positionFilter, setPositionFilter] = useState("");
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [showFilters, setShowFilters] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const { exportCandidates } = useExport();
 
   const { data: candidates = [], isLoading } = useQuery({
-    queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate }],
+    queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchCandidates({
         search: searchTerm || undefined,
@@ -35,6 +37,8 @@ export default function CandidatesPage() {
         position_id: positionFilter || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
+        skip: ((currentPage - 1) * itemsPerPage).toString(),
+        limit: itemsPerPage.toString(),
       }),
   });
 
@@ -254,7 +258,14 @@ export default function CandidatesPage() {
                           </div>
                         )}
                         <div>
-                          <p className="font-semibold text-gray-900">{candidate.full_name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-gray-900">{candidate.full_name}</p>
+                            {candidate.is_blacklisted && (
+                              <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 border border-red-200">
+                                Blacklist
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500">{candidate.identity_no || "-"}</p>
                         </div>
                       </div>
@@ -322,6 +333,28 @@ export default function CandidatesPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between py-4 px-4 border-t border-gray-200">
+          <div className="text-sm text-gray-500">
+            Menampilkan {candidates.length} kandidat
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              Sebelumnya
+            </button>
+            <span className="text-sm font-medium text-gray-700">Halaman {currentPage}</span>
+            <button
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+              disabled={candidates.length < itemsPerPage}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              Selanjutnya
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL: str = "claude-haiku-4-5"
 
+    # OpenAI (untuk TASK-14 Natural Language Search)
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
     # Email
     EMAIL_FROM: str = "noreply@altek.id"
     SMTP_HOST: str = "smtp.gmail.com"

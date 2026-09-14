@@ -91,9 +91,16 @@ def list_candidates(
     candidates = query.offset(skip).limit(limit).all()
     # Re-compute & persist freshness for each returned candidate
     for c in candidates:
-        new_status = _recalc_completeness(str(c.id), db)
-        if c.completeness_status != new_status:
-            c.completeness_status = new_status
+      new_status = _recalc_completeness(str(c.id), db)
+      if c.completeness_status != new_status:
+          c.completeness_status = new_status
+      # Determine blacklist status
+      bl_exists = db.query(Blacklist).filter(
+          Blacklist.candidate_id == c.id,
+          Blacklist.is_active == True,
+          Blacklist.is_approved == True
+      ).first()
+      c.is_blacklisted = bool(bl_exists)
     db.commit()
     return candidates
 

@@ -16,6 +16,8 @@ export const blacklistApi = {
     search?: string;
     status_type_id?: string;
     approval_status?: "pending" | "approved" | "all";
+    skip?: number;
+    limit?: number;
   }): Promise<Blacklist[]> => {
     const response = await api.get("/api/v1/blacklist", { params });
     return response.data as Blacklist[];

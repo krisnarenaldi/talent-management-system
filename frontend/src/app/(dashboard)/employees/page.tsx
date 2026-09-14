@@ -19,14 +19,18 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [placementFilter, setPlacementFilter] = useState("");
   const [expiryDays, setExpiryDays] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const { data: employees = [], isLoading } = useQuery({
-    queryKey: ["employees", { statusFilter, placementFilter, expiryDays }],
+    queryKey: ["employees", { statusFilter, placementFilter, expiryDays, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchEmployees({
         status: statusFilter || undefined,
         placement: placementFilter || undefined,
         contract_expiry_within_days: expiryDays ? Number(expiryDays) : undefined,
+        skip: (currentPage - 1) * itemsPerPage,
+        limit: itemsPerPage,
       }),
   });
 
@@ -129,7 +133,14 @@ export default function EmployeesPage() {
                   return (
                     <tr key={emp.id} className="border-t border-gray-200 hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <p className="font-semibold text-gray-900">{emp.full_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900">{emp.full_name}</p>
+                          {emp.is_blacklisted && (
+                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 border border-red-200">
+                              Blacklist
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">{emp.phone_number || "-"}</p>
                       </td>
                       <td className="px-4 py-3">
@@ -183,6 +194,28 @@ export default function EmployeesPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between py-4 px-4 border-t border-gray-200">
+          <div className="text-sm text-gray-500">
+            Menampilkan {employees.length} karyawan
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              Sebelumnya
+            </button>
+            <span className="text-sm font-medium text-gray-700">Halaman {currentPage}</span>
+            <button
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+              disabled={employees.length < itemsPerPage}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              Selanjutnya
+            </button>
+          </div>
         </div>
       </div>
     </div>

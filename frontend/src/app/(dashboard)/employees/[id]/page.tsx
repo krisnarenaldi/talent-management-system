@@ -112,7 +112,7 @@ function PersonalDataTab({
               </label>
               <input
                 type={key.includes("date") ? "date" : "text"}
-                value={form[key] ?? ""}
+                value={(form[key] as string | number | undefined) ?? ""}
                 onChange={(e) => handleChange(key, e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
               />

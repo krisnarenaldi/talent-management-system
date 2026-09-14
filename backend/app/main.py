@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.routers import auth, users, clients, positions, candidates, applications
 from app.routers import blacklist, employee, employees, export, admin, internal, analytics
 from app.routers import agreement_types, blacklist_status_types
+from app.routers import ai_search
 
 
 def _serve_uploaded_file(path: str):
@@ -69,6 +70,7 @@ app.include_router(internal.router,     prefix="/api/v1/internal",             t
 app.include_router(analytics.router,    prefix="/api/v1/analytics",             tags=["Analytics"])
 app.include_router(agreement_types.router,    prefix="/api/v1/agreement-types",  tags=["Agreement Types"])
 app.include_router(blacklist_status_types.router, prefix="/api/v1/blacklist-status-types", tags=["Blacklist Status Types"])
+app.include_router(ai_search.router,          prefix="/api/v1/ai/search",         tags=["AI Search"])
 
 
 @app.get("/health", tags=["Health"])

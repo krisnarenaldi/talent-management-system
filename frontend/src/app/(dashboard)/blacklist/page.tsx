@@ -18,6 +18,8 @@ export default function BlacklistPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusTypeFilter, setStatusTypeFilter] = useState("");
   const [approvalFilter, setApprovalFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const { data: statusTypes = [] } = useQuery({
     queryKey: ["blacklist-status-types"],
@@ -28,12 +30,14 @@ export default function BlacklistPage() {
   });
 
   const { data: blacklistItems = [], isLoading } = useQuery<Blacklist[]>({
-    queryKey: ["blacklist", { searchTerm, statusTypeFilter, approvalFilter }],
+    queryKey: ["blacklist", { searchTerm, statusTypeFilter, approvalFilter, currentPage, itemsPerPage }],
     queryFn: () =>
       blacklistApi.list({
         search: searchTerm || undefined,
         status_type_id: statusTypeFilter || undefined,
-        approval_status: (approvalFilter || "all") as "pending" | "approved" | "all",
+        approval_status: (approvalFilter || "all" ) as "pending" | "approved" | "all",
+        skip: (currentPage - 1) * itemsPerPage,
+        limit: itemsPerPage,
       }),
   });
 
@@ -212,8 +216,27 @@ export default function BlacklistPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-3 border-t border-gray-200 text-xs text-gray-500 bg-gray-50">
-          Total: {blacklistItems.length} entri
+        <div className="flex items-center justify-between py-4 px-4 border-t border-gray-200">
+          <div className="text-sm text-gray-500">
+            Menampilkan {blacklistItems.length} entri
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              Sebelumnya
+            </button>
+            <span className="text-sm font-medium text-gray-700">Halaman {currentPage}</span>
+            <button
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+              disabled={blacklistItems.length < itemsPerPage}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              Selanjutnya
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -75,17 +75,9 @@ function LoginForm() {
           </div>
         </div>
         <div className="hidden sm:flex items-center space-x-6 text-body-sm font-medium text-on-surface-variant">
-          <a className="hover:text-primary transition-colors" href="#">
+          <a className="hover:text-primary transition-colors" href="/docs">
             Dokumentasi
           </a>
-          <a className="hover:text-primary transition-colors" href="#">
-            Bantuan Admin
-          </a>
-          <div className="flex items-center space-x-1.5 cursor-pointer text-on-surface font-semibold pl-2 border-l border-outline-variant">
-            <span className="material-symbols-outlined text-base">language</span>
-            <span>ID</span>
-            <span className="material-symbols-outlined text-xs">expand_more</span>
-          </div>
         </div>
       </header>
 
@@ -286,16 +278,16 @@ function LoginForm() {
           <span>Hak Cipta © 2024. All rights reserved.</span>
         </div>
         <div className="flex items-center space-x-6">
-          <a className="hover:text-on-surface transition-colors" href="#">
+          <a className="hover:text-on-surface transition-colors" href="/bantuan">
             Pusat Bantuan
           </a>
-          <a className="hover:text-on-surface transition-colors" href="#">
+          <a className="hover:text-on-surface transition-colors" href="/kebijakan-privasi">
             Kebijakan Privasi
           </a>
-          <a className="hover:text-on-surface transition-colors" href="#">
+          <a className="hover:text-on-surface transition-colors" href="/syarat-ketentuan">
             Syarat &amp; Ketentuan
           </a>
-          <a className="hover:text-on-surface transition-colors" href="#">
+          <a className="hover:text-on-surface transition-colors" href="/status-sistem">
             Status Sistem
           </a>
         </div>

@@ -96,19 +96,23 @@ export default function ApplicationsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
   const user = useAuthStore((state) => state.user);
   const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
 
   const { exportPipeline } = useExport();
 
   const { data: applications = [], isLoading } = useQuery({
-    queryKey: ["applications", { statusFilter, stageFilter, startDate, endDate }],
+    queryKey: ["applications", { statusFilter, stageFilter, startDate, endDate, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchApplications({
         status_filter: statusFilter || undefined,
         current_stage: stageFilter || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
+        skip: ((currentPage - 1) * itemsPerPage).toString(),
+        limit: itemsPerPage.toString(),
       }),
   });
 

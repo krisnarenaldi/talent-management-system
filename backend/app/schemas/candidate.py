@@ -122,6 +122,7 @@ class CandidateResponse(BaseModel):
     contact_status: str
     notes: str | None
     skills: List[str] | None
+    is_blacklisted: bool = False
     created_at: datetime
     updated_at: datetime
 

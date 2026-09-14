@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.employee import Employee, EmployeeContract, EmployeePayroll, EmployeeDocument
+from app.models.blacklist import Blacklist
 from app.schemas.employee import (
     EmployeeUpdate,
     EmployeeResponse,
@@ -66,14 +67,20 @@ def list_employees(
     # Compute age and contract duration running for each employee
     for emp in employees:
         emp.age = employee_service.calculate_age(emp.birth_date)
-        # Find active contract (using eager-loaded contracts collection)
+        # Determine blacklist status
+        bl_exists = db.query(Blacklist).filter(
+            Blacklist.employee_id == emp.id,
+            Blacklist.is_active == True,
+            Blacklist.is_approved == True
+        ).first()
+        emp.is_blacklisted = bool(bl_exists)
+        # Find active contract ...
         contract_duration = None
         for contract in emp.contracts:
             if contract.status == "aktif":
                 contract_duration = employee_service.calculate_contract_duration(contract.join_date)
                 break
         emp.contract_duration_running = contract_duration
-
     return employees
 
 

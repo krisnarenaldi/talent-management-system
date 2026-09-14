@@ -323,14 +323,16 @@
 
 ### TASK-14: Natural Language Search (FR-09)
 
-- [ ] Backend `services/ai_service.py`:
+- [x] Backend `services/ai_service.py`:
   - `translate_nl_to_filters(query: str)` → kirim query + skema field ke LLM → return filter JSON
   - `execute_structured_filters(filters: dict)` → terjemahkan ke SQLAlchemy query (bukan raw SQL dari LLM)
-- [ ] Endpoint `POST /api/v1/ai/search/` — role Manager only
-- [ ] Frontend `/search`:
-  - Search bar input teks bebas
-  - Tampilkan `filters_applied` (filter yang dipakai AI) — Manager bisa koreksi
-  - Hasil: DataTable kandidat yang match
+- [x] Endpoint `POST /api/v1/ai/search/` — role Manager only
+- [x] Frontend `/search`:
+  - Chat-style UI (ala ChatGPT/Claude) — input teks bebas, riwayat percakapan
+  - Tampilkan `filters_applied` sebagai badge — Manager tahu filter yang dipakai
+  - Hasil: DataTable kandidat yang match + link ke detail
+  - Boundary: query di luar talent management ditolak sopan (HTTP 422)
+  - Guard frontend: halaman hanya tampil untuk role Manager
 
 ---
 
@@ -338,9 +340,9 @@
 
 ### TASK-15: Dashboard Analytics (FR-10)
 
-- [ ] Backend: endpoint analytics per tahapan/posisi/periode, rasio lolos/gagal User Interview
-- [ ] Backend: analisis sederhana: posisi/sumber dengan rasio lolos tertinggi
-- [ ] Frontend `/analytics`:
+- [x] Backend: endpoint analytics per tahapan/posisi/periode, rasio lolos/gagal User Interview
+- [x] Backend: analisis sederhana: posisi/sumber dengan rasio lolos tertinggi
+- [x] Frontend `/analytics`:
   - Bar chart: kandidat per tahapan
   - Line chart: tren kandidat masuk per bulan
   - Tabel: rasio lolos per posisi dan per sumber channel

@@ -57,6 +57,7 @@ class EmployeeResponse(EmployeeBase):
     id: AutoStrUUID
     age: Optional[int] = None
     contract_duration_running: Optional[int] = None
+    is_blacklisted: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
