@@ -1,0 +1,838 @@
+
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UAT Scenario – Talent Management System</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    background: #ffffff;
+    color: #1f2328;
+    padding: 32px 20px 48px;
+  }
+  .container { max-width: 760px; margin: 0 auto; }
+
+  /* Header */
+  .doc-header { border-bottom: 2px solid #e5e7eb; padding-bottom: 20px; margin-bottom: 28px; }
+  .doc-header h1 { font-size: 22px; font-weight: 700; color: #1f2328; }
+  .doc-header .meta { display: flex; gap: 20px; margin-top: 10px; flex-wrap: wrap; }
+  .doc-header .meta span { font-size: 12.5px; color: #57606a; }
+  .doc-header .meta strong { color: #1f2328; }
+
+  /* Badge */
+  .badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .badge-admin    { background: #fce7f3; color: #9d174d; }
+  .badge-hr       { background: #dbeafe; color: #1e40af; }
+  .badge-manager  { background: #d1fae5; color: #065f46; }
+  .badge-pm       { background: #ede9fe; color: #5b21b6; }
+
+  /* Section */
+  .section { margin-bottom: 36px; }
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1f2328;
+    border-left: 3px solid #3b82d4;
+    padding-left: 10px;
+    margin-bottom: 14px;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #57606a;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 20px 0 8px;
+  }
+
+  /* Scenario card */
+  .scenario {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .scenario-header {
+    background: #f7f8fa;
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .scenario-num {
+    background: #3b82d4;
+    color: #fff;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    font-size: 11.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .scenario-title { font-weight: 600; font-size: 13.5px; flex: 1; }
+  .scenario-body { padding: 12px 14px; }
+  .scenario-body p { font-size: 13px; color: #1f2328; margin-bottom: 6px; }
+  .scenario-body p:last-child { margin-bottom: 0; }
+
+  /* Steps */
+  ol.steps { padding-left: 18px; font-size: 13px; color: #1f2328; }
+  ol.steps li { margin-bottom: 5px; }
+  ol.steps li strong { color: #1f2328; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { background: #f7f8fa; padding: 7px 10px; text-align: left; border: 1px solid #e5e7eb; font-weight: 600; color: #1f2328; }
+  td { padding: 7px 10px; border: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+
+  /* Pipeline flow */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 8px 0 12px;
+    align-items: center;
+  }
+  .pipe-step {
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .pipe-arrow {
+    font-size: 12px;
+    color: #9ca3af;
+    padding: 0 4px;
+  }
+  .pipe-step.terminal { background: #fee2e2; border-color: #fca5a5; color: #7f1d1d; }
+  .pipe-step.success  { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+
+  /* Notice box */
+  .notice {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: #78350f;
+    margin-bottom: 12px;
+  }
+  .notice strong { color: #92400e; }
+
+  .notice-blue {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: #1e3a5f;
+    margin-bottom: 12px;
+  }
+
+  /* Credentials */
+  .cred-table td:first-child { font-family: monospace; font-size: 12px; color: #0550ae; }
+  .cred-table td:nth-child(2) { font-family: monospace; font-size: 12px; }
+
+  /* Checklist */
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { padding: 4px 0; font-size: 13px; display: flex; align-items: flex-start; gap: 8px; }
+  .checklist li::before { content: "☐"; color: #6b7280; font-size: 13px; flex-shrink: 0; line-height: 1.5; }
+
+  /* Footer */
+  .footer {
+    margin-top: 48px;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: #9ca3af;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  
+  <div class="doc-header">
+    <h1>📋 UAT Scenario — Talent Management System</h1>
+    <div class="meta">
+      <span><strong>Tanggal UAT:</strong> 16 September 2026</span>
+      <span><strong>Versi:</strong> 1.0</span>
+      <span><strong>Prepared by:</strong> Tim Pengembang TMS</span>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-title">1. User &amp; Role</div>
+    <p style="font-size:13px;color:#57606a;margin-bottom:12px">
+      Sistem TMS memiliki 4 role pengguna dengan hak akses berbeda. Setiap role mewakili fungsi bisnis yang spesifik.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Label</th>
+          <th>Akses &amp; Tanggung Jawab</th>
+          <th>Tidak Bisa</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-admin">admin</span></td>
+          <td>Administrator</td>
+          <td>Full akses ke seluruh modul. Kelola user, master data (client, posisi, agreement type, blacklist status type), approve/revoke blacklist, lihat analytics.</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-hr">hr</span></td>
+          <td>HR / Recruiter</td>
+          <td>Input kandidat, buat lamaran, update stage pipeline, input ke blacklist, lihat analytics. Hanya bisa edit lamaran yang ditugaskan kepadanya sendiri.</td>
+          <td>Kelola user, approve/revoke blacklist, akses payroll.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-manager">manager</span></td>
+          <td>Manager / HRD</td>
+          <td>Semua akses HR + approve/revoke blacklist. Lihat data payroll karyawan. Lihat semua lamaran.</td>
+          <td>Kelola user &amp; master data global.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-pm">pm</span></td>
+          <td>Project Manager</td>
+          <td>Lihat daftar karyawan (placement) &amp; blacklist. Tidak bisa membuat atau edit data apapun.</td>
+          <td>Semua operasi tulis. Analytics pipeline.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-title">2. Akun Test untuk UAT</div>
+    <div class="notice">
+      <strong>Persiapan:</strong> Pastikan seed data sudah dijalankan sebelum UAT. Buat akun berikut manual via menu Admin → Users, atau minta tim teknis untuk menyiapkan sebelum 16 Sept.
+    </div>
+    <table class="cred-table">
+      <thead>
+        <tr><th>Role</th><th>Email</th><th>Password</th><th>Digunakan untuk skenario</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-admin">admin</span></td>
+          <td>admin@altek.id</td>
+          <td>admin123!</td>
+          <td>Setup awal, kelola user, approve blacklist, master data</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-hr">hr</span></td>
+          <td>hr.sari@altek.id</td>
+          <td>hr123456</td>
+          <td>Input kandidat, buat lamaran, update pipeline</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-manager">manager</span></td>
+          <td>manager@altek.id</td>
+          <td>mgr123456</td>
+          <td>Approve blacklist, lihat analytics, lihat payroll</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-pm">pm</span></td>
+          <td>pm@altek.id</td>
+          <td>pm1234567</td>
+          <td>Verifikasi akses read-only karyawan &amp; blacklist</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-title">3. Skenario UAT</div>
+    <p style="font-size:13px;color:#57606a;margin-bottom:16px">
+      Jalankan skenario secara berurutan. Setiap skenario mencantumkan: <em>aktor, langkah, dan hasil yang diharapkan</em>.
+    </p>
+
+    
+    <div class="section-subtitle">Modul A — Autentikasi</div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">A1</div>
+        <div class="scenario-title">Login berhasil sebagai Admin</div>
+        <span class="badge badge-admin">admin</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka URL aplikasi TMS di browser.</li>
+          <li>Masukkan email <strong>admin@altek.id</strong> dan password <strong>admin123!</strong>.</li>
+          <li>Klik tombol <strong>Masuk</strong>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Redirect ke dashboard. Nama "Admin Altek" muncul di header. Sidebar menampilkan semua menu termasuk <em>Admin</em>.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">A2</div>
+        <div class="scenario-title">Login gagal — password salah</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Masukkan email <strong>hr.sari@altek.id</strong> dengan password <strong>salah123</strong>.</li>
+          <li>Klik tombol <strong>Masuk</strong>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Muncul pesan error <em>"Email atau password salah"</em>. Tidak ada redirect.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">A3</div>
+        <div class="scenario-title">Lupa &amp; Reset Password</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Di halaman login, klik <strong>Lupa Password</strong>.</li>
+          <li>Masukkan email <strong>hr.sari@altek.id</strong> → klik <strong>Kirim</strong>.</li>
+          <li>Buka link reset dari email (atau minta dari tim teknis jika email tidak dikonfigurasi).</li>
+          <li>Masukkan password baru minimal 6 karakter → simpan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Muncul notifikasi sukses. Login dengan password baru berhasil. Sesi lama ter-revoke otomatis.
+        </p>
+      </div>
+    </div>
+
+    
+    <div class="section-subtitle">Modul B — Master Data (Admin)</div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">B1</div>
+        <div class="scenario-title">Buat User Baru (HR &amp; Manager)</div>
+        <span class="badge badge-admin">admin</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login sebagai admin → buka menu <strong>Admin → Users</strong>.</li>
+          <li>Klik <strong>Tambah User</strong> → isi: Nama "Sari HR", Email <strong>hr.sari@altek.id</strong>, Role <strong>hr</strong>, Password <strong>hr123456</strong>.</li>
+          <li>Simpan. Ulangi untuk Manager: "Budi Manager", <strong>manager@altek.id</strong>, role <strong>manager</strong>, password <strong>mgr123456</strong>.</li>
+          <li>Ulangi untuk PM: "Pak Rian", <strong>pm@altek.id</strong>, role <strong>pm</strong>, password <strong>pm1234567</strong>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Ketiga user muncul di daftar Users. Status <em>Aktif</em>. Bisa login dengan kredensial masing-masing.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">B2</div>
+        <div class="scenario-title">Tambah Client &amp; Posisi</div>
+        <span class="badge badge-admin">admin</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka <strong>Admin → Clients</strong> → klik <strong>Tambah Client</strong>.</li>
+          <li>Isi: Nama <strong>"PT Maju Bersama"</strong>, Industri <em>Teknologi</em>, PIC Name <em>Bapak Doni</em>, PIC Kontak <em>08112233445</em> → Simpan.</li>
+          <li>Buka <strong>Admin → Posisi</strong> → klik <strong>Tambah Posisi</strong>.</li>
+          <li>Pilih client <em>PT Maju Bersama</em>, Judul <strong>"Backend Developer"</strong>, Tipe Kontrak <em>PKWT</em>, Durasi <em>12 bulan</em>, isi requirement → Simpan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Client &amp; Posisi tersimpan dan muncul di daftar. Posisi terhubung ke client yang benar.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">B3</div>
+        <div class="scenario-title">Tambah Blacklist Status Type</div>
+        <span class="badge badge-admin">admin</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka <strong>Admin → Blacklist Status Types</strong>.</li>
+          <li>Verifikasi 5 status default sudah ada (No-Show, Manipulasi Data, dll).</li>
+          <li>Tambah status baru: <strong>"Kinerja Buruk di Klien"</strong> → Simpan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Status baru muncul di daftar dan bisa dipilih saat menambah blacklist.
+        </p>
+      </div>
+    </div>
+
+    
+    <div class="section-subtitle">Modul C — Kandidat</div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">C1</div>
+        <div class="scenario-title">Buat Kandidat Baru</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login sebagai HR → buka menu <strong>Kandidat</strong> → klik <strong>Tambah Kandidat</strong>.</li>
+          <li>Isi data wajib: Nama Lengkap <strong>"Andi Firmansyah"</strong>, Email <strong>andi.firmansyah@gmail.com</strong>, No. HP <strong>081290001234</strong>, Domisili <em>Jakarta</em>.</li>
+          <li>Isi data opsional: NIK, Tanggal Lahir, Jenis Kelamin, Gaji Saat Ini <em>8.000.000</em>, Expected Salary <em>11.000.000</em>, Notice Period <em>30 hari</em>.</li>
+          <li>Tambah Skills: <em>Python, FastAPI, PostgreSQL</em>.</li>
+          <li>Tambah Riwayat Pendidikan: Universitas Indonesia, Teknik Informatika, Lulus 2020.</li>
+          <li>Tambah Pengalaman Kerja: PT Teknologi Nusantara, Backend Engineer, Jan 2021 – Des 2023.</li>
+          <li>Klik <strong>Simpan</strong>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Kandidat tersimpan, muncul di daftar, status <em>Belum Lengkap → Lengkap</em> (jika semua field utama diisi). Bisa dibuka detail-nya.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">C2</div>
+        <div class="scenario-title">Edit &amp; Update Kandidat</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka detail kandidat <em>Andi Firmansyah</em> → klik <strong>Edit</strong>.</li>
+          <li>Ubah Expected Salary menjadi <em>12.000.000</em>, tambah skill <em>Docker</em>.</li>
+          <li>Simpan perubahan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Data terbaru tersimpan dan tampil di halaman detail.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">C3</div>
+        <div class="scenario-title">Cari Kandidat (Filter &amp; Search)</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Dari daftar Kandidat, gunakan search bar → ketik <strong>"Andi"</strong>.</li>
+          <li>Verifikasi Andi Firmansyah muncul di hasil.</li>
+          <li>Gunakan filter <em>Source Channel = LinkedIn</em> (jika tersedia) untuk memfilter kandidat dari seed data.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Filter &amp; search berjalan realtime atau setelah submit. Hanya kandidat yang relevan tampil.
+        </p>
+      </div>
+    </div>
+
+    
+    <div class="section-subtitle">Modul D — Lamaran &amp; Pipeline Rekrutmen</div>
+
+    <div class="notice-blue">
+      <strong>Pipeline Rekrutmen (berurutan):</strong>
+      <div class="pipeline" style="margin-top:8px">
+        <span class="pipe-step">Dijadwalkan_Interview</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step">Konfirmasi_Kehadiran</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step">Interview_HR</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step">Psikotest</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step">Interview_User</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step">Offering</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step">Tanda_Tangan_Kontrak</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step">Onboarding</span><span class="pipe-arrow">→</span>
+        <span class="pipe-step success">Existing (Hired)</span>
+      </div>
+      <div class="pipeline" style="margin-top:4px">
+        <span class="pipe-step terminal">Rejected</span><span class="pipe-arrow">atau</span>
+        <span class="pipe-step terminal">Withdrawn</span><span style="font-size:12px;color:#6b7280;padding-left:8px">(bisa dari tahap mana saja)</span>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">D1</div>
+        <div class="scenario-title">Buat Lamaran Baru</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login HR → buka menu <strong>Lamaran</strong> → klik <strong>Buat Lamaran</strong>.</li>
+          <li>Pilih kandidat: <strong>Andi Firmansyah</strong>.</li>
+          <li>Pilih posisi: <strong>Backend Developer – PT Maju Bersama</strong>.</li>
+          <li>Pilih recruiter: <em>Sari HR</em>.</li>
+          <li>Stage awal: <strong>Dijadwalkan_Interview</strong> (default).</li>
+          <li>Klik <strong>Simpan</strong>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Lamaran dibuat dengan status <em>active</em>, stage <em>Dijadwalkan_Interview</em>. Muncul di daftar Lamaran.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">D2</div>
+        <div class="scenario-title">Update Pipeline Stage — Maju Bertahap</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka lamaran <em>Andi Firmansyah</em> → klik <strong>Update Stage</strong>.</li>
+          <li>Pilih stage: <strong>Konfirmasi_Kehadiran</strong> → isi tanggal jadwal, result <em>ok</em>, catatan → Simpan.</li>
+          <li>Update lagi ke <strong>Interview_HR</strong> → result <em>pass</em>, tanggal, catatan → Simpan.</li>
+          <li>Update ke <strong>Interview_User</strong> (lewati Psikotest untuk variasi) → result <em>lolos</em> → Simpan.</li>
+          <li>Update ke <strong>Offering</strong> → isi Gaji Ditawarkan → Simpan.</li>
+          <li>Update ke <strong>Tanda_Tangan_Kontrak</strong> → Simpan.</li>
+          <li>Update ke <strong>Onboarding</strong> → Simpan.</li>
+          <li>Update ke <strong>Existing</strong> → Simpan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Stage bergerak maju sesuai pipeline. Saat masuk <em>Existing</em>: status lamaran menjadi <em>hired</em> dan <strong>karyawan baru otomatis terbentuk</strong> di modul Karyawan.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">D3</div>
+        <div class="scenario-title">Reject Kandidat di Tengah Pipeline</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buat lamaran baru untuk kandidat <em>Budi Santoso</em> (dari seed data) → posisi yang sama.</li>
+          <li>Update stage ke <strong>Interview_HR</strong> → result <em>fail</em> → Simpan.</li>
+          <li>Coba update ke <strong>Interview_User</strong> — sistem harus menolak.</li>
+          <li>Update ke <strong>Rejected</strong> dengan alasan "Tidak memenuhi kualifikasi teknis" → Simpan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Setelah result <em>fail</em>, transisi maju ditolak. Lamaran berhasil ditutup dengan status <em>rejected</em>. Tidak bisa di-update lagi.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">D4</div>
+        <div class="scenario-title">Cegah Duplikat Lamaran Aktif</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Coba buat lamaran kedua untuk kandidat yang sama (<em>Andi Firmansyah</em>) ke posisi <em>Backend Developer</em> yang sama.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Sistem menolak dengan pesan <em>"Kandidat sudah memiliki lamaran aktif untuk posisi ini"</em>.
+        </p>
+      </div>
+    </div>
+
+    
+    <div class="section-subtitle">Modul E — Blacklist</div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">E1</div>
+        <div class="scenario-title">Tambah Kandidat ke Blacklist (HR)</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login HR → buka menu <strong>Blacklist</strong> → klik <strong>Tambah Blacklist</strong>.</li>
+          <li>Target: pilih <strong>Kandidat</strong> → cari <em>Siti Aminah</em>.</li>
+          <li>Status Type: <strong>"Tidak Hadir Interview Tanpa Konfirmasi (No-Show)"</strong>.</li>
+          <li>Isi Alasan: <em>"Tidak hadir 2x interview tanpa kabar"</em>.</li>
+          <li>Isi Catatan, tanggal blacklist: hari ini, PIC: otomatis terisi HR.</li>
+          <li>Klik <strong>Simpan</strong>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Record blacklist tersimpan dengan status <em>Menunggu Approval</em> (is_approved = false). Muncul di daftar blacklist.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">E2</div>
+        <div class="scenario-title">Approve Blacklist (Manager/Admin)</div>
+        <span class="badge badge-manager">manager</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login sebagai Manager → buka menu <strong>Blacklist</strong>.</li>
+          <li>Filter approval status: <em>Pending</em> → temukan record Siti Aminah.</li>
+          <li>Klik <strong>Approve</strong> pada record tersebut → konfirmasi.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Status menjadi <em>Approved</em>. Nama approver tercatat (Manager). Kandidat kini tidak bisa dibuatkan lamaran baru.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">E3</div>
+        <div class="scenario-title">Blokir Lamaran untuk Kandidat Blacklisted</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login HR → coba buat lamaran baru untuk <em>Siti Aminah</em>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Sistem menolak dengan pesan <em>"Kandidat ini sedang dalam daftar blacklist dan tidak dapat diproses"</em> beserta alasannya.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">E4</div>
+        <div class="scenario-title">Cabut (Revoke) Blacklist</div>
+        <span class="badge badge-manager">manager</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login Manager → buka <strong>Blacklist</strong> → temukan record Siti Aminah.</li>
+          <li>Klik <strong>Cabut Blacklist</strong> → konfirmasi.</li>
+          <li>Setelah dicabut, coba buat lamaran baru untuk Siti Aminah.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Blacklist tidak lagi aktif (is_active = false). Tidak muncul di daftar aktif. Lamaran baru untuk Siti Aminah bisa dibuat.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">E5</div>
+        <div class="scenario-title">Blacklist Karyawan Aktif</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka menu <strong>Blacklist → Tambah Blacklist</strong>.</li>
+          <li>Ubah target ke <strong>Karyawan</strong> → cari <em>Andi Firmansyah</em> (yang baru di-hire).</li>
+          <li>Status Type: <strong>"Bermasalah di Tempat Kerja Client"</strong>.</li>
+          <li>Isi alasan &amp; catatan → Simpan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Record blacklist karyawan tersimpan, menunggu approval manager.
+        </p>
+      </div>
+    </div>
+
+    
+    <div class="section-subtitle">Modul F — Karyawan</div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">F1</div>
+        <div class="scenario-title">Verifikasi Karyawan Otomatis dari Hiring</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Setelah skenario D2 selesai (Andi Firmansyah masuk Existing), buka menu <strong>Karyawan</strong>.</li>
+          <li>Cari <em>Andi Firmansyah</em>.</li>
+          <li>Verifikasi data: nama, data kandidat (NIK, TTL, dll) sudah ter-import otomatis.</li>
+          <li>Lengkapi data karyawan: NIP, Placement <em>"Site Jakarta"</em>, Role Level <em>"Junior Engineer"</em>, email kantor.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Karyawan terbentuk otomatis saat lamaran masuk stage Existing. Data dasar sudah terisi dari profil kandidat.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">F2</div>
+        <div class="scenario-title">Tambah Kontrak Karyawan</div>
+        <span class="badge badge-manager">manager</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka detail karyawan <em>Andi Firmansyah</em> → tab <strong>Kontrak</strong>.</li>
+          <li>Klik <strong>Tambah Kontrak</strong> → isi: Tipe Perjanjian <em>PKWT</em>, No. Kontrak, Durasi 12 bulan, Tanggal Mulai: hari ini.</li>
+          <li>Simpan.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Kontrak tersimpan. End date dihitung otomatis (join_date + 12 bulan). Status kontrak: <em>aktif</em>.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">F3</div>
+        <div class="scenario-title">Akses Payroll (Manager Only)</div>
+        <span class="badge badge-manager">manager</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login Manager → buka detail karyawan → tab <strong>Payroll</strong>.</li>
+          <li>Isi data: THP, Bank, No. Rekening, BPJS TK, BPJS Kesehatan, NPWP → Simpan.</li>
+          <li>Logout, login sebagai HR → coba buka tab Payroll karyawan yang sama.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Manager bisa melihat &amp; isi payroll. HR tidak dapat mengakses data payroll (redirect atau pesan tidak punya akses).
+        </p>
+      </div>
+    </div>
+
+    
+    <div class="section-subtitle">Modul G — Dashboard &amp; Analytics</div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">G1</div>
+        <div class="scenario-title">Dashboard Summary</div>
+        <span class="badge badge-manager">manager</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login Manager → buka halaman <strong>Dashboard</strong>.</li>
+          <li>Verifikasi card summary: <em>Total Kandidat Aktif</em>, <em>Total Karyawan Aktif</em>, <em>Kontrak Berakhir dalam 30 Hari</em>.</li>
+          <li>Verifikasi tabel <em>Lamaran Terbaru</em> dan <em>Kontrak Segera Berakhir</em>.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Semua angka terisi dan sesuai data yang telah diinput selama UAT.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">G2</div>
+        <div class="scenario-title">Analytics Pipeline &amp; Success Rate</div>
+        <span class="badge badge-manager">manager</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buka halaman <strong>Analytics</strong>.</li>
+          <li>Periksa grafik <em>Pipeline Breakdown</em> — harus menampilkan distribusi kandidat per stage.</li>
+          <li>Periksa <em>Success Rate by Position</em> dan <em>by Source Channel</em>.</li>
+          <li>Gunakan filter periode untuk mempersempit data.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Grafik tampil dengan data yang mencerminkan skenario D1–D3. Filter berfungsi.
+        </p>
+      </div>
+    </div>
+
+    
+    <div class="section-subtitle">Modul H — Verifikasi Pembatasan Role</div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">H1</div>
+        <div class="scenario-title">PM — Read-only Access</div>
+        <span class="badge badge-pm">pm</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Login sebagai PM (<em>pm@altek.id</em>).</li>
+          <li>Buka menu <strong>Karyawan</strong> → verifikasi bisa melihat daftar karyawan.</li>
+          <li>Buka menu <strong>Blacklist</strong> → verifikasi bisa melihat daftar blacklist.</li>
+          <li>Coba klik tombol <em>Tambah</em> / <em>Edit</em> / <em>Hapus</em> — pastikan tidak muncul atau tidak bisa diklik.</li>
+          <li>Coba akses <strong>Admin → Users</strong> — pastikan redirect atau pesan tidak punya akses.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> PM hanya bisa membaca. Semua aksi tulis dibatasi.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="scenario-header">
+        <div class="scenario-num">H2</div>
+        <div class="scenario-title">HR — Tidak Bisa Edit Lamaran HR Lain</div>
+        <span class="badge badge-hr">hr</span>
+      </div>
+      <div class="scenario-body">
+        <ol class="steps">
+          <li>Buat user HR kedua: <em>hr2@altek.id</em> (via Admin).</li>
+          <li>Buat lamaran baru dengan recruiter = <em>hr2@altek.id</em>.</li>
+          <li>Login sebagai <em>hr.sari@altek.id</em> → coba update stage lamaran milik hr2.</li>
+        </ol>
+        <p style="margin-top:8px;color:#57606a;font-size:12.5px">
+          ✅ <strong>Hasil diharapkan:</strong> Sistem menolak dengan pesan <em>"Anda tidak memiliki akses untuk mengedit lamaran yang ditugaskan ke recruiter lain"</em>.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-title">4. Checklist Persiapan Sebelum UAT (15 Sept 2026)</div>
+    <ul class="checklist">
+      <li>Sistem berjalan di server / environment UAT (Docker Compose up)</li>
+      <li>Database migration sudah dijalankan (<code>alembic upgrade head</code>)</li>
+      <li>Seed data sudah dijalankan (<code>python -m app.db.seed2</code>)</li>
+      <li>Akun admin@altek.id sudah aktif dan bisa login</li>
+      <li>Akun HR, Manager, PM sudah dibuat (atau siapkan via seed)</li>
+      <li>Client "PT Maju Bersama" dan posisi "Backend Developer" sudah ada</li>
+      <li>5 Blacklist Status Type default sudah ada</li>
+      <li>4 Agreement Type default sudah ada</li>
+      <li>URL aplikasi frontend &amp; backend sudah diakses dan tidak ada error console</li>
+      <li>Layanan email reset password sudah dikonfigurasi atau dimatikan untuk UAT</li>
+      <li>Browser modern tersedia (Chrome/Edge terbaru)</li>
+      <li>Dokumen skenario ini dicetak atau dibagikan ke peserta UAT</li>
+    </ul>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-title">5. Template Bug Report</div>
+    <table>
+      <thead>
+        <tr><th>No</th><th>Skenario</th><th>Langkah Reproduksi</th><th>Hasil Aktual</th><th>Hasil Diharapkan</th><th>Severity</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>🔴 / 🟡 / 🟢</td>
+          <td>Open</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:#9ca3af;margin-top:6px">Severity: 🔴 Critical (blocker) · 🟡 Major · 🟢 Minor</p>
+  </div>
+
+  <div class="footer">Made with IBM Bob</div>
+</div>
+</body>
+</html>

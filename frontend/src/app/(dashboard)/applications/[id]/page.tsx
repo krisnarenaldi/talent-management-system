@@ -246,6 +246,16 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                       {history.result && <span className="rounded-full bg-gray-100 px-2 py-1">Result: {history.result}</span>}
                       {history.scheduled_date && <span className="rounded-full bg-gray-100 px-2 py-1">Jadwal: {history.scheduled_date}</span>}
                       {history.notes && <span className="rounded-full bg-gray-100 px-2 py-1">Catatan: {history.notes}</span>}
+                      {history.salary_current_input != null && (
+                        <span className="rounded-full bg-gray-100 px-2 py-1">
+                          Gaji saat ini: Rp {Number(history.salary_current_input).toLocaleString("id-ID")}
+                        </span>
+                      )}
+                      {history.salary_expected_input != null && (
+                        <span className="rounded-full bg-gray-100 px-2 py-1">
+                          Gaji diharapkan: Rp {Number(history.salary_expected_input).toLocaleString("id-ID")}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
