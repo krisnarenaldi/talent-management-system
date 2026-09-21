@@ -348,8 +348,8 @@ export default function CandidateForm({
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Link href="/candidates" className="text-sm font-medium text-primary-600 hover:underline">
-            ← Kembali ke Kandidat
+          <Link href={candidateId ? `/candidates/${candidateId}` : "/candidates"} className="text-sm font-medium text-primary-600 hover:underline">
+            ← Kembali ke Detail
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">
             {mode === "create" ? "Tambah Kandidat" : "Edit Kandidat"}
