@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -12,6 +13,7 @@ class PositionCreate(BaseModel):
     employment_type: str | None = None
     contract_duration_months: int | None = None
     is_active: bool = True
+    ai_scoring_config: dict[str, Any] | None = None
 
 
 class PositionUpdate(BaseModel):
@@ -20,6 +22,7 @@ class PositionUpdate(BaseModel):
     employment_type: str | None = None
     contract_duration_months: int | None = None
     is_active: bool | None = None
+    ai_scoring_config: dict[str, Any] | None = None
 
 
 class PositionResponse(BaseModel):
@@ -31,6 +34,7 @@ class PositionResponse(BaseModel):
     employment_type: str | None
     contract_duration_months: int | None
     is_active: bool
+    ai_scoring_config: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
 

@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
@@ -17,6 +17,7 @@ class Position(Base):
     employment_type = Column(String(100))       # PKWT, PKWTT, dll
     contract_duration_months = Column(Integer)
     is_active = Column(Boolean, default=True, nullable=False)
+    ai_scoring_config = Column(JSONB, nullable=True)  # threshold, weights, required_skills, min_experience_years
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

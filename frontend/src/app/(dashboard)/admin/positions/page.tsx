@@ -37,6 +37,14 @@ const positionUpdateSchema = z
       .min(1, "Durasi minimal 1 bulan")
       .optional(),
     is_active: z.boolean().optional(),
+    ai_threshold_auto: z.number().min(0).max(100).optional(),
+    ai_threshold_manual: z.number().min(0).max(100).optional(),
+    ai_weight_education: z.number().min(0).max(100).optional(),
+    ai_weight_experience: z.number().min(0).max(100).optional(),
+    ai_weight_skill: z.number().min(0).max(100).optional(),
+    ai_weight_domain: z.number().min(0).max(100).optional(),
+    ai_required_skills: z.string().optional(),
+    ai_min_experience_years: z.number().min(0).optional(),
   })
   .partial();
 
@@ -462,6 +470,7 @@ function PositionFormModal({
     register,
     handleSubmit,
     formState: { errors },
+    watch,
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: isCreating
@@ -480,6 +489,14 @@ function PositionFormModal({
           employment_type: position?.employment_type ?? "",
           contract_duration_months: position?.contract_duration_months ?? undefined,
           is_active: position?.is_active ?? true,
+          ai_threshold_auto: position?.ai_scoring_config?.threshold_auto_recommend ?? 80,
+          ai_threshold_manual: position?.ai_scoring_config?.threshold_manual_review ?? 60,
+          ai_weight_education: position?.ai_scoring_config?.weights?.education ?? 25,
+          ai_weight_experience: position?.ai_scoring_config?.weights?.experience_years ?? 25,
+          ai_weight_skill: position?.ai_scoring_config?.weights?.skill_match ?? 25,
+          ai_weight_domain: position?.ai_scoring_config?.weights?.domain_relevance ?? 25,
+          ai_required_skills: position?.ai_scoring_config?.required_skills?.join(", ") ?? "",
+          ai_min_experience_years: position?.ai_scoring_config?.min_experience_years ?? 0,
         },
   });
 
@@ -492,7 +509,33 @@ function PositionFormModal({
       if (isCreating) {
         await onCreate(data as unknown as PositionCreateForm);
       } else if (position) {
-        await onUpdate({ id: position.id, payload: data as unknown as PositionUpdateForm });
+        const payload: Record<string, unknown> = { ...data };
+        // Build ai_scoring_config from flat form fields
+        const configFields = [
+          "ai_threshold_auto", "ai_threshold_manual",
+          "ai_weight_education", "ai_weight_experience",
+          "ai_weight_skill", "ai_weight_domain",
+          "ai_required_skills", "ai_min_experience_years",
+        ];
+        const hasConfig = configFields.some((f) => data[f] !== undefined && data[f] !== "");
+        if (hasConfig) {
+          const weightsStr = data.ai_required_skills as string;
+          payload.ai_scoring_config = {
+            threshold_auto_recommend: data.ai_threshold_auto as number | undefined,
+            threshold_manual_review: data.ai_threshold_manual as number | undefined,
+            weights: {
+              education: data.ai_weight_education as number | undefined,
+              experience_years: data.ai_weight_experience as number | undefined,
+              skill_match: data.ai_weight_skill as number | undefined,
+              domain_relevance: data.ai_weight_domain as number | undefined,
+            },
+            required_skills: weightsStr
+              ? weightsStr.split(",").map((s: string) => s.trim()).filter(Boolean)
+              : [],
+            min_experience_years: data.ai_min_experience_years as number | undefined,
+          };
+        }
+        await onUpdate({ id: position.id, payload: payload as PositionUpdateForm });
       }
     } catch {
       // Errors handled by mutation's onError callback
@@ -596,20 +639,112 @@ function PositionFormModal({
           </div>
 
           {!isCreating && (
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="is_active"
-                {...register("is_active")}
-                className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
-              />
-              <label
-                htmlFor="is_active"
-                className="text-body-sm text-on-surface cursor-pointer"
-              >
-                Posisi aktif
-              </label>
-            </div>
+            <>
+              {/* ── AI Scoring Config ─────────────────────────────────── */}
+              <div className="border-t border-outline-variant pt-4 mt-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-primary text-lg">tune</span>
+                  <h3 className="text-label-lg font-semibold text-on-surface">Konfigurasi AI Screening</h3>
+                </div>
+
+                {/* Thresholds */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-label-sm text-on-surface mb-1">
+                      Threshold Otomatis (<span className="text-on-surface-variant">≥ skor ini = langsung terima</span>)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      {...register("ai_threshold_auto", { valueAsNumber: true })}
+                      className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-label-sm text-on-surface mb-1">
+                      Threshold Review (<span className="text-on-surface-variant">skor di antara = perlu review</span>)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      {...register("ai_threshold_manual", { valueAsNumber: true })}
+                      className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Weights */}
+                <div className="mb-4">
+                  <p className="text-label-sm text-on-surface mb-2">Bobot Penilaian (total harus 100)</p>
+                  <div className="space-y-3">
+                    {[
+                      { key: "ai_weight_education", label: "Pendidikan" },
+                      { key: "ai_weight_experience", label: "Pengalaman (tahun)" },
+                      { key: "ai_weight_skill", label: "Skill Match" },
+                      { key: "ai_weight_domain", label: "Relevansi Domain" },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center gap-3">
+                        <span className="text-body-sm text-on-surface w-40 shrink-0">{label}</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          {...register(key as any, { valueAsNumber: true })}
+                          className="flex-1 accent-primary cursor-pointer"
+                        />
+                        <span className="text-body-sm font-mono text-on-surface w-8 text-center">
+                          {watch(key as any) ?? 0}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Required Skills */}
+                <div className="mb-4">
+                  <label className="block text-label-sm text-on-surface mb-1">
+                    Skill yang Dibutuhkan
+                    <span className="text-on-surface-variant font-normal ml-1">(pisahkan dengan koma)</span>
+                  </label>
+                  <input
+                    type="text"
+                    {...register("ai_required_skills")}
+                    placeholder="Python, SQL, React, AWS"
+                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+
+                {/* Min Experience */}
+                <div>
+                  <label className="block text-label-sm text-on-surface mb-1">
+                    Pengalaman Minimum (tahun)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    {...register("ai_min_experience_years", { valueAsNumber: true })}
+                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  {...register("is_active")}
+                  className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                />
+                <label
+                  htmlFor="is_active"
+                  className="text-body-sm text-on-surface cursor-pointer"
+                >
+                  Posisi aktif
+                </label>
+              </div>
+            </>
           )}
 
           <div className="flex gap-3 pt-2">

@@ -1,7 +1,15 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 BASE_DIR = Path(__file__).resolve().parents[3]
+
+# Minimum length for secrets used as shared keys.
+# 32 characters ≈ 192 bits of entropy when generated with a random tool —
+# long enough to be brute-force-resistant for HMAC-style comparison.
+_MIN_SECRET_LEN = 32
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
@@ -32,8 +40,34 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Internal API (shared secret untuk n8n callback)
+    # Internal API (shared secret untuk endpoint /internal/* — observability/manual retry)
     INTERNAL_API_SECRET: str
+
+    # ── SEC-01: Validasi minimum length untuk secret wajib ────────────────────
+    # Dijalankan saat Settings() diinstansiasi (startup), bukan saat request masuk.
+    # Mencegah deploy dengan secret kosong/lemah yang bisa membuka akses internal endpoint.
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def _validate_secret_key(cls, v: str) -> str:
+        if len(v) < _MIN_SECRET_LEN:
+            raise ValueError(
+                f"SECRET_KEY terlalu pendek ({len(v)} karakter). "
+                f"Minimal {_MIN_SECRET_LEN} karakter — gunakan: "
+                f"python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        return v
+
+    @field_validator("INTERNAL_API_SECRET")
+    @classmethod
+    def _validate_internal_secret(cls, v: str) -> str:
+        if len(v) < _MIN_SECRET_LEN:
+            raise ValueError(
+                f"INTERNAL_API_SECRET terlalu pendek ({len(v)} karakter). "
+                f"Minimal {_MIN_SECRET_LEN} karakter — gunakan: "
+                f"python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        return v
 
     # Microsoft Graph API (OneDrive for Business)
     MICROSOFT_TENANT_ID: str = ""
@@ -47,9 +81,8 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
     STORAGE_BASE_URL: str = ""  # kosong = relative path; isi = base URL saat production
 
-    # n8n
-    N8N_WEBHOOK_CV_PARSER: str = ""
-    N8N_WEBHOOK_AI_SCREENING: str = ""
+    # Redis (arq job queue)
+    REDIS_URL: str = "redis://redis:6379/0"
 
     # LLM
     ANTHROPIC_API_KEY: str = ""

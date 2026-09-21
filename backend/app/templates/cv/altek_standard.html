@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="{{ language }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CV — {{ candidate.full_name }}</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    body {
+      font-family: "Arial", "Helvetica Neue", sans-serif;
+      font-size: 10pt;
+      color: #1a1a2e;
+      background: #ffffff;
+    }
+
+    /* ── Colour palette (Altek brand) ─────────────────────────────── */
+    :root {
+      --navy:      #0d2458;
+      --blue-mid:  #1e4fc2;
+      --blue-light:#4b8fdb;
+      --bg-row:    #dde8f5;
+      --text-muted:#6b7a99;
+      --border:    #d0daea;
+    }
+
+    /* ── Cover page ───────────────────────────────────────────────── */
+    .cover {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      overflow: hidden;
+      page-break-after: always;
+    }
+
+    /* Decorative wave — top */
+    .deco-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 72px;
+      background: linear-gradient(135deg, #b8cfe8 0%, #d6e8f5 55%, #f0e8df 100%);
+      border-radius: 0 0 60% 0 / 0 0 80px 0;
+    }
+
+    /* Decorative blob — bottom-left */
+    .deco-bottom-left {
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 120px;
+      height: 160px;
+      background: linear-gradient(160deg, #b8cfe8 0%, #e8d5c8 100%);
+      border-radius: 0 80px 0 0;
+    }
+
+    /* Decorative blob — right */
+    .deco-right {
+      position: absolute;
+      top: 60px; right: 0;
+      width: 80px;
+      height: 240px;
+      background: linear-gradient(180deg, #c0d8ef 0%, #d6e8f5 100%);
+      border-radius: 40px 0 0 40px;
+    }
+
+    /* Company logo — top-right */
+    .cover-logo {
+      position: absolute;
+      top: 12px; right: 16px;
+      text-align: right;
+    }
+    .cover-logo img {
+      height: 44px;
+      object-fit: contain;
+    }
+    .cover-logo-text {
+      font-size: 7pt;
+      font-weight: bold;
+      color: var(--navy);
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    /* Cover body — centred */
+    .cover-body {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .cover-title {
+      font-size: 36pt;
+      font-weight: normal;
+      color: #1a1a2e;
+      letter-spacing: 1px;
+    }
+
+    .cover-name {
+      font-size: 18pt;
+      font-weight: bold;
+      color: var(--navy);
+    }
+
+    /* Photo box */
+    .photo-box {
+      width: 160px;
+      height: 200px;
+      border: 2.5px dashed var(--blue-mid);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #f5f8ff;
+    }
+    .photo-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 10px;
+    }
+    .photo-placeholder {
+      font-size: 9pt;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 8px;
+    }
+
+    .cover-position {
+      font-size: 18pt;
+      color: #1a1a2e;
+    }
+
+    /* Cover footer */
+    .cover-footer {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 52px;
+      background: var(--navy);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+    }
+    .cover-footer-logo img {
+      height: 28px;
+    }
+    .cover-footer-text {
+      font-size: 7.5pt;
+      color: #ccd8ef;
+      text-align: center;
+    }
+    .cover-footer-web {
+      font-size: 7.5pt;
+      color: #ccd8ef;
+      text-align: right;
+    }
+
+    /* ── Detail pages ─────────────────────────────────────────────── */
+    .detail-page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 28px 36px 64px 36px;
+      position: relative;
+      page-break-after: always;
+    }
+    .detail-page:last-child {
+      page-break-after: auto;
+    }
+
+    /* Page header — logo centred */
+    .page-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .page-header img {
+      height: 52px;
+      object-fit: contain;
+    }
+    .page-header-company {
+      font-size: 8pt;
+      font-weight: bold;
+      color: var(--navy);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    /* Section table */
+    .section-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+
+    .section-header {
+      background: var(--navy);
+      color: #ffffff;
+      font-size: 9pt;
+      font-weight: bold;
+      letter-spacing: 0.8px;
+      padding: 6px 10px;
+    }
+
+    .section-table tr td {
+      border: 1px solid var(--border);
+      vertical-align: top;
+      padding: 5px 8px;
+      font-size: 9pt;
+      line-height: 1.5;
+    }
+
+    .label-cell {
+      width: 150px;
+      font-weight: normal;
+      color: #2a3a5c;
+      white-space: nowrap;
+    }
+
+    /* Alternating row colour for experience */
+    .row-shade td {
+      background: var(--bg-row);
+    }
+
+    /* Summary box */
+    .summary-box {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font-size: 9pt;
+      line-height: 1.7;
+      color: #2a3a5c;
+      min-height: 56px;
+    }
+
+    /* Skills section */
+    .skills-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    .skills-table tr td {
+      border: 1px solid var(--border);
+      padding: 5px 8px;
+      font-size: 9pt;
+      vertical-align: top;
+    }
+    .skills-label {
+      width: 200px;
+      color: #2a3a5c;
+    }
+
+    /* Page footer */
+    .page-footer {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 44px;
+      background: #f0f4fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .page-footer-text {
+      font-size: 7.5pt;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    /* Decorative blobs on detail pages */
+    .deco-detail-left {
+      position: absolute;
+      bottom: 44px; left: 0;
+      width: 80px;
+      height: 110px;
+      background: linear-gradient(160deg, #b8cfe8 0%, #e8d5c8 100%);
+      border-radius: 0 60px 0 0;
+      z-index: 0;
+    }
+    .deco-detail-right {
+      position: absolute;
+      bottom: 44px; right: 0;
+      width: 80px;
+      height: 110px;
+      background: linear-gradient(200deg, #c8daf0 0%, #dce8f5 100%);
+      border-radius: 60px 0 0 0;
+      z-index: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 1 — COVER
+════════════════════════════════════════════════════ -->
+<div class="cover">
+
+  <!-- Decorative shapes -->
+  <div class="deco-top"></div>
+  <div class="deco-right"></div>
+  <div class="deco-bottom-left"></div>
+
+  <!-- Logo top-right -->
+  <div class="cover-logo">
+    {% if logo_base64 %}
+    <img src="data:image/png;base64,{{ logo_base64 }}" alt="PT Altek Citra Cemerlang" />
+    {% endif %}
+    <div class="cover-logo-text">PT ALTEK CITRA CEMERLANG</div>
+  </div>
+
+  <!-- Cover centre content -->
+  <div class="cover-body">
+    <div class="cover-title">Curriculum Vitae</div>
+
+    <div class="cover-name">{{ candidate.full_name }}</div>
+
+    <!-- Photo -->
+    <div class="photo-box">
+      {% if photo_base64 %}
+      <img src="data:{{ photo_mime }};base64,{{ photo_base64 }}" alt="Foto {{ candidate.full_name }}" />
+      {% else %}
+      <div class="photo-placeholder">Foto</div>
+      {% endif %}
+    </div>
+
+    <div class="cover-position">{{ position_title or "-" }}</div>
+  </div>
+
+  <!-- Footer bar -->
+  <div class="cover-footer">
+    <div class="cover-footer-logo">
+      {% if logo_base64 %}
+      <img src="data:image/png;base64,{{ logo_base64 }}" alt="Altek" />
+      {% endif %}
+    </div>
+    <div class="cover-footer-text">
+      Jl. Puri Beta Sel. Raya No.73, RT.003/RW.013, Larangan Utara,<br/>
+      Kec. Larangan, Kota Tangerang, Banten 15154
+    </div>
+    <div class="cover-footer-web">www.altekcitra.com</div>
+  </div>
+
+</div><!-- /cover -->
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 2 — PERSONAL DETAILS + SUMMARY + EDUCATION + EXPERIENCE (1st)
+════════════════════════════════════════════════════ -->
+<div class="detail-page">
+
+  <!-- Header -->
+  <div class="page-header">
+    {% if logo_base64 %}
+    <img src="data:image/png;base64,{{ logo_base64 }}" alt="PT Altek Citra Cemerlang" />
+    {% endif %}
+    <div class="page-header-company">PT ALTEK CITRA CEMERLANG</div>
+  </div>
+
+  <!-- PERSONAL DETAILS -->
+  <table class="section-table">
+    <tr><td colspan="2" class="section-header">PERSONAL DETAILS</td></tr>
+    <tr>
+      <td class="label-cell">Name</td>
+      <td>{{ candidate.full_name }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Age</td>
+      <td>{{ age if age else "-" }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Gender</td>
+      <td>{{ candidate.gender | capitalize if candidate.gender else "-" }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Marital Status</td>
+      <td>-</td>
+    </tr>
+  </table>
+
+  <!-- CANDIDATE SUMMARY -->
+  <table class="section-table">
+    <tr><td class="section-header">CANDIDATES SUMMARY</td></tr>
+    <tr>
+      <td>
+        <div class="summary-box">
+          {{ summary_text if summary_text else "-" }}
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- FORMAL EDUCATION -->
+  <table class="section-table">
+    <tr><td colspan="2" class="section-header">FORMAL EDUCATION</td></tr>
+    {% if educations %}
+      {% for edu in educations %}
+      <tr>
+        <td class="label-cell" style="font-weight:bold;">
+          Years :<br/>
+          {% if edu.graduation_year %}{{ edu.graduation_year }}{% else %}-{% endif %}
+        </td>
+        <td>
+          {% if edu.institution %}{{ edu.institution }}{% endif %}
+          {% if edu.major %} — {{ edu.major }}{% endif %}
+          {% if edu.gpa %} (GPA: {{ "%.2f"|format(edu.gpa) }}){% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td class="label-cell">Years :</td>
+        <td>-</td>
+      </tr>
+    {% endif %}
+  </table>
+
+  <!-- WORKING EXPERIENCE — first entry -->
+  {% if experiences %}
+    {% set exp = experiences[0] %}
+    <table class="section-table">
+      <tr><td colspan="2" class="section-header">Working Experience</td></tr>
+      <tr class="row-shade">
+        <td class="label-cell">Periode</td>
+        <td>
+          {% if exp.start_date %}{{ exp.start_date | format_date }}{% else %}-{% endif %}
+          —
+          {% if exp.end_date %}{{ exp.end_date | format_date }}{% else %}Sekarang{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td class="label-cell">Company</td>
+        <td>{{ exp.company_name or "-" }}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Position</td>
+        <td>{{ exp.job_title or "-" }}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Project</td>
+        <td>-</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Tools</td>
+        <td>{{ candidate.skills | join(", ") if candidate.skills else "-" }}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Job Description</td>
+        <td style="white-space: pre-wrap;">{{ exp.description or "-" }}</td>
+      </tr>
+    </table>
+  {% endif %}
+
+  <!-- Decorative blobs -->
+  <div class="deco-detail-left"></div>
+  <div class="deco-detail-right"></div>
+
+  <!-- Footer -->
+  <div class="page-footer">
+    <span class="page-footer-text">Curriculume Vitae &nbsp;©&nbsp; Altek Citra Cemerlang</span>
+  </div>
+
+</div><!-- /detail-page 2 -->
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 3+ — ADDITIONAL EXPERIENCE ENTRIES
+════════════════════════════════════════════════════ -->
+{% if experiences | length > 1 %}
+<div class="detail-page">
+
+  <div class="page-header">
+    {% if logo_base64 %}
+    <img src="data:image/png;base64,{{ logo_base64 }}" alt="PT Altek Citra Cemerlang" />
+    {% endif %}
+    <div class="page-header-company">PT ALTEK CITRA CEMERLANG</div>
+  </div>
+
+  {% for exp in experiences[1:] %}
+    <table class="section-table">
+      <tr class="row-shade">
+        <td class="label-cell">Periode</td>
+        <td>
+          {% if exp.start_date %}{{ exp.start_date | format_date }}{% else %}-{% endif %}
+          —
+          {% if exp.end_date %}{{ exp.end_date | format_date }}{% else %}Sekarang{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td class="label-cell">Company</td>
+        <td>{{ exp.company_name or "-" }}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Position</td>
+        <td>{{ exp.job_title or "-" }}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Project</td>
+        <td>-</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Tools</td>
+        <td>{{ candidate.skills | join(", ") if candidate.skills else "-" }}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Job Description</td>
+        <td style="white-space: pre-wrap;">{{ exp.description or "-" }}</td>
+      </tr>
+    </table>
+  {% endfor %}
+
+  <p style="font-size:8pt; color:#6b7a99; margin-top:4px;">
+    *) silakan menambahkan secara mandiri, jika pengalaman lebih dari kolom yang disediakan.
+  </p>
+
+  <div class="deco-detail-left"></div>
+  <div class="deco-detail-right"></div>
+
+  <div class="page-footer">
+    <span class="page-footer-text">Curriculume Vitae &nbsp;©&nbsp; Altek Citra Cemerlang</span>
+  </div>
+
+</div><!-- /detail-page 3 -->
+{% endif %}
+
+
+<!-- ═══════════════════════════════════════════════════
+     LAST PAGE — SKILLS
+════════════════════════════════════════════════════ -->
+<div class="detail-page">
+
+  <div class="page-header">
+    {% if logo_base64 %}
+    <img src="data:image/png;base64,{{ logo_base64 }}" alt="PT Altek Citra Cemerlang" />
+    {% endif %}
+    <div class="page-header-company">PT ALTEK CITRA CEMERLANG</div>
+  </div>
+
+  <table class="skills-table">
+    <tr><td colspan="2" class="section-header">SKILLS</td></tr>
+    <tr>
+      <td class="skills-label">Programming Language</td>
+      <td>{{ skills_programming | join(", ") if skills_programming else "-" }}</td>
+    </tr>
+    <tr>
+      <td class="skills-label">Database &amp; Reporting Tools</td>
+      <td>{{ skills_database | join(", ") if skills_database else "-" }}</td>
+    </tr>
+    <tr>
+      <td class="skills-label">Other Technical Skills</td>
+      <td>{{ skills_other_tech | join(", ") if skills_other_tech else "-" }}</td>
+    </tr>
+    <tr>
+      <td class="skills-label">Soft Skills</td>
+      <td>{{ skills_soft | join(", ") if skills_soft else "-" }}</td>
+    </tr>
+  </table>
+
+  <p style="font-size:8pt; color:#6b7a99; margin-top:4px;">
+    *) isi sesuai dengan kapasitas diri.
+  </p>
+
+  <div class="deco-detail-left"></div>
+  <div class="deco-detail-right"></div>
+
+  <div class="page-footer">
+    <span class="page-footer-text">Curriculume Vitae &nbsp;©&nbsp; Altek Citra Cemerlang</span>
+  </div>
+
+</div><!-- /detail-page skills -->
+
+</body>
+</html>

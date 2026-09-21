@@ -9,6 +9,9 @@ from app.routers import auth, users, clients, positions, candidates, application
 from app.routers import blacklist, employee, employees, export, admin, internal, analytics
 from app.routers import agreement_types, blacklist_status_types
 from app.routers import ai_search
+from app.routers import notifications
+from app.routers import settings as settings_router
+from app.routers import generated_cv
 
 
 def _serve_uploaded_file(path: str):
@@ -71,6 +74,9 @@ app.include_router(analytics.router,    prefix="/api/v1/analytics",             
 app.include_router(agreement_types.router,    prefix="/api/v1/agreement-types",  tags=["Agreement Types"])
 app.include_router(blacklist_status_types.router, prefix="/api/v1/blacklist-status-types", tags=["Blacklist Status Types"])
 app.include_router(ai_search.router,          prefix="/api/v1/ai/search",         tags=["AI Search"])
+app.include_router(notifications.router,      prefix="/api/v1/notifications",     tags=["Notifications"])
+app.include_router(settings_router.router,    prefix="/api/v1/settings",          tags=["Settings"])
+app.include_router(generated_cv.router,       prefix="/api/v1",                   tags=["CV"])
 
 
 @app.get("/health", tags=["Health"])

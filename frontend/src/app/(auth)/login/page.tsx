@@ -275,7 +275,7 @@ function LoginForm() {
         <div className="flex items-center space-x-2">
           <span>TalentFlow Enterprise Platform</span>
           <span className="text-outline-variant">•</span>
-          <span>Hak Cipta © 2024. All rights reserved.</span>
+          <span>Hak Cipta &copy; {new Date().getFullYear()}. All rights reserved.</span>
         </div>
         <div className="flex items-center space-x-6">
           <a className="hover:text-on-surface transition-colors" href="/bantuan">

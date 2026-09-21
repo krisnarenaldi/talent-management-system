@@ -10,7 +10,8 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
 import { useRouter } from "next/navigation";
-import type { Application, StageHistory } from "@/types";
+import type { Application, StageHistory, User } from "@/types";
+import { FileText } from "lucide-react";
 
 const FAIL_RESULTS = new Set(["fail", "tidak_lolos"]);
 
@@ -29,6 +30,16 @@ async function updateStage(id: string, payload: Record<string, string | number |
   return response.data;
 }
 
+async function assignRecruiter(id: string, recruiter_id: string) {
+  const response = await api.patch(`/api/v1/applications/${id}/assign-recruiter`, { recruiter_id });
+  return response.data;
+}
+
+async function fetchHRUsers() {
+  const response = await api.get(`/api/v1/users/recruiters`);
+  return response.data as User[];
+}
+
 function formatStageLabel(stage: string | null | undefined) {
   const normalizedStage = stage ?? "";
   return normalizedStage
@@ -43,6 +54,13 @@ function formatSafeDate(dateValue: string | null | undefined, pattern: string) {
   if (Number.isNaN(parsedDate.getTime())) return "-";
 
   return format(parsedDate, pattern, { locale: idLocale });
+}
+
+function aiScoreBadgeClass(score: number | null | undefined) {
+  if (score === null || score === undefined) return "bg-slate-100 text-slate-600";
+  if (score >= 80) return "bg-emerald-100 text-emerald-800";
+  if (score >= 60) return "bg-amber-100 text-amber-800";
+  return "bg-red-100 text-red-800";
 }
 
 function statusBadgeClass(status: string) {
@@ -72,6 +90,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [salaryCurrent, setSalaryCurrent] = useState("");
   const [salaryExpected, setSalaryExpected] = useState("");
   const [notes, setNotes] = useState("");
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignRecruiterInput, setAssignRecruiterInput] = useState("");
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["application", trimmedId],
@@ -81,6 +101,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const { data: stageHistory = [] } = useQuery({
     queryKey: ["application-stages", trimmedId],
     queryFn: () => fetchStageHistory(trimmedId),
+  });
+
+  // Hanya load HR/Manager user list saat modal terbuka
+  const { data: hrUsers = [] } = useQuery({
+    queryKey: ["hr-users"],
+    queryFn: fetchHRUsers,
+    enabled: showAssignModal,
   });
 
   useEffect(() => {
@@ -106,11 +133,20 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         setTimeout(() => {
           const showToast = useToastStore.getState().showToast;
           showToast("success", "Karyawan berhasil dibuat, silahkan lengkapi data berikut");
-          // Redirect to employees list - in a more advanced implementation, 
-          // we would redirect to the specific employee detail page
           router.push("/employees");
         }, 1000);
       }
+    },
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (recruiter_id: string) => assignRecruiter(trimmedId, recruiter_id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["application", trimmedId] });
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      setShowAssignModal(false);
+      setAssignRecruiterInput("");
+      useToastStore.getState().showToast("success", "Recruiter berhasil diganti");
     },
   });
 
@@ -121,10 +157,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     (stage) => stage !== ""
   );
 
-  // Check if current user is allowed to edit this application
-  const isRecruiter = currentUser?.role === "hr";
-  const isOwner = application?.recruiter_id === currentUser?.id;
-  const canEdit = !isRecruiter || isOwner;
+  // Semua HR/Manager/Admin dapat mengedit — tidak ada lagi ownership lock
+  const canEdit = currentUser?.role === "hr" || currentUser?.role === "manager" || currentUser?.role === "admin";
+  // Hanya manager/admin yang bisa assign recruiter
+  const canAssignRecruiter = currentUser?.role === "manager" || currentUser?.role === "admin";
 
   // Cek apakah current stage sudah punya hasil FAIL → kunci form (kecuali Rejected/Withdrawn)
   const lastResult = application?.last_result ?? null;
@@ -163,9 +199,18 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">Detail Lamaran</h1>
         </div>
-        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(application.status)}`}>
-          {application.status}
-        </span>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/applications/${trimmedId}/cv`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
+          >
+            <FileText className="h-4 w-4" />
+            CV Standar
+          </Link>
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(application.status)}`}>
+            {application.status}
+          </span>
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_1.95fr]">
@@ -186,14 +231,100 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                 <p className="mt-1 text-sm text-gray-700">{application.client_name || "-"}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-gray-500">Recruiter</p>
-                <p className="mt-1 text-sm text-gray-700">{application.recruiter_name || "-"}</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Dipegang oleh (Recruiter)</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-900">{application.recruiter_name || "-"}</p>
+                  {canAssignRecruiter && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssignRecruiterInput(application.recruiter_id ?? "");
+                        setShowAssignModal(true);
+                      }}
+                      className="rounded-md border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
+                    >
+                      Ganti
+                    </button>
+                  )}
+                </div>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Tahap saat ini</p>
                 <p className="mt-1 text-sm font-medium text-gray-900">{formatStageLabel(application.current_stage)}</p>
               </div>
             </div>
+          </div>
+
+          {/* ── AI Screening Panel ─────────────────────────────────── */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
+              <h2 className="text-lg font-semibold text-gray-900">Hasil AI Screening</h2>
+            </div>
+            {application.ai_screening ? (
+              <div className="space-y-4">
+                {/* Score */}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-500 w-20">AI Score</span>
+                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-bold ${aiScoreBadgeClass(application.ai_screening.score ?? application.ai_score)}`}>
+                    {application.ai_screening.score ?? application.ai_score ?? "-"}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    ({application.ai_screening.ai_screening_status === "sudah_direview" ? "Terd_review" : application.ai_screening.ai_screening_status === "siap_review" ? "Siap review" : "Menunggu review"})
+                  </span>
+                </div>
+                {/* Notes */}
+                {application.ai_screening.notes && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Catatan AI</p>
+                    <p className="text-sm text-gray-700 italic bg-gray-50 rounded-lg px-3 py-2">{application.ai_screening.notes}</p>
+                  </div>
+                )}
+                {/* Summary table */}
+                {application.ai_screening.extracted_summary && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Ringkasan Match per Dimensi</p>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-gray-200">
+                          <th className="pb-1.5 pr-4 font-medium">Dimensi</th>
+                          <th className="pb-1.5 font-medium">Detail</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(application.ai_screening.extracted_summary)
+                          .filter(([k]) => !["_ai_scoring_config", "nama", "name", "email", "telepon", "phone", "kontak", "skills", "pendidikan", "pengalaman_kerja"].includes(k))
+                          .slice(0, 8)
+                          .map(([key, val]) => (
+                            <tr key={key} className="border-b border-gray-100 last:border-0">
+                              <td className="py-1.5 pr-4 text-gray-500 capitalize">{key.replace(/_/g, " ")}</td>
+                              <td className="py-1.5 text-gray-800 font-medium">
+                                {typeof val === "number" ? `${val}/100` : String(val)}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {/* Link to review */}
+                {!application.ai_screening.ai_screening_status || application.ai_screening.ai_screening_status === "siap_review" ? (
+                  <Link
+                    href={`/applications/pending-review/${application.id}`}
+                    className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
+                  >
+                    <span className="material-symbols-outlined text-sm">rate_review</span>
+                    Review Hasil AI
+                  </Link>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <span className="material-symbols-outlined text-gray-300 text-4xl mb-2">smart_toy</span>
+                <p className="text-sm text-gray-400">Belum ada hasil screening AI</p>
+                <p className="text-xs text-gray-400 mt-1">CV akan diproses secara otomatis setelah upload</p>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -238,9 +369,17 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     <div className="absolute left-3 top-5 h-2.5 w-2.5 rounded-full bg-primary-500" />
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <p className="font-medium text-gray-900">{formatStageLabel(history.stage_name)}</p>
-                      <span className="text-xs text-gray-500">
-                        {formatSafeDate(history.created_at, "dd MMM yyyy, HH:mm")}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {history.handler_name && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                            <span className="material-symbols-outlined text-[11px]">person</span>
+                            {history.handler_name}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-500">
+                          {formatSafeDate(history.created_at, "dd MMM yyyy, HH:mm")}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
                       {history.result && <span className="rounded-full bg-gray-100 px-2 py-1">Result: {history.result}</span>}
@@ -266,11 +405,6 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-gray-900">Update Tahapan</h2>
-              {canEdit ? null : (
-                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
-                  Hanya recruiter yang ditugaskan yang dapat mengedit
-                </span>
-              )}
             </div>
 
             {allStageOptions.length === 0 ? (
@@ -428,6 +562,55 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           </div>
         </main>
       </div>
+
+      {/* ── Modal Ganti Recruiter ─────────────────────────────────────────── */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-base font-semibold text-gray-900">Ganti Recruiter Pemegang Lamaran</h3>
+            <p className="mb-4 text-sm text-gray-500">
+              Pilih HR/Manager yang akan menangani lamaran ini. Recruiter lama masih tercatat di riwayat tahapan.
+            </p>
+            <div className="mb-4">
+              <label className="mb-1 block text-sm font-medium text-gray-700">Recruiter baru</label>
+              <select
+                value={assignRecruiterInput}
+                onChange={(e) => setAssignRecruiterInput(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              >
+                <option value="">-- Pilih recruiter --</option>
+                {hrUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {assignMutation.isError && (
+              <p className="mb-3 text-sm text-red-600">
+                {getErrorMessage(assignMutation.error, "Gagal mengganti recruiter.")}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowAssignModal(false); setAssignRecruiterInput(""); }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={!assignRecruiterInput || assignMutation.isPending}
+                onClick={() => assignMutation.mutate(assignRecruiterInput)}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {assignMutation.isPending ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

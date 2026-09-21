@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/stores/auth.store";
 import { naturalLanguageSearch } from "@/lib/api/ai_search";
+import { FileText } from "lucide-react";
 import type { Candidate, NLSearchFilters, NLSearchResponse } from "@/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -159,12 +160,22 @@ function ResultsTable({ candidates }: { candidates: Candidate[] }) {
                 </span>
               </td>
               <td className="px-3 py-2 text-right">
-                <Link
-                  href={`/candidates/${c.id}`}
-                  className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                >
-                  Lihat
-                </Link>
+                <div className="flex items-center justify-end gap-1.5">
+                  <Link
+                    href={`/candidates/${c.id}/cv`}
+                    className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                    title="Generate CV Standar Altek"
+                  >
+                    <FileText className="h-3 w-3" />
+                    CV
+                  </Link>
+                  <Link
+                    href={`/candidates/${c.id}`}
+                    className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    Lihat
+                  </Link>
+                </div>
               </td>
             </tr>
           ))}

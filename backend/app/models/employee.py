@@ -109,7 +109,7 @@ class EmployeeDocument(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employee.id", ondelete="CASCADE"), nullable=False, index=True)
     # Tipe: CV_terupdate, CV_template_Altek, Offering_Payslip, Application_Form, KK, KTP, Ijazah, Transkrip,
-    #        Kartu_BPJS_TK, Kartu_BPJS_Kesehatan, NPWP
+    #        Sertifikat, Dokumen_Onboarding, BPJS_TK, BPJS_Kesehatan, NPWP
     doc_type = Column(String(100), nullable=False)
     file_url = Column(String(500))
     drive_item_id = Column(String(500))

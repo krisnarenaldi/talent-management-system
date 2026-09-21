@@ -47,7 +47,8 @@ class LocalStorage(StorageService):
         dest = UPLOAD_ROOT / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(file_content)
-        return {"file_url": f"/api/v1/files/{rel}"}
+        file_url = f"/api/v1/files/{rel}"
+        return {"file_url": file_url, "drive_item_id": str(rel)}
 
     async def delete(self, file_url: str) -> None:
         # Strip base URL prefix if present

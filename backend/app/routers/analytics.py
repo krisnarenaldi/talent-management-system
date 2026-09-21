@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.dependencies import get_db, require_role
 from app.models.application import Application, StageHistory
 from app.models.candidate import Candidate
+from app.models.client import Client
 from app.models.employee import Employee, EmployeeContract
 from app.models.position import Position
 from app.models.user import User
@@ -147,7 +148,7 @@ async def analytics_pipeline_breakdown(
             Application.current_stage.label("stage"),
             Position.id.label("position_id"),
             Position.title.label("position_title"),
-            Position.client_name.label("client_name"),
+            Position.client.name.label("client_name"),
             func.to_char(Application.created_at, 'YYYY-MM').label("period"),
             func.count(Application.id).label("count"),
         )
@@ -164,7 +165,7 @@ async def analytics_pipeline_breakdown(
         Application.current_stage,
         Position.id,
         Position.title,
-        Position.client_name,
+        Position.client.name,
         func.to_char(Application.created_at, 'YYYY-MM'),
     )
     query = query.order_by(
@@ -294,6 +295,59 @@ async def analytics_pipeline_trend(
         )
     ).all()
     return [{"period": r.period, "count": r.count} for r in rows]
+
+
+@router.get("/applications-by-position")
+async def analytics_applications_by_position(
+    db: Session = Depends(get_db),
+    _current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """Jumlah pelamar (aplikasi) per posisi."""
+    rows = (
+        db.execute(
+            select(
+                Position.title.label("position_title"),
+                func.count(Application.id).label("total_applications"),
+            )
+            .join(Position, Application.position_id == Position.id)
+            .group_by(Position.id, Position.title)
+            .order_by(func.count(Application.id).desc())
+        )
+    ).all()
+    return [
+        {
+            "position_title": row.position_title or "(Tidak Diketahui)",
+            "total_applications": row.total_applications or 0,
+        }
+        for row in rows
+    ]
+
+
+@router.get("/applications-by-company")
+async def analytics_applications_by_company(
+    db: Session = Depends(get_db),
+    _current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """Jumlah pelamar (aplikasi) per perusahaan (client)."""
+    rows = (
+        db.execute(
+            select(
+                Client.name.label("client_name"),
+                func.count(Application.id).label("total_applications"),
+            )
+            .join(Position, Application.position_id == Position.id)
+            .join(Client, Position.client_id == Client.id)
+            .group_by(Client.id, Client.name)
+            .order_by(func.count(Application.id).desc())
+        )
+    ).all()
+    return [
+        {
+            "client_name": row.client_name or "(Tidak Diketahui)",
+            "total_applications": row.total_applications or 0,
+        }
+        for row in rows
+    ]
 
 
 @router.get("/recruiter-workload")

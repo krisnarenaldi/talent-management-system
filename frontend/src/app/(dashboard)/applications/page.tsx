@@ -85,6 +85,20 @@ function formatStageLabel(stage: string | null | undefined) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "-";
 }
 
+function aiScoreBadgeClass(score: number | null | undefined) {
+  if (score === null || score === undefined) return "border border-slate-200 bg-slate-100 text-slate-600";
+  if (score >= 80) return "border border-emerald-200 bg-emerald-100 text-emerald-800";
+  if (score >= 60) return "border border-amber-200 bg-amber-100 text-amber-800";
+  return "border border-red-200 bg-red-100 text-red-800";
+}
+
+function aiStatusIcon(status: string | null | undefined) {
+  if (!status) return "⏳";
+  if (status === "sudah_direview") return "✅";
+  if (status === "siap_review") return "🔍";
+  return "⏳";
+}
+
 function normalizeRole(role: string | undefined): string {
   if (!role) return "";
   return role.split(".").pop()?.toLowerCase() || role;
@@ -270,6 +284,7 @@ export default function ApplicationsPage() {
                 <th className="px-4 py-3">Posisi</th>
                 <th className="px-4 py-3">Client</th>
                 <th className="px-4 py-3">Tahap</th>
+                <th className="px-4 py-3">AI Score</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Update</th>
                 <th className="px-4 py-3">Recruiter</th>
@@ -279,13 +294,13 @@ export default function ApplicationsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
                     Memuat data lamaran...
                   </td>
                 </tr>
               ) : applications.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
                     Belum ada lamaran.
                   </td>
                 </tr>
@@ -311,6 +326,18 @@ export default function ApplicationsPage() {
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {application.ai_score !== undefined && application.ai_score !== null ? (
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${aiScoreBadgeClass(application.ai_score)}`}>
+                            {aiStatusIcon(application.ai_screening_status)} {application.ai_score}
+                          </span>
+                          <span className="text-xs text-gray-400">{application.ai_screening_status === "sudah_direview" ? "Terd_review" : application.ai_screening_status === "siap_review" ? "Siap review" : "Menunggu"}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(application.status)}`}>

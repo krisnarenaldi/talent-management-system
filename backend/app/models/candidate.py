@@ -10,6 +10,17 @@ COMPLETENESS_STATUS = ("lengkap", "belum_lengkap")
 CONTACT_STATUS = ("aktif", "tidak_bisa_dihubungi")
 
 
+class SourceChannel(Base):
+    """Master data untuk sumber kandidat (LinkedIn, Glints, Email, dll)."""
+    __tablename__ = "source_channel"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    label = Column(String(100), nullable=False, unique=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class Candidate(Base):
     __tablename__ = "candidate"
 

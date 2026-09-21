@@ -5,7 +5,7 @@ FastAPI adalah satu-satunya yang memegang credential Graph API — tidak pernah 
 
 Referensi: https://learn.microsoft.com/en-us/graph/api/resources/driveitem
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import httpx
 
@@ -22,7 +22,7 @@ class OneDriveService:
 
     async def _get_access_token(self) -> str:
         """Ambil access token dengan cache — hindari request berulang ke Microsoft."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if self._token and self._token_expires_at and now < self._token_expires_at - timedelta(minutes=5):
             return self._token
 
@@ -109,6 +109,15 @@ class OneDriveService:
         data = resp.json()
         # Microsoft Graph mengembalikan @microsoft.graph.downloadUrl
         return data.get("@microsoft.graph.downloadUrl", "")
+
+    async def download_file(self, drive_item_id: str) -> bytes:
+        """Download file content as bytes from OneDrive."""
+        token = await self._get_access_token()
+        url = f"{self.GRAPH_BASE}/drives/{settings.ONEDRIVE_DRIVE_ID}/items/{drive_item_id}/content"
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30.0)
+        resp.raise_for_status()
+        return resp.content
 
     async def delete_file(self, drive_item_id: str) -> None:
         """Hapus file dari OneDrive."""

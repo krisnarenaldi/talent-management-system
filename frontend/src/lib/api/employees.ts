@@ -73,6 +73,17 @@ export async function fetchPayroll(employeeId: string): Promise<EmployeePayroll>
   return response.data as EmployeePayroll;
 }
 
+export async function createPayroll(
+  employeeId: string,
+  payload: Partial<EmployeePayroll>,
+): Promise<EmployeePayroll> {
+  const response = await api.post(
+    `/api/v1/employees/${employeeId}/payroll`,
+    payload,
+  );
+  return response.data as EmployeePayroll;
+}
+
 export async function updatePayroll(
   employeeId: string,
   payload: Partial<EmployeePayroll>,

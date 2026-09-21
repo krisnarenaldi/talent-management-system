@@ -39,8 +39,14 @@ export default function EmployeeDocumentUploader({ employeeId }: { employeeId: s
       );
       return response.data as EmployeeDocument;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["employee-documents", employeeId] });
+    onSuccess: async (newDoc) => {
+      // Langsung tambahkan dokumen baru ke cache agar list ter-update instan
+      queryClient.setQueryData<EmployeeDocument[]>(
+        ["employee-documents", employeeId],
+        (prev) => (prev ? [...prev, newDoc] : [newDoc]),
+      );
+      // Invalidate tetap dipanggil untuk sinkronisasi data dari server
+      await queryClient.invalidateQueries({ queryKey: ["employee-documents", employeeId] });
       setSelectedFile(null);
       if (inputRef.current) inputRef.current.value = "";
       showToast("success", "Dokumen berhasil diupload.");
@@ -104,6 +110,7 @@ export default function EmployeeDocumentUploader({ employeeId }: { employeeId: s
     "CV_asli",
     "Foto",
     "Sertifikat",
+    "Dokumen_Onboarding",
     "BPJS_TK",
     "BPJS_Kesehatan",
     "NPWP",

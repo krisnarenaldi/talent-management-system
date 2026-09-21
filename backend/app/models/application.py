@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Numeric, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Date, DateTime, Enum, Float, ForeignKey, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
@@ -120,22 +120,41 @@ class StageHistory(Base):
     salary_expected_input = Column(Numeric(15, 2))
     notes = Column(Text)
     updated_by = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True)
+    # handler_id: user HR/Manager yang menangani tahapan ini (bisa beda dari recruiter utama)
+    handler_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     application = relationship("Application", back_populates="stage_histories")
     updater = relationship("User", foreign_keys=[updated_by])
+    handler = relationship("User", foreign_keys=[handler_id])
+
+    @property
+    def handler_name(self) -> str | None:
+        return self.handler.name if self.handler else None
 
 
 class AIScreeningResult(Base):
     __tablename__ = "ai_screening_result"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    application_id = Column(UUID(as_uuid=True), ForeignKey("application.id"), unique=True, nullable=False)
-    match_score = Column(Numeric(5, 2))
-    ai_notes = Column(Text)
-    extracted_data = Column(Text)   # JSON string hasil ekstraksi field CV
-    model_used = Column(String(100))
-    review_status = Column(String(50), default="pending")  # pending / reviewed / rejected
-    scored_at = Column(DateTime(timezone=True), server_default=func.now())
+    application_id = Column(UUID(as_uuid=True), ForeignKey("application.id"), nullable=True, index=True)
+    candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidate.id", ondelete="SET NULL"), nullable=True, index=True)
+    position_id = Column(UUID(as_uuid=True), ForeignKey("position.id", ondelete="SET NULL"), nullable=True, index=True)
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    cv_file_url = Column(String(2048), nullable=True)
+    cv_drive_item_id = Column(String(500), nullable=True)
+    source_channel = Column(String(100), nullable=True)  # LinkedIn/Glints/Email/dll — sumber kandidat
+    ai_score = Column(Float, nullable=True)
+    ai_notes = Column(Text, nullable=True)
+    extracted_json = Column(JSONB(), nullable=True)
+    status = Column(String(50), nullable=True, index=True)  # menunggu_screening_ai / sedang_diproses / siap_review / sudah_direview / error
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     application = relationship("Application", back_populates="ai_screening_result")
+    candidate = relationship("Candidate")
+    position = relationship("Position")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])

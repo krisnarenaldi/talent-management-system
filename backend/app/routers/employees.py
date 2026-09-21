@@ -15,6 +15,7 @@ from app.schemas.employee import (
     EmployeeContractUpdate,
     EmployeeContractResponse,
     EmployeePayrollUpdate,
+    EmployeePayrollCreate,
     EmployeePayrollResponse,
     EmployeeDocumentResponse,
 )
@@ -197,6 +198,25 @@ def delete_contract(
 
 
 # ── Payroll (Manager & Admin only) ───────────────────────────────────────────────
+@router.post("/{employee_id}/payroll", response_model=EmployeePayrollResponse, status_code=status.HTTP_201_CREATED)
+def create_payroll(
+    employee_id: str,
+    payload: EmployeePayrollCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("manager", "admin")),
+):
+    employee = db.query(Employee).filter(Employee.id == employee_id).first() or _raise_404("Karyawan tidak ditemukan")
+    existing = db.query(EmployeePayroll).filter(EmployeePayroll.employee_id == employee_id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Data payroll sudah ada untuk karyawan ini")
+
+    payroll = EmployeePayroll(employee_id=employee_id, **payload.model_dump())
+    db.add(payroll)
+    db.commit()
+    db.refresh(payroll)
+    return payroll
+
+
 @router.get("/{employee_id}/payroll", response_model=EmployeePayrollResponse)
 def get_payroll(
     employee_id: str,
@@ -248,10 +268,11 @@ def list_documents(
     )
 
 
+@router.post("/{employee_id}/documents", response_model=EmployeeDocumentResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/{employee_id}/documents/", response_model=EmployeeDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     employee_id: str,
-    doc_type: str = Query(..., description="KTP/Ijazah/Transkrip/CV_asli/Foto/Sertifikat/BPJS_TK/BPJS_Kesehatan/NPWP"),
+    doc_type: str = Query(..., description="KTP/Ijazah/Transkrip/CV_asli/Foto/Sertifikat/Dokumen_Onboarding/BPJS_TK/BPJS_Kesehatan/NPWP"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),

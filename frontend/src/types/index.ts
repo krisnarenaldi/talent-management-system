@@ -1,5 +1,4 @@
 // Tipe-tipe TypeScript utama — diselaraskan dengan model database
-// TODO: generate otomatis dari OpenAPI schema FastAPI (opsional)
 
 export type UserRole = "admin" | "hr" | "manager" | "pm";
 
@@ -33,6 +32,19 @@ export interface Client {
 }
 
 // --- Position ---
+export interface AIScoringConfig {
+  threshold_auto_recommend?: number;
+  threshold_manual_review?: number;
+  weights?: {
+    education?: number;
+    experience_years?: number;
+    skill_match?: number;
+    domain_relevance?: number;
+  };
+  required_skills?: string[];
+  min_experience_years?: number;
+}
+
 export interface Position {
   id: string;
   client_id: string;
@@ -42,6 +54,7 @@ export interface Position {
   employment_type: string | null;
   contract_duration_months: number | null;
   is_active: boolean;
+  ai_scoring_config: AIScoringConfig | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +70,24 @@ export interface AgreementType {
   id: string;
   label: string;
   is_active: boolean;
+}
+
+// --- Source Channel ---
+export interface SourceChannel {
+  id: string;
+  label: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SourceChannelCreate {
+  label: string;
+}
+
+export interface SourceChannelUpdate {
+  label?: string;
+  is_active?: boolean;
 }
 
 // --- Candidate ---
@@ -85,6 +116,7 @@ export interface Candidate {
   notes?: string;
   skills?: string[];
   is_blacklisted?: boolean;
+  is_deleted?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -137,6 +169,15 @@ export interface Application {
   created_at: string;
   updated_at?: string;
   candidate?: Pick<Candidate, "id" | "full_name" | "email">;
+  ai_score?: number | null;
+  ai_screening_status?: string | null;
+  ai_screening?: {
+    ai_score?: number | null;
+    ai_screening_status?: string | null;
+    score?: number | null;
+    notes?: string | null;
+    extracted_summary?: Record<string, unknown> | null;
+  } | null;
 }
 
 export interface StageHistory {
@@ -150,6 +191,8 @@ export interface StageHistory {
   salary_expected_input?: number;
   notes?: string;
   updated_by?: string;
+  handler_id?: string | null;
+  handler_name?: string | null;
   created_at: string;
 }
 
@@ -257,44 +300,31 @@ export interface ContractExpiring {
   days_remaining: number | null;
 }
 
-/**
- * Analytics: pipeline breakdown per stage, position, and period (monthly).
- */
 export interface PipelineAnalyticsItem {
   stage: string;
   position_id?: string;
   position_title?: string;
   client_name?: string;
-  period: string; // format: YYYY-MM
+  period: string;
   count: number;
 }
 
-/**
- * Analytics: success rate (lolos/tidak lolos) per position.
- */
 export interface PositionSuccessRate {
   position_id: string;
   position_title: string;
   client_name: string;
   total_applications: number;
   passed_user_interview: number;
-  success_rate: number; // 0-100
+  success_rate: number;
 }
 
-/**
- * Analytics: success rate (lolos/tidak lolos) per source channel.
- */
 export interface SourceSuccessRate {
   source_channel: string;
   total_applications: number;
   passed_user_interview: number;
-  success_rate: number; // 0-100
+  success_rate: number;
 }
 
-/**
- * Analytics: beban kerja per HR / recruiter (jumlah kandidat aktif yang dipegang,
- * total aplikasi historis, serta hitung hired dan rejected).
- */
 export interface RecruiterWorkload {
   recruiter_id: string;
   recruiter_name: string;
@@ -302,6 +332,16 @@ export interface RecruiterWorkload {
   active_candidates: number;
   hired_count: number;
   rejected_count: number;
+}
+
+export interface ApplicationByPosition {
+  position_title: string;
+  total_applications: number;
+}
+
+export interface ApplicationByCompany {
+  client_name: string;
+  total_applications: number;
 }
 
 // --- Blacklist ---
@@ -318,7 +358,6 @@ export interface Blacklist {
   approved_by: string | null;
   is_active: boolean;
   created_at: string;
-  // Target details (either candidate or employee)
   target_name: string;
   target_email?: string | null;
   target_phone?: string | null;
@@ -364,8 +403,41 @@ export interface NLSearchResponse {
   filters_applied: NLSearchFilters;
   description: string;
   results: Candidate[];
-  results_count: number; // jumlah hasil yang dikembalikan (≤ 100)
-  has_more: boolean;     // true jika total match > 100
+  results_count: number;
+  has_more: boolean;
+}
+
+// --- AI Screening ---
+export interface AIScreeningResult {
+  id: string;
+  application_id?: string | null;
+  candidate_id?: string | null;
+  position_id: string;
+  uploaded_by?: string | null;
+  cv_file_url?: string | null;
+  cv_drive_item_id?: string | null;
+  ai_score?: number | null;
+  ai_notes?: string | null;
+  extracted_json?: Record<string, unknown> | null;
+  status: "menunggu_screening_ai" | "sedang_diproses" | "siap_review" | "sudah_direview" | "error";
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  position_title?: string;
+  client_name?: string;
+  uploaded_by_name?: string;
+}
+
+// --- Notification ---
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  message: string;
+  link?: string | null;
+  is_read: boolean;
+  created_at: string;
 }
 
 // --- API Error ---
@@ -376,4 +448,35 @@ export interface APIError {
     message: string;
     detail?: Record<string, unknown>;
   };
+}
+
+// --- Generated CV (TASK-10) ---
+export type CVLanguage = "ID" | "EN";
+export type CVSummarySource = "AI" | "HR";
+
+export interface GeneratedCV {
+  id: string;
+  candidate_id: string;
+  application_id?: string | null;
+  template_used?: string | null;
+  language?: CVLanguage | null;
+  summary_source?: CVSummarySource | null;
+  summary_text?: string | null;
+  file_url?: string | null;
+  drive_item_id?: string | null;
+  generated_at: string;
+  /** True if candidate data was updated after this CV was generated. */
+  is_stale: boolean;
+}
+
+export interface CVGenerateRequest {
+  language: CVLanguage;
+  summary_text?: string | null;
+  force_regenerate?: boolean;
+}
+
+export interface CVGenerateResponse extends GeneratedCV {
+  /** True if the existing cached CV was returned without regeneration. */
+  was_cached: boolean;
+  message: string;
 }

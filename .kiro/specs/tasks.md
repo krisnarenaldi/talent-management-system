@@ -268,58 +268,120 @@
 
 ### TASK-10: Generate CV Standar (FR-07)
 
-- [ ] Backend: simpan data template CV di database (atau file konfigurasi)
-- [ ] Backend: `POST /api/v1/applications/{id}/cv/generate` — generate CV standar:
+- [x] Backend: simpan data template CV di database (atau file konfigurasi)
+      — Template HTML Jinja2 di `backend/app/templates/cv/altek_standard.html`; logo di `backend/app/assets/altek_logo.png`
+- [x] Backend: `POST /api/v1/applications/{id}/cv/generate` — generate CV standar:
   - Gabungkan data kandidat (tanpa PII)
   - Terapkan template Altek
   - Jika foto ada → masukkan ke layout; jika tidak → skip slot foto
-  - Simpan hasil ke `generated_cv`, upload file PDF ke OneDrive
-- [ ] Backend: `GET /api/v1/applications/{id}/cv/` — list CV yang sudah digenerate
-- [ ] Frontend `/applications/[id]/cv`:
-  - Preview CV standar
+  - Simpan hasil ke `generated_cv`, upload file PDF ke storage (local/OneDrive)
+  - Staleness check: `candidate.updated_at` vs `generated_cv.generated_at` via cascade trigger
+- [x] Backend: `GET /api/v1/applications/{id}/cv/` — list CV yang sudah digenerate
+- [x] Frontend `/applications/[id]/cv`:
   - Tombol generate/regenerate
   - Pilih bahasa (ID/EN) untuk summary
-  - Field input summary manual atau generate AI (Fase 3)
-- [ ] Admin: halaman `/admin/cv-templates` — kelola template CV
+  - Field input summary manual atau generate AI
+  - Stale warning banner + riwayat CV dengan open/download
+- [x] Admin: halaman `/admin/cv-templates` — overview semua generated CV + konfigurasi template
 
 ---
 
 ## FASE 3 — AI Screening & Ekstraksi
 
-### TASK-11: Async CV Parsing & AI Extraction (FR-08)
+### TASK-11: Async CV Parsing & AI Extraction (FR-08, FR-03.9)
 
-- [ ] Setup `services/n8n_service.py` — kirim webhook ke n8n dengan payload yang diperlukan
-- [ ] Buat `routers/internal.py` — endpoint `/internal/ai/extraction-result` (dilindungi shared secret):
-  - Terima hasil ekstrakti dari n8n
-  - Simpan ke `ai_screening_result`
-  - Tandai kandidat perlu review
-- [ ] n8n Workflow "CV Parser":
-  - Trigger: webhook dari FastAPI
-  - Download file dari OneDrive (sementara)
-  - Deteksi PDF teks vs scan → PyMuPDF atau Tesseract/PaddleOCR
-  - Kirim teks ke LLM API (text-only) → JSON terstruktur
-  - POST hasil ke FastAPI `/internal/ai/extraction-result`
-  - Hapus file sementara
-- [ ] Frontend: komponen `AIExtractionReview`:
-  - Tampilkan hasil ekstraksi AI di sebelah form kandidat
-  - HR bisa edit tiap field sebelum simpan
-  - Tombol "Terapkan Hasil AI" (isi otomatis) atau "Simpan Manual"
-  - Badge "Menunggu Review AI" di profil kandidat
+#### TASK-11.1: Database Migration
+- [x] Buat migration: tabel `ai_screening_result` — kolom: `id`, `application_id` (nullable — belum ada lamaran saat batch upload), `candidate_id` (nullable — diisi setelah HR setuju buat kandidat), `position_id`, `uploaded_by` (user_id HR), `cv_file_url`, `cv_drive_item_id`, `status` (enum: `menunggu_screening_ai` / `sedang_diproses` / `siap_review` / `sudah_direview` / `error`), `extracted_json` (raw JSON dari LLM), `ai_score` (float), `ai_notes` (text), `reviewed_by`, `reviewed_at`, `created_at`, `updated_at`
+- [x] Buat migration: tabel `notification` — kolom: `id`, `user_id`, `type` (varchar), `message`, `link`, `is_read` (bool, default false), `created_at`
+- [x] Tambah kolom `ai_scoring_config` (JSON, nullable) ke tabel `position` via migration
+
+#### TASK-11.2: Backend — Upload & Enqueue
+- [x] Endpoint `POST /api/v1/applications/bulk-upload-cv` (HR + Manager):
+  - Terima `position_id` + multifile CV (PDF, max per file dikonfigurasi)
+  - Upload setiap file ke OneDrive: folder path `/{position_id}/{client_name}/cv_uploads/`
+  - Buat record `ai_screening_result` per file dengan status `menunggu_screening_ai`
+  - Enqueue satu arq job per file via `await redis_pool.enqueue_job("process_cv_screening", str(screening_result.id))` — tanpa HTTP keluar sama sekali
+  - Return immediately — jangan tunggu proses selesai
+- [x] Setup `app/core/arq_pool.py` — helper `get_redis_pool()` return koneksi arq ke Redis (`REDIS_URL` dari env var)
+
+#### TASK-11.3: Backend — Internal Callback & Notifikasi
+- [x] Buat `routers/internal.py` — endpoint `POST /internal/ai/extraction-result` (dilindungi `X-Internal-Secret` header dari env var):
+  - Terima payload: `screening_result_id`, `extracted_json`, `ai_score`, `ai_notes`, `status` (`siap_review` atau `error`)
+  - Update record `ai_screening_result` sesuai payload
+  - Jika status `siap_review`: buat record `notification` untuk `uploaded_by` (type: `ai_screening_done`, link: `/applications/pending-review`)
+  - Jika semua file dalam satu batch selesai: buat satu notifikasi ringkasan (bukan satu notif per file)
+- [x] Endpoint `GET /api/v1/notifications/` — return notifikasi milik user yang login, diurutkan terbaru, filter `is_read`
+- [x] Endpoint `PATCH /api/v1/notifications/{id}/read` — tandai notifikasi sebagai sudah dibaca
+- [x] Endpoint `PATCH /api/v1/notifications/read-all` — tandai semua notifikasi sebagai sudah dibaca
+
+#### TASK-11.4: Backend — Parsing Service (fungsi Python, dipanggil oleh arq worker)
+- [x] Buat `services/cv_pipeline.py` — fungsi `process_cv_screening(ctx, screening_result_id: str)`:
+  - Download file dari OneDrive via `onedrive_service.download_file(drive_item_id)`
+  - Ekstrak teks: PyMuPDF (text-based) atau Tesseract/PaddleOCR (scan) via `pdf_service.extract_text(raw_file)`
+  - Validasi teks tidak kosong (< 20 karakter → raise ValueError)
+  - Hapus file sementara dari disk lokal setelah parsing selesai
+  - Menggantikan endpoint `/internal/parse-cv` sebagai titik parsing — tidak ada HTTP round-trip
+
+#### TASK-11.5: arq Worker — CV Pipeline
+- [x] Buat `app/worker.py` — kelas `WorkerSettings`:
+  - `functions = [process_cv_screening]` — task utama CV parsing + AI scoring + save result
+  - Urutan dalam `process_cv_screening`: parse CV → ambil scoring config → call LLM → simpan hasil → notifikasi batch
+  - Error handling: try/except di level fungsi, status di-set `"error"` + `ai_notes` berisi pesan error, tetap commit ke DB
+  - `redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)`
+  - `max_jobs = 10`, `job_timeout = 300` (5 menit per CV)
+  - Menggantikan seluruh n8n workflow "CV Parser" (8 node HTTP) dengan satu fungsi Python terurut
+
+#### TASK-11.6: Frontend — Halaman Pending Review & Notifikasi
+- [x] Komponen `NotificationBell` di navbar:
+  - [x] Polling `GET /api/v1/notifications/` tiap 30 detik
+  - [x] Badge angka merah untuk notifikasi belum dibaca
+  - [x] Dropdown list notifikasi terbaru (maks 10); klik item → navigasi ke `link` + mark as read
+  - [x] Tombol "Tandai semua dibaca"
+- [x] Halaman `/applications/pending-review`:
+  - [x] List semua `ai_screening_result` dengan status `siap_review` milik HR yang login (Manager lihat semua)
+  - [x] Kolom: nama file CV, posisi, tanggal upload, AI score (badge warna), waktu tunggu
+  - [x] Filter: posisi, tanggal upload
+  - [x] Diurutkan dari yang terlama menunggu review
+  - [x] Tombol "Review" per baris → buka komponen `AIExtractionReview`
+
+#### TASK-11.7: Frontend — Komponen AIExtractionReview
+- [x] Komponen `AIExtractionReview` (layout 2-panel: kiri hasil AI, kanan form input kandidat):
+  - [x] Panel kiri: tampilkan `extracted_json` sebagai read-only structured view + AI score + catatan AI
+  - [x] Panel kanan: form kandidat (nama, kontak, pendidikan, pengalaman, skill) — prefill dari `extracted_json`
+  - [x] Tombol "Terapkan Hasil AI" — isi semua field form dari data AI (dapat diedit ulang)
+  - [x] HR bisa edit tiap field bebas sebelum simpan
+  - [x] Tombol aksi berdasarkan skor (FR-08.8):
+    - Skor ≥ threshold tinggi: **"Terima & Buat Lamaran"**
+    - Skor antara threshold: **"Review & Buat Lamaran"**
+    - Skor < threshold rendah: **"Simpan Sebagai Kandidat"** + **"Tetap Proses"**
+  - [x] HR/Manager selalu bisa override — semua tombol aksi tersedia, badge skor hanya informasi
+  - [x] Setelah aksi diambil: update status `ai_screening_result` → `sudah_direview`, mark notifikasi terkait as read
+
+#### TASK-11.8: Backend — Endpoint Review Screening Result
+- [x] Endpoint `GET /api/v1/applications/screening/{id}` — return detail satu screening result lengkap
+- [x] Endpoint `PATCH /api/v1/applications/screening/{id}/review` — update status, link candidate/application, simpan catatan HR
+- [x] Setelah berhasil: buat notifikasi ke uploader jika bukan diri sendiri
 
 ### TASK-12: AI Scoring & Matching (FR-08.4)
 
-- [ ] n8n Workflow "AI Screening":
-  - Trigger: saat Application baru dibuat
-  - Ambil data kandidat + requirement posisi
-  - Kirim ke LLM → match score + catatan AI
-  - POST ke `/internal/ai/screening-result`
-- [ ] Backend: simpan ke `ai_screening_result`
-- [ ] Frontend: tampilkan AI score di card kandidat di pipeline view
+#### TASK-12.1: Backend — Scoring Config
+- [x] Tambah field `ai_scoring_config` (JSON) ke endpoint `PUT /api/v1/positions/{id}` — Admin/Manager dapat set konfigurasi scoring per posisi
+- [x] Schema `ai_scoring_config`: `threshold_auto_recommend` (default 80), `threshold_manual_review` (default 60), `weights` (education, experience_years, skill_match, domain_relevance — total 100), `required_skills` (array string), `min_experience_years` (int)
+- [x] Frontend `/admin/positions` — tambah section "Konfigurasi AI Screening" di form edit posisi: input threshold, slider bobot per dimensi, input required skills (tag input), input min experience
+
+#### TASK-12.2: Backend — Scoring Result
+- [x] `ai_screening_result` sudah mencakup `ai_score` dan `ai_notes` dari TASK-11.1
+- [x] Endpoint `GET /api/v1/applications/` — tambah field `ai_score` dan `ai_screening_status` di response tiap item
+- [x] Endpoint `GET /api/v1/applications/{id}` — tambah objek `ai_screening` di response: `score`, `notes`, `status`, `extracted_summary` (ringkasan match per dimensi)
+
+#### TASK-12.3: Frontend — Tampilan Skor di Pipeline
+- [x] Halaman `/applications` (list): tambah kolom "AI Score" — badge warna (hijau ≥ 80 / kuning 60-79 / merah < 60) + ikon status (⏳/✅/✓)
+- [x] Halaman `/applications/[id]` (detail): tambah panel "Hasil AI Screening" — skor angka, catatan AI, tabel ringkasan match per dimensi (pendidikan, pengalaman, skill match, relevansi domain)
 
 ### TASK-13: AI Draft Project (FR-08.5)
 
-- [ ] Backend: `POST /api/v1/candidates/{id}/ai/draft-projects` — kirim pengalaman kerja ke LLM, return draft
-- [ ] Frontend: panel "Draft Project AI" di tab pengalaman kandidat — edit & setujui sebelum masuk CV
+- [x] Backend: `POST /api/v1/candidates/{id}/ai/draft-projects` — kirim pengalaman kerja ke LLM, return draft
+- [x] Frontend: panel "Draft Project AI" di tab pengalaman kandidat — edit & setujui sebelum masuk CV
 
 ### TASK-14: Natural Language Search (FR-09)
 
@@ -351,20 +413,23 @@
 
 ## TASK Infrastruktur & DevOps (Cross-Fase)
 
-### TASK-16: n8n Automation Lainnya
+### TASK-16: arq Cron Jobs (menggantikan n8n Automation)
 
-- [ ] n8n Workflow "Database Backup":
-  - Cron trigger harian pukul 02.00
-  - Jalankan `pg_dump` di container postgres
-  - Upload hasil ke OneDrive folder `/backups/`
-- [ ] n8n Workflow "Contract Expiry Alert":
-  - Cron trigger harian
-  - Query employee dengan kontrak berakhir dalam 30, 14, 7 hari
-  - POST ke FastAPI → (Fase selanjutnya) kirim notifikasi ke Manager/HR
+> **Catatan migrasi:** TASK-16 sebelumnya direncanakan sebagai n8n workflow terpisah. Setelah migrasi CV pipeline ke arq (TASK-11.4/11.5), kedua cron job ini didaftarkan di `WorkerSettings.cron_jobs` pada worker yang sama — tidak butuh service terpisah.
+
+- [x] Buat `services/ops_jobs.py` — dua fungsi async:
+  - `backup_database(ctx)`: jalankan `pg_dump` via subprocess, upload hasil ke OneDrive folder `/backups/`, cleanup file lokal
+  - `check_contract_expiry(ctx)`: query `employee_contract` yang berakhir dalam 30/14/7 hari, buat notifikasi ke Manager/HR via `notification_service`
+- [x] Daftarkan di `app/worker.py` sebagai cron jobs:
+  ```python
+  cron(backup_database, hour=2, minute=0)       # harian 02.00
+  cron(check_contract_expiry, hour=8, minute=0) # harian 08.00
+  ```
+- [ ] Uji dengan `arq app.worker.WorkerSettings --burst` (dry-run tanpa loop)
 
 ### TASK-17: Monitoring & Production Readiness
 
-- [ ] Setup basic monitoring: script cek disk usage, RAM, CPU (bisa via n8n cron atau cron OS)
+- [ ] Setup basic monitoring: script cek disk usage, RAM, CPU (bisa via arq cron job atau cron OS)
 - [ ] Alert jika disk VPS > 80% atau RAM > 85%
 - [ ] Monitor kuota OneDrive (via Graph API `GET /drive` → `quota` object)
 - [ ] Pastikan `pg_dump` backup berjalan dan bisa di-restore (test restore sekali)

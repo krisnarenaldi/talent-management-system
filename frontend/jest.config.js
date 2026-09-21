@@ -7,7 +7,7 @@ module.exports = {
     '^.+\\.(t|j)sx?$': ['ts-jest', {
       tsconfig: {
         jsx: 'react-jsx',
-        esModule: true,
+        esModuleInterop: true,
       },
     }],
   },

@@ -5,4 +5,7 @@ if [ -d /uploads ]; then
   chown -R appuser:appuser /uploads 2>/dev/null || chmod -R 777 /uploads 2>/dev/null || true
 fi
 
+echo "Running database migrations..."
+alembic upgrade head
+
 exec gosu appuser "$@"

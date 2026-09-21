@@ -19,7 +19,10 @@ const clientCreateSchema = z.object({
   name: z.string().min(1, "Nama klien wajib diisi"),
   industry: z.string().optional(),
   pic_name: z.string().optional(),
-  pic_contact: z.string().optional(),
+  pic_contact: z.string().optional().refine(
+    (val) => !val || /^\+?[\d\s\-()]{6,20}$/.test(val),
+    "Format nomor HP tidak valid"
+  ),
 });
 
 const clientUpdateSchema = z
@@ -27,7 +30,10 @@ const clientUpdateSchema = z
     name: z.string().min(1, "Nama klien wajib diisi").optional(),
     industry: z.string().optional(),
     pic_name: z.string().optional(),
-    pic_contact: z.string().optional(),
+    pic_contact: z.string().optional().refine(
+      (val) => !val || /^\+?[\d\s\-()]{6,20}$/.test(val),
+      "Format nomor HP tidak valid"
+    ),
     is_active: z.boolean().optional(),
   })
   .partial();
@@ -89,28 +95,48 @@ export default function AdminClientsPage() {
   const totalClients = clientsData?.total ?? 0;
 
   const createMutation = useMutation({
-    mutationFn: (payload: ClientCreateForm) =>
-      api.post("/api/v1/clients", payload).then((res) => res.data),
+    mutationFn: (payload: ClientCreateForm) => {
+      const clean = Object.fromEntries(
+        Object.entries(payload).filter(([, v]) => v !== "" && v !== undefined && v !== null)
+      ) as ClientCreateForm;
+      return api.post("/api/v1/clients", clean).then((res) => res.data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       setShowAddModal(false);
       showToast("success", "Klien berhasil ditambahkan.");
     },
     onError: (err: unknown) => {
-      showToast("error", getErrorMessage(err, "Gagal menambahkan klien."));
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      if (detail === "Nomor HP PIC sudah digunakan oleh klien lain") {
+        showToast("error", "No HP PIC sudah digunakan oleh klien lain.");
+      } else {
+        showToast("error", getErrorMessage(err, "Gagal menambahkan klien."));
+      }
+      throw err;
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: ClientUpdateForm }) =>
-      api.put(`/api/v1/clients/${id}`, payload).then((res) => res.data),
+    mutationFn: ({ id, payload }: { id: string; payload: ClientUpdateForm }) => {
+      const clean = Object.fromEntries(
+        Object.entries(payload).filter(([, v]) => v !== "" && v !== undefined && v !== null)
+      ) as ClientUpdateForm;
+      return api.put(`/api/v1/clients/${id}`, clean).then((res) => res.data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       setEditingClient(null);
       showToast("success", "Klien berhasil diperbarui.");
     },
     onError: (err: unknown) => {
-      showToast("error", getErrorMessage(err, "Gagal memperbarui klien."));
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      if (detail === "Nomor HP PIC sudah digunakan oleh klien lain") {
+        showToast("error", "No HP PIC sudah digunakan oleh klien lain.");
+      } else {
+        showToast("error", getErrorMessage(err, "Gagal memperbarui klien."));
+      }
+      throw err;
     },
   });
 
@@ -429,21 +455,19 @@ function ClientFormModal({
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: isCreating
-      ? { name: "", industry: "", pic_name: "", pic_contact: "" }
+      ? { name: "", industry: undefined, pic_name: undefined, pic_contact: undefined }
       : {
           name: client?.name ?? "",
-          industry: client?.industry ?? "",
-          pic_name: client?.pic_name ?? "",
-          pic_contact: client?.pic_contact ?? "",
+          industry: client?.industry || undefined,
+          pic_name: client?.pic_name || undefined,
+          pic_contact: client?.pic_contact || undefined,
         },
   });
-
-  void register;
-  void errors;
 
   const onSubmit = async (data: Record<string, unknown>) => {
     try {
@@ -452,8 +476,14 @@ function ClientFormModal({
       } else if (client) {
         await onUpdate({ id: client.id, payload: data as unknown as ClientUpdateForm });
       }
-    } catch {
-      // Errors handled by mutation's onError callback
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { status?: number; data?: { detail?: string } } };
+      if (apiErr.response?.status === 400 && apiErr.response?.data?.detail === "Nomor HP PIC sudah digunakan oleh klien lain") {
+        setError("pic_contact", {
+          type: "manual",
+          message: "Nomor HP PIC sudah digunakan oleh klien lain",
+        });
+      }
     }
   };
 

@@ -9,7 +9,9 @@ import type {
   PipelineAnalyticsItem,
   PositionSuccessRate,
   SourceSuccessRate,
-  RecruiterWorkload
+  RecruiterWorkload,
+  ApplicationByPosition,
+  ApplicationByCompany
 } from "@/types";
 
 export async function fetchAnalyticsSummary(): Promise<AnalyticsSummary> {
@@ -62,4 +64,14 @@ export async function fetchPipelineTrend(months = 6): Promise<{ period: string; 
 export async function fetchRecruiterWorkload(): Promise<RecruiterWorkload[]> {
   const response = await api.get("/api/v1/analytics/recruiter-workload");
   return response.data as RecruiterWorkload[];
+}
+
+export async function fetchApplicationsByPosition(): Promise<ApplicationByPosition[]> {
+  const response = await api.get("/api/v1/analytics/applications-by-position");
+  return response.data as ApplicationByPosition[];
+}
+
+export async function fetchApplicationsByCompany(): Promise<ApplicationByCompany[]> {
+  const response = await api.get("/api/v1/analytics/applications-by-company");
+  return response.data as ApplicationByCompany[];
 }

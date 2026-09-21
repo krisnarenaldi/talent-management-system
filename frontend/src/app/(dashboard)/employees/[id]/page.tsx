@@ -16,6 +16,7 @@ import {
   addContract,
   deleteContract,
   fetchPayroll,
+  createPayroll,
   updatePayroll,
 } from "@/lib/api/employees";
 import EmployeeDocumentUploader from "@/components/employees/EmployeeDocumentUploader";
@@ -486,16 +487,19 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
     );
   }
 
+  const createMutation = useMutation({
+    mutationFn: (payload: Partial<EmployeePayroll>) => createPayroll(employeeId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payroll", employeeId] });
+      showToast("success", "Data payroll berhasil ditambahkan.");
+    },
+    onError: (err: unknown) => {
+      showToast("error", getErrorMessage(err, "Gagal menambah payroll."));
+    },
+  });
+
   if (isLoading) {
     return <p className="text-sm text-gray-500">Memuat data payroll…</p>;
-  }
-
-  if (error || !payroll) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p className="text-sm text-gray-500">Data payroll belum tersedia untuk karyawan ini.</p>
-      </div>
-    );
   }
 
   const fields: { key: keyof EmployeePayroll; label: string; type?: string }[] = [
@@ -509,6 +513,42 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
     { key: "npwp_number", label: "NPWP" },
     { key: "allowance_used", label: "Tunjangan" },
   ];
+
+  if (error || !payroll) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Payroll</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {fields.map(({ key, label, type }) => (
+            <div key={key}>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                {label}
+              </label>
+              <input
+                type={type ?? (key === "thp" ? "number" : "text")}
+                onChange={(e) =>
+                  createMutation.mutate({
+                    [key]: key === "thp" ? Number(e.target.value) : e.target.value,
+                  } as Partial<EmployeePayroll>)
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => createMutation.mutate({})}
+            disabled={createMutation.isPending}
+            className="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-secondary/90 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            {createMutation.isPending ? "Menyimpan…" : "Simpan Payroll"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

@@ -8,9 +8,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { settingsApi } from "@/lib/api/settings";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
-import type { Candidate, CandidateEducation, CandidateExperience } from "@/types";
+import type { Candidate, CandidateEducation, CandidateExperience, SourceChannel } from "@/types";
 
 const educationItemSchema = z.object({
   id: z.string().optional(),
@@ -105,6 +106,7 @@ export default function CandidateForm({
   const [initialEducation, setInitialEducation] = useState<CandidateEducation[]>([]);
   const [initialExperience, setInitialExperience] = useState<CandidateExperience[]>([]);
   const [skillInput, setSkillInput] = useState("");
+  const [sourceChannels, setSourceChannels] = useState<SourceChannel[]>([]);
   const skillInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CandidateFormValues>({
@@ -150,6 +152,10 @@ export default function CandidateForm({
   });
 
   useEffect(() => {
+    settingsApi.listSourceChannels({ is_active: true }).then(setSourceChannels).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (mode !== "edit" || !candidateId) return;
 
     const loadCandidate = async () => {
@@ -183,12 +189,12 @@ export default function CandidateForm({
           skills: candidate.skills ?? [],
           education:
             educations.length > 0
-              ? educations.map((item) => ({
+              ? educations.map((item, idx) => ({
                   id: item.id,
                   institution: item.institution || "",
                   major: item.major || "",
                   graduation_year: item.graduation_year != null ? String(item.graduation_year) : "",
-                  gpa: item.gpa != null ? String(item.gpa) : "",
+                  gpa: idx === 0 && item.gpa != null ? String(item.gpa) : "",
                 }))
               : [defaultEducation],
           experience:
@@ -259,13 +265,12 @@ export default function CandidateForm({
       }
 
       const normalizedEducation = values.education
-        .filter((item) => item.institution || item.major || item.graduation_year || item.gpa)
+        .filter((item) => item.institution || item.major || item.graduation_year)
         .map((item) => ({
           id: item.id || undefined,
           institution: item.institution?.trim() || null,
           major: item.major?.trim() || null,
           graduation_year: item.graduation_year ? Number(item.graduation_year) : null,
-          gpa: item.gpa ? Number(item.gpa) : null,
         }));
 
       const normalizedExperience = values.experience
@@ -450,10 +455,9 @@ export default function CandidateForm({
               <label className="mb-1 block text-sm font-medium text-gray-700">Sumber</label>
               <select {...form.register("source_channel")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
                 <option value="">Pilih sumber</option>
-                <option value="LinkedIn">LinkedIn</option>
-                <option value="Glints">Glints</option>
-                <option value="Email">Email</option>
-                <option value="Referral">Referral</option>
+                {sourceChannels.map((ch) => (
+                  <option key={ch.id} value={ch.label}>{ch.label}</option>
+                ))}
               </select>
             </div>
 
@@ -585,10 +589,12 @@ export default function CandidateForm({
                     <input type="number" {...form.register(`education.${index}.graduation_year`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
                   </div>
 
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">IPK</label>
-                    <input type="number" step="0.01" {...form.register(`education.${index}.gpa`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
-                  </div>
+                  {index === 0 && (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">IPK</label>
+                      <input type="number" step="0.01" {...form.register(`education.${index}.gpa`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

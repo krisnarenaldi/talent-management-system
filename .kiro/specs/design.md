@@ -30,11 +30,15 @@
        │
        ├──▶ PostgreSQL (via PgBouncer)
        │
+       ├──▶ Redis (arq job queue)
+       │       enqueue CV parsing jobs, cron jobs
+       │
+       ├──▶ arq Worker (same image as backend)
+       │       dequeue & process: PDF parse → LLM → save result
+       │       cron: database backup, contract expiry alert
+       │
        ├──▶ Microsoft Graph API (OneDrive for Business)
        │       upload/download dokumen kandidat & karyawan
-       │
-       ├──▶ n8n (Webhook Trigger)
-       │       antrian async: PDF parsing, AI ekstraksi, notifikasi
        │
        └──▶ LLM API (Anthropic/OpenAI/Gemini)
                ekstraksi CV, scoring, NL Search (Fase 3)
@@ -45,10 +49,11 @@
 | Komponen | Tanggung Jawab |
 |---|---|
 | **Next.js** | UI/UX, routing, server-side rendering halaman, form handling, auth session di browser |
-| **FastAPI** | REST API, business logic, RBAC enforcement, integrasi Graph API, trigger n8n webhook |
+| **FastAPI** | REST API, business logic, RBAC enforcement, integrasi Graph API, enqueue arq job |
 | **PostgreSQL** | Penyimpanan data relasional (kandidat, aplikasi, karyawan, dll) |
-| **PgBouncer** | Connection pooling antara FastAPI/n8n/Next.js (API routes) dan PostgreSQL |
-| **n8n** | Async workflow: terima webhook dari FastAPI → jalankan parsing PDF / OCR / AI call → kirim hasil balik ke FastAPI endpoint |
+| **PgBouncer** | Connection pooling antara FastAPI/worker dan PostgreSQL |
+| **Redis** | Broker antrian job arq — menerima enqueue dari FastAPI, menyimpan job sampai diambil worker |
+| **arq Worker** | Async task worker (image sama dengan backend): dequeue job dari Redis → jalankan `process_cv_screening` in-process (tanpa HTTP round-trip), jalankan cron jobs |
 | **OneDrive for Business** | File storage dokumen (CV, KTP, KK, dll) via Microsoft Graph API |
 | **Nginx** | Reverse proxy, SSL termination (Let's Encrypt), routing /api vs / |
 
@@ -182,34 +187,33 @@ Error response:
 ### 4.1 Upload CV & Async Parsing (Fase 3)
 
 ```
-[HR Upload CV]
+[HR Upload CV (bulk)]
       │
       ▼
-[Next.js → POST /api/v1/candidates/{id}/documents/]
+[Next.js → POST /api/v1/applications/bulk-upload-cv]
       │
       ▼
 [FastAPI]
   1. Validasi file (tipe, ukuran)
-  2. Upload file ke OneDrive via Graph API
-  3. Simpan referensi (file_url) ke Candidate_Document
-  4. Jika doc_type = "CV_asli" → trigger webhook n8n
-  5. Return response 202 Accepted (proses async, belum selesai)
+  2. Upload setiap file ke OneDrive via Graph API
+  3. Buat record ai_screening_result (status: menunggu_screening_ai)
+  4. Enqueue arq job: redis_pool.enqueue_job("process_cv_screening", screening_result_id)
+  5. Return 200 immediately — tidak tunggu proses selesai
       │
-      ▼
-[n8n Workflow: CV Parser]
-  1. Terima webhook payload (candidate_id, file_url)
-  2. Download file sementara dari OneDrive
-  3. Cek apakah PDF berbasis teks atau scan
-     - Jika teks: PyMuPDF/pdfplumber → ekstrak teks
-     - Jika scan: OCR dengan Tesseract/PaddleOCR → teks
-  4. Kirim teks ke LLM API → dapatkan JSON terstruktur
-  5. POST hasil ke FastAPI /internal/ai/extraction-result
-  6. Hapus file sementara dari disk
-      │
-      ▼
-[FastAPI /internal/ai/extraction-result]
-  1. Simpan hasil ke AI_Screening_Result
-  2. Tandai kandidat: "hasil ekstraksi menunggu review HR"
+      ▼ (via Redis broker)
+[arq Worker: process_cv_screening(ctx, screening_result_id)]
+  1. Ambil record ai_screening_result dari DB
+  2. Download file dari OneDrive (drive_item_id)
+  3. Ekstrak teks:
+     - PDF berbasis teks → PyMuPDF/pdfplumber
+     - PDF scan → Tesseract/PaddleOCR
+  4. Validasi teks (< 20 karakter → error)
+  5. Ambil ai_scoring_config dari tabel Position
+  6. Kirim teks + config ke LLM → dapatkan JSON (nama, pendidikan, pengalaman, skill, skor)
+  7. Simpan hasil ke ai_screening_result (status: siap_review)
+  8. Hapus file sementara dari disk
+  9. Buat notifikasi batch (satu notif per batch, bukan per file)
+  ↳ On error: set status "error", simpan pesan error ke ai_notes, commit DB
       │
       ▼
 [HR membuka UI Review Ekstraksi AI]
@@ -217,6 +221,8 @@ Error response:
   - Edit/koreksi jika ada yang salah
   - Klik "Simpan" → data tersimpan final ke Candidate
 ```
+
+> **Perubahan dari desain awal:** Alur sebelumnya melewati n8n sebagai HTTP orchestrator (FastAPI → n8n webhook → `/internal/parse-cv` → n8n → LLM API → n8n → `/internal/ai/extraction-result`), menghasilkan 4 HTTP round-trip. Migrasi ke arq menghilangkan seluruh hop eksternal — semua langkah dijalankan sebagai pemanggilan fungsi Python in-process di dalam worker container, dalam satu trust boundary yang sama dengan FastAPI.
 
 ### 4.2 Blacklist Check saat Input Kandidat Baru
 
@@ -362,28 +368,64 @@ Role-based UI: komponen/menu hanya ditampilkan jika role sesuai
 
 ---
 
-## 6. Desain Integrasi n8n
+## 6. Desain Async Processing (arq + Redis)
 
-### 6.1 Workflow yang Direncanakan
+> **Catatan arsitektur:** Desain awal (v1.0) menggunakan n8n sebagai async orchestrator antara FastAPI dan pipeline CV parsing. Setelah evaluasi, n8n digantikan dengan arq + Redis karena: (1) seluruh alur hanya memanggil service milik sendiri — tidak ada integrasi SaaS pihak ketiga yang menjadi nilai tambah n8n; (2) 4 HTTP round-trip diganti 1 pemanggilan fungsi in-process, menghilangkan 1 network hop dan 1 service yang perlu dijaga uptime-nya; (3) error handling & retry lebih matang di ekosistem Python (tenacity, pytest, logging konsisten); (4) overhead operasional n8n (setup, shared secret, JSON workflow di git) tidak sebanding untuk pipeline yang sifatnya linear.
 
-| Workflow | Trigger | Aksi |
-|---|---|---|
-| **CV Parser** | Webhook dari FastAPI (saat CV diupload) | Download CV, ekstrak teks (PyMuPDF/OCR), kirim ke LLM, kirim hasil ke FastAPI |
-| **AI Screening** | Webhook dari FastAPI (saat Application dibuat) | Ambil data kandidat + requirement posisi, kirim ke LLM untuk scoring, simpan AI_Screening_Result |
-| **Blacklist Notif** | Webhook saat kandidat ditambah ke blacklist | Kirim notifikasi ke channel internal (opsional: email/Slack/WhatsApp) |
-| **Database Backup** | Cron (setiap hari pukul 02.00) | Jalankan `pg_dump`, upload hasil ke OneDrive |
-| **Contract Expiry Alert** | Cron (setiap hari) | Cek kontrak yang berakhir dalam 30/14/7 hari, kirim reminder ke Manager/HR |
+### 6.1 Komponen Async
 
-### 6.2 Komunikasi FastAPI ↔ n8n
+| Komponen | Peran |
+|---|---|
+| **Redis** | Broker antrian job (image `redis:7-alpine`). FastAPI enqueue job, worker dequeue dan jalankan |
+| **arq Worker** | Proses terpisah (`arq app.worker.WorkerSettings`), image sama dengan backend. Menjalankan task functions dan cron jobs |
+| **`app/worker.py`** | Mendefinisikan `WorkerSettings`: daftar `functions`, `cron_jobs`, `redis_settings`, `max_jobs`, `job_timeout` |
+| **`services/cv_pipeline.py`** | Implementasi `process_cv_screening(ctx, screening_result_id)` — menggantikan seluruh 8 node n8n |
+| **`services/ops_jobs.py`** | Implementasi `backup_database(ctx)` dan `check_contract_expiry(ctx)` — menggantikan n8n cron workflows |
+| **`app/core/arq_pool.py`** | Helper `get_redis_pool()` — return ArqRedis pool, dipakai di endpoint `bulk-upload-cv` |
+
+### 6.2 Alur Enqueue dari FastAPI ke Worker
 
 ```
-FastAPI → n8n  : HTTP POST ke n8n webhook URL (payload: job data)
-n8n → FastAPI  : HTTP POST ke /internal/* endpoint (hasil processing)
-
-Internal endpoints dilindungi dengan shared secret header:
-X-Internal-Secret: {env variable}
-Tidak bisa diakses dari luar VPS (Nginx block rule)
+FastAPI (bulk-upload-cv)
+  └─▶ redis_pool.enqueue_job("process_cv_screening", screening_result_id)
+           │
+           ▼ (via Redis broker)
+      arq Worker
+        └─▶ process_cv_screening(ctx, screening_result_id)
+              ├─ download OneDrive file          [fungsi Python]
+              ├─ extract_text(raw_file)          [fungsi Python]
+              ├─ get ai_scoring_config from DB   [SQLAlchemy]
+              ├─ call_llm(text, config)          [fungsi Python]
+              ├─ save result to DB               [SQLAlchemy commit]
+              └─ create_batch_notification(...)  [fungsi Python]
 ```
+
+Tidak ada HTTP keluar dari worker ke FastAPI. Semua operasi adalah pemanggilan fungsi atau query DB langsung, dalam trust boundary container yang sama.
+
+### 6.3 Cron Jobs di Worker
+
+```python
+# app/worker.py
+class WorkerSettings:
+    functions = [process_cv_screening]
+    cron_jobs = [
+        cron(backup_database,      hour=2, minute=0),  # harian 02.00 WIB
+        cron(check_contract_expiry, hour=8, minute=0), # harian 08.00 WIB
+    ]
+    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    max_jobs = 10
+    job_timeout = 300  # detik, per CV
+```
+
+### 6.4 Variabel Environment yang Berubah
+
+| Sebelumnya (n8n) | Sekarang (arq) |
+|---|---|
+| `N8N_WEBHOOK_URL=...` | `REDIS_URL=redis://redis:6379/0` |
+| `N8N_ENCRYPTION_KEY=...` | *(dihapus)* |
+| `N8N_INTERNAL_SECRET=...` | *(dihapus)* |
+
+> **File historis n8n:** `n8n/workflows/cv-parser.json` dan `n8n/README.md` diarsipkan di `n8n/archive/` sebagai referensi historis sampai migrasi tervalidasi di production.
 
 ---
 
@@ -517,15 +559,18 @@ services:
   pgbouncer:      # Connection pooling
   backend:        # FastAPI (Dockerfile di backend/)
   frontend:       # Next.js (Dockerfile di frontend/)
-  n8n:            # n8n self-hosted
+  redis:          # Redis 7-alpine — broker arq job queue
+  worker:         # arq worker (image sama dengan backend, command: arq app.worker.WorkerSettings)
   nginx:          # Reverse proxy
 
 volumes:
   postgres_data:  # Data PostgreSQL
-  n8n_data:       # Workflow & credential n8n
+  redis_data:     # Persistensi Redis (RDB snapshot)
 
 # File dokumen TIDAK disimpan di volume lokal
 # → semua ke OneDrive via Graph API
+
+# Catatan: service n8n dan volume n8n_data dihapus sejak migrasi ke arq (lihat Bagian 6)
 ```
 
 ---

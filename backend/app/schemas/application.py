@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Annotated
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.pydantic_utils import AutoStrUUID
 
@@ -26,6 +27,8 @@ class StageHistoryResponse(BaseModel):
     salary_expected_input: Decimal | None
     notes: str | None
     updated_by: AutoStrUUID | None
+    handler_id: AutoStrUUID | None = None
+    handler_name: str | None = None
     created_at: datetime | None
 
     @field_validator("created_at", mode="before")
@@ -47,11 +50,20 @@ class ApplicationCreate(BaseModel):
     position_id: str
     recruiter_id: str | None = None
     current_stage: str = "Dijadwalkan_Interview"
+    force_blacklisted: bool = False
 
 
 class ApplicationUpdate(BaseModel):
     recruiter_id: str | None = None
     cv_submitted_to_pm_date: date | None = None
+
+
+class AIScreeningInfo(BaseModel):
+    ai_score: float | None = None
+    ai_screening_status: str | None = None
+
+    class Config:
+        from_attributes = True
 
 
 class ApplicationResponse(BaseModel):
@@ -69,6 +81,9 @@ class ApplicationResponse(BaseModel):
     cv_submitted_to_pm_date: date | None
     created_at: datetime | None
     updated_at: datetime | None
+    ai_score: float | None = None
+    ai_screening_status: str | None = None
+    ai_screening: AIScreeningInfo | None = None
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod
@@ -87,3 +102,29 @@ class ApplicationResponse(BaseModel):
 class ApplicationStageDetail(ApplicationResponse):
     stage_history: list[StageHistoryResponse]
     next_possible_stages: list[str]
+
+
+class ApplicationCVItem(BaseModel):
+    filename: str
+    content: bytes = Field(..., min_length=1)
+
+    @field_validator("filename")
+    @classmethod
+    def validate_filename(cls, v: str) -> str:
+        if not v.lower().endswith(".pdf"):
+            raise ValueError("Hanya file PDF yang diizinkan")
+        return v
+
+
+class ApplicationBulkUploadResponse(BaseModel):
+    position_id: AutoStrUUID
+    position_title: str
+    client_name: str | None
+    total_files: int
+    created_screening_result_ids: list[AutoStrUUID]
+    # Legacy field — dipertahankan untuk kompatibilitas response frontend
+    # Setelah migrasi ke arq, nilai selalu False (trigger via Redis, bukan HTTP n8n)
+    n8n_triggered: bool = False
+
+    class Config:
+        from_attributes = True

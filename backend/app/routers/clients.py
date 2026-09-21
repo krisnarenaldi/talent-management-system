@@ -32,6 +32,9 @@ def create_client(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("admin")),  # create: admin only
 ):
+    if payload.pic_contact and payload.pic_contact.strip():
+        if db.query(Client).filter(Client.pic_contact == payload.pic_contact.strip()).first():
+            raise HTTPException(status_code=400, detail="Nomor HP PIC sudah digunakan oleh klien lain")
     client = Client(**payload.model_dump())
     db.add(client)
     db.commit()
@@ -49,6 +52,12 @@ def update_client(
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client tidak ditemukan")
+    
+    new_contact = payload.pic_contact and payload.pic_contact.strip()
+    if new_contact and new_contact != (client.pic_contact or "").strip():
+        if db.query(Client).filter(Client.pic_contact == new_contact, Client.id != client_id).first():
+            raise HTTPException(status_code=400, detail="Nomor HP PIC sudah digunakan oleh klien lain")
+    
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(client, key, value)
     db.commit()

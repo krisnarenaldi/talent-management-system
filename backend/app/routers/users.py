@@ -10,6 +10,20 @@ from app.schemas.user import UserCreate, UserResponse, UserUpdate
 router = APIRouter()
 
 
+@router.get("/recruiters", response_model=list[UserResponse])
+def list_recruiters(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """Daftar user HR/Manager aktif — digunakan untuk pilih recruiter di form lamaran."""
+    return (
+        db.query(User)
+        .filter(User.role.in_(["hr", "manager", "admin"]), User.is_active == True)
+        .order_by(User.name.asc())
+        .all()
+    )
+
+
 @router.get("", response_model=list[UserResponse])
 def list_users(
     skip: int = Query(0, ge=0, description="Jumlah dilewati"),

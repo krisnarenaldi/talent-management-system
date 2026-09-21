@@ -52,7 +52,14 @@ Fase 1 bisa langsung dipakai operasional sambil Fase 2–4 dikembangkan paralel/
 - Riwayat pendidikan (bisa lebih dari satu entri): institusi, jurusan, tahun lulus, IPK
 - Riwayat pengalaman kerja (bisa lebih dari satu entri)
 - Upload dokumen: CV, foto, KTP, KK, Ijazah, Transkrip, Sertifikat, Surat Keterangan BI Checking (opsional)
-- **Bulk Upload CV (AI-Assisted Entry):** HR dapat mengunggah banyak CV sekaligus (multi-file) langsung ke suatu posisi lamaran di UI. Sistem memprosesnya di *background* dengan AI untuk mengekstrak data dan otomatis membuat profil kandidat, sehingga HR terbebas dari proses input manual satu per satu.
+- **Bulk Upload CV (AI-Assisted Entry):** HR dapat mengunggah banyak CV sekaligus (multi-file) di halaman `/applications/new` saat membuat lamaran untuk suatu posisi. Alur lengkap:
+  1. HR membuka `/applications/new`, memilih posisi (termasuk nama client/perusahaan)
+  2. HR mengupload satu atau banyak file CV (PDF) sekaligus
+  3. FastAPI menerima file, mengupload ke OneDrive (folder terstruktur per `position_id/client_name`), mencatat setiap file ke tabel `ai_screening_result` dengan status `menunggu_screening_ai`, lalu mengirim webhook ke n8n — **tidak** menunggu proses selesai (return immediately)
+  4. n8n memproses tiap CV secara asinkron: memanggil endpoint parsing internal FastAPI (PyMuPDF/OCR) → kirim teks ke LLM API → terima JSON terstruktur + skor → POST ke FastAPI `/internal/ai/extraction-result`
+  5. FastAPI menyimpan hasil, membuat notifikasi in-app untuk HR yang mengupload (lihat 5.11)
+  6. HR membuka halaman `/applications/pending-review`, melihat hasil ekstraksi AI di komponen 2-panel, mengedit field bila perlu, lalu memutuskan aksi berdasarkan skor (lihat 5.6)
+  - *Catatan arsitektur:* upload dilakukan melalui FastAPI (bukan langsung ke Drive) agar setiap file terasosiasi ke posisi, user, dan waktu upload yang jelas (audit trail). Logic PDF parsing ditempatkan di FastAPI sebagai internal endpoint — n8n hanya berperan sebagai orchestrator alur, bukan sebagai processing engine
 - **Deduplikasi:** saat kandidat submit CV berulang kali, sistem cek berdasarkan email & no. HP. Jika no. HP berbeda tapi email sama (atau sebaliknya) → dibuat baris baru namun ditandai sebagai kemungkinan duplikat untuk direview manual (deteksi otomatis 100% akurat tidak realistis, lihat bagian 8)
 - Indikator kelengkapan dokumen (flag "belum lengkap")
 - Flag jika email/no. HP tidak dapat dihubungi
@@ -98,13 +105,26 @@ Setiap kandidat dapat melamar ke lebih dari satu posisi/waktu (`Application` ter
 ### 5.6 AI Screening & Ekstraksi Data CV
 - AI membaca isi CV **berbasis teks saja** (bukan gambar/vision — sejalan dengan keputusan di 5.5, sehingga tidak perlu model multimodal untuk fitur ini, biaya lebih murah — lihat 8.5) dan mengekstrak: nama, kontak, pendidikan, pengalaman kerja, skill → mengisi kolom-kolom database (lihat batasan realistis di bagian 8)
 - Teks diambil dari PDF menggunakan PyMuPDF/pdfplumber; untuk CV hasil scan/gambar tetap perlu OCR terlebih dahulu (bukan model vision LLM, cukup OCR biasa seperti Tesseract) sebelum masuk ke tahap ekstraksi AI
-- AI mencocokkan profil kandidat dengan requirement posisi
-- AI memberi scoring/ranking kandidat per posisi
-- **Wajib ada tahap review manual** — recruiter memverifikasi/mengedit hasil ekstraksi & scoring AI sebelum data difinalisasi (bukan full-automatic)
+- AI mencocokkan profil kandidat dengan requirement posisi dan memberi **scoring per posisi** — skor dikonfigurasi per posisi oleh Admin/Manager (bukan skor global), mencakup bobot per dimensi (pendidikan, lama pengalaman, kecocokan skill, relevansi domain), required skills, min pengalaman, dan threshold keputusan
+- **Aksi HR berdasarkan skor AI** (setelah review):
+  - Skor ≥ threshold tinggi (default 80) → badge "Rekomendasi Kuat" + tombol **"Terima & Buat Lamaran"** (1-click membuat `candidate` + `application` sekaligus)
+  - Skor antara threshold (default 60–79) → badge "Perlu Pertimbangan" + tombol **"Review & Buat Lamaran"** (buka form edit lengkap dulu)
+  - Skor < threshold rendah (default 60) → badge "Kurang Sesuai" + tombol **"Simpan Sebagai Kandidat"** (tanpa lamaran) atau **"Tetap Proses"** (override)
+  - HR/Manager **selalu bisa override** — skor AI hanya rekomendasi, bukan penentu otomatis
+- **Wajib ada tahap review manual** — recruiter memverifikasi/mengedit hasil ekstraksi & scoring AI sebelum data difinalisasi. Komponen `AIExtractionReview` (layout 2-panel) menampilkan hasil AI di kiri dan form input kandidat di kanan; HR dapat menekan "Terapkan Hasil AI" untuk prefill form, lalu mengedit tiap field sebelum simpan
+- Hasil AI screening juga ditampilkan di halaman `/applications`: badge skor berwarna per baris lamaran, dan panel ringkasan di halaman detail lamaran
 
 ### 5.7 AI Drafting "Project" pada CV
 - AI membaca pengalaman kerja kandidat, menyusun draft daftar project yang relevan
 - Recruiter mengedit/menyetujui draft sebelum masuk ke CV final (human-in-the-loop, sesuai request client)
+
+### 5.11 Notifikasi In-App
+- Setelah seluruh CV dalam satu batch selesai diproses AI, sistem membuat notifikasi in-app untuk HR yang mengupload
+- **Bell icon di navbar** — badge angka untuk notifikasi belum dibaca; frontend polling tiap 30 detik saat user aktif
+- Klik notifikasi → langsung ke halaman `/applications/pending-review` (list semua hasil AI yang belum direview)
+- Halaman `/applications/pending-review`: list screening dengan status `siap_review`, diurutkan dari yang terlama menunggu, dengan filter posisi & tanggal upload
+- Manager juga menerima notifikasi yang sama sebagai pengawas (by default untuk semua posisi yang ia kelola)
+- Notifikasi disimpan di tabel `notification` (`user_id`, `type`, `message`, `link`, `is_read`, `created_at`)
 
 ### 5.8 Natural Language Search (Khusus Role Manager)
 Contoh: *"Cari Backend Developer Laravel minimal 3 tahun yang pernah memimpin tim kecil."*

@@ -1,0 +1,149 @@
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: tms_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - tms_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── PgBouncer (Connection Pooling) ──────────────────────────
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: tms_pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: postgres
+      DB_NAME: ${POSTGRES_DB}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - tms_internal
+
+  # ── FastAPI (Backend) ────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tms_backend
+    restart: unless-stopped
+    user: "root"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: pgbouncer
+      POSTGRES_PORT: 5432
+    depends_on:
+      - pgbouncer
+    networks:
+      - tms_internal
+    extra_hosts:
+      - "n8n:172.19.0.4"
+    volumes:
+      - ./backend/uploads:/uploads
+    # Port tidak diekspos langsung — diakses via Nginx
+
+  # ── Next.js (Frontend) ──────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tms_frontend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: /api/v1
+    depends_on:
+      - backend
+    networks:
+      - tms_internal
+    # Port tidak diekspos langsung — diakses via Nginx
+
+  # ── n8n (Automation / Queue) ────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: tms_n8n
+    restart: unless-stopped
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      # ── Konfigurasi Lokal / Development ──
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      N8N_PATH: ""
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      WEBHOOK_URL: ${N8N_WEBHOOK_BASE_URL}
+      GENERIC_TIMEZONE: Asia/Jakarta
+      # ── Env vars digunakan di dalam workflow n8n via $env.* ──
+      FASTAPI_INTERNAL_URL: ${FASTAPI_INTERNAL_URL}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      # ── Gunakan N8N_WEBHOOK_URL (recommended baru) ──
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_BASE_URL}
+      # ── n8n Assistant: Code Sandbox ──
+
+      # sandbox-api = nama service Docker di bawah, bukan domain publik
+      N8N_INSTANCE_AI_SANDBOX_ENABLED: "true"
+      N8N_INSTANCE_AI_SANDBOX_PROVIDER: n8n-sandbox
+      N8N_INSTANCE_AI_SANDBOX_IMAGE: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:latest
+      N8N_INSTANCE_AI_SANDBOX_API_URL: http://sandbox-api:8080
+      N8N_SANDBOX_SERVICE_URL: http://sandbox-api:8080
+      N8N_SANDBOX_SERVICE_API_KEY: ${SANDBOX_API_KEYS}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - backend
+    networks:
+      - tms_internal
+    extra_hosts:
+      - "backend:172.19.0.2"
+    ports:
+      - "5678:5678"   # Akses langsung ke n8n UI (khusus dev/local)
+
+  # ── Nginx (Reverse Proxy) ───────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: tms_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro        # SSL certificates (Let's Encrypt)
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+      - n8n
+    networks:
+      - tms_internal
+
+volumes:
+  postgres_data:
+  n8n_data:
+
+networks:
+  tms_internal:
+    driver: bridge

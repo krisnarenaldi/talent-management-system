@@ -8,8 +8,34 @@ import {
   fetchSuccessRateByPosition, 
   fetchSuccessRateBySource,
   fetchPipelineTrend,
-  fetchRecruiterWorkload
+  fetchRecruiterWorkload,
+  fetchApplicationsByPosition,
+  fetchApplicationsByCompany
 } from "@/lib/api/analytics";
+
+function formatPeriodLabel(period: string): string {
+  if (!period) return "";
+
+  const monthMap: Record<string, string> = {
+    "01": "Jan",
+    "02": "Feb",
+    "03": "Mar",
+    "04": "Apr",
+    "05": "Mei",
+    "06": "Jun",
+    "07": "Jul",
+    "08": "Agu",
+    "09": "Sep",
+    "10": "Okt",
+    "11": "Nov",
+    "12": "Des",
+  };
+
+  const [year, month] = period.split("-");
+  if (!year || !month) return period;
+
+  return monthMap[month] ?? month;
+}
 
 function LineChart({ data, width, height }: { data: { period: string; count: number }[]; width: number; height: number }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -35,7 +61,10 @@ function LineChart({ data, width, height }: { data: { period: string; count: num
 
   const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
   const areaPath = linePath + ` L ${points[points.length - 1]?.x ?? padding} ${padding + chartHeight} L ${padding} ${padding + chartHeight} Z`;
-  const labelIndices = points.map((_, i) => i).filter(i => i === 0 || i === points.length - 1 || (points.length > 3 && i % Math.ceil(points.length / 5) === 0));
+
+  // Tampilkan semua label bulan di sumbu X, kecuali jika terlalu padat (>12 titik)
+  const showAllLabels = points.length <= 12;
+  const labelStep = showAllLabels ? 1 : Math.ceil(points.length / 12);
 
   return (
     <svg width={width} height={height} className="overflow-visible">
@@ -51,33 +80,91 @@ function LineChart({ data, width, height }: { data: { period: string; count: num
       })}
       <path d={areaPath} className="fill-primary/10" />
       <path d={linePath} className="stroke-primary" fill="none" strokeWidth={2} />
-      {points.map((p, i) => (
-        <g key={i}>
-          <circle
-            cx={p.x}
-            cy={p.y}
-            r={hoveredIndex === i ? 6 : 4}
-            className="fill-primary stroke-background"
-            strokeWidth={2}
-            onMouseEnter={() => setHoveredIndex(i)}
-            onMouseLeave={() => setHoveredIndex(null)}
-          />
-          {labelIndices.includes(i) && (
-            <text x={p.x} y={height - 10} textAnchor="middle" className="text-xs fill-on-surface-variant">
-              {p.period}
-            </text>
-          )}
-          {hoveredIndex === i && (
-            <g>
-              <rect x={p.x - 30} y={p.y - 30} width={60} height={22} rx={4} className="fill-surface-container-high" />
-              <text x={p.x} y={p.y - 16} textAnchor="middle" className="text-xs fill-on-surface-container-high font-semibold">
-                {p.count} kandidat
+      {points.map((p, i) => {
+        const shouldShowLabel = showAllLabels || (i % labelStep === 0) || i === points.length - 1;
+        return (
+          <g key={i}>
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={hoveredIndex === i ? 6 : 4}
+              className="fill-primary stroke-background"
+              strokeWidth={2}
+              onMouseEnter={() => setHoveredIndex(i)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            />
+            {shouldShowLabel && (
+              <text x={p.x} y={height - 10} textAnchor="middle" className="text-xs fill-on-surface-variant">
+                {formatPeriodLabel(p.period)}
               </text>
-            </g>
-          )}
-        </g>
-      ))}
+            )}
+            <text x={p.x} y={p.y - 10} textAnchor="middle" className="text-xs fill-on-surface font-semibold">
+              {p.count}
+            </text>
+            {hoveredIndex === i && (
+              <g>
+                <rect x={p.x - 30} y={p.y - 30} width={60} height={22} rx={4} className="fill-surface-container-high" />
+                <text x={p.x} y={p.y - 16} textAnchor="middle" className="text-xs fill-on-surface-container-high font-semibold">
+                  {p.count} kandidat
+                </text>
+              </g>
+            )}
+          </g>
+        );
+      })}
     </svg>
+  );
+}
+
+function SimpleHorizontalBarChart({ data, valueLabel = "Jumlah" }: { data: { name: string; value: number }[]; valueLabel?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(400);
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) setChartWidth(containerRef.current.clientWidth);
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
+  if (!data.length) return (
+    <div className="h-64 flex items-center justify-center text-sm text-on-surface-variant">
+      Belum ada data.
+    </div>
+  );
+
+  const maxValue = Math.max(...data.map(d => d.value), 1);
+  const barAreaWidth = chartWidth - 170;
+
+  return (
+    <div ref={containerRef}>
+      <div className="flex flex-col gap-3">
+        {data.map((item, idx) => {
+          const barWidth = barAreaWidth > 0 ? Math.max(2, (item.value / maxValue) * barAreaWidth) : 0;
+          return (
+            <div key={idx} className="flex items-center gap-3 min-h-[36px]">
+              <div className="w-40 flex-shrink-0 flex items-center">
+                <span className="text-sm font-medium text-on-surface truncate max-w-[140px]">{item.name}</span>
+              </div>
+              <div className="flex-1 h-6 bg-surface rounded-md overflow-hidden relative border border-outline-variant/40">
+                <div
+                  className="h-full bg-primary/80"
+                  style={{ width: `${barWidth}px` }}
+                />
+                <span
+                  className="absolute top-1/2 -translate-y-1/2 text-xs font-semibold"
+                  style={{ left: barWidth < 40 ? barWidth + 6 : barWidth - 24, color: barWidth < 40 ? '' : 'white' }}
+                >
+                  {item.value}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -198,6 +285,16 @@ export default function AnalyticsPage() {
   const { data: recruiterData, isLoading: isLoadingRecruiter } = useQuery({
     queryKey: ["analytics-recruiter-workload"],
     queryFn: fetchRecruiterWorkload,
+  });
+
+  const { data: positionAppData, isLoading: isLoadingPositionApp } = useQuery({
+    queryKey: ["analytics-applications-by-position"],
+    queryFn: fetchApplicationsByPosition,
+  });
+
+  const { data: companyAppData, isLoading: isLoadingCompanyApp } = useQuery({
+    queryKey: ["analytics-applications-by-company"],
+    queryFn: fetchApplicationsByCompany,
   });
 
   const [chartWidth, setChartWidth] = useState(400);
@@ -358,6 +455,38 @@ export default function AnalyticsPage() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div className="bg-surface-container-low rounded-xl border border-outline-variant p-6 shadow-sm">
+          <h2 className="text-title-md font-semibold text-on-surface mb-4">
+            Jumlah Pelamar per Posisi
+          </h2>
+          {isLoadingPositionApp ? (
+            <p className="text-sm text-on-surface-variant">Memuat data posisi...</p>
+          ) : !positionAppData || positionAppData.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">Belum ada data posisi.</p>
+          ) : (
+            <SimpleHorizontalBarChart
+              data={positionAppData.map(item => ({ name: item.position_title, value: item.total_applications }))}
+            />
+          )}
+        </div>
+
+        <div className="bg-surface-container-low rounded-xl border border-outline-variant p-6 shadow-sm">
+          <h2 className="text-title-md font-semibold text-on-surface mb-4">
+            Jumlah Pelamar per Perusahaan (Client)
+          </h2>
+          {isLoadingCompanyApp ? (
+            <p className="text-sm text-on-surface-variant">Memuat data perusahaan...</p>
+          ) : !companyAppData || companyAppData.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">Belum ada data perusahaan.</p>
+          ) : (
+            <SimpleHorizontalBarChart
+              data={companyAppData.map(item => ({ name: item.client_name, value: item.total_applications }))}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

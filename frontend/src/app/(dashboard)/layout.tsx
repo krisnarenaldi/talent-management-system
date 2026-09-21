@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 import TokenRefreshProvider from "@/components/TokenRefreshProvider";
+import NotificationBell from "@/components/NotificationBell";
 import { useAuthStore } from "@/stores/auth.store";
 import api from "@/lib/api";
 
@@ -87,7 +88,7 @@ export default function DashboardLayout({
 
   const initials = (user?.name ?? "")
     .split(" ")
-    .map((n) => n[0])
+    .map((n: string) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
@@ -109,9 +110,7 @@ export default function DashboardLayout({
               Candidate Database
             </h2>
             <div className="flex items-center gap-2 ml-auto">
-              <button className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container transition-colors" title="Notifications">
-                <span className="material-symbols-outlined">notifications</span>
-              </button>
+              <NotificationBell />
               <button className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container transition-colors" title="Help">
                 <span className="material-symbols-outlined">help</span>
               </button>
@@ -140,7 +139,7 @@ export default function DashboardLayout({
                         <p className="text-caption text-on-surface-variant truncate">{user?.email}</p>
                       </div>
                       <Link
-                        href="/settings/profile"
+                        href="/settings"
                         onClick={() => setMenuOpen(false)}
                         className="flex items-center gap-3 px-4 py-2.5 text-body-sm text-on-surface hover:bg-primary-container hover:text-on-primary transition-colors"
                       >

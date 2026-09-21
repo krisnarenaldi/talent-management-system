@@ -49,6 +49,14 @@ TMS dibangun untuk mendigitalkan seluruh alur tersebut: database kandidat terpus
 - `FR-03.6` **Deteksi duplikat**: saat input kandidat baru, sistem mengecek kecocokan email & no. HP; jika cocok satu (bukan keduanya), tandai sebagai kemungkinan duplikat untuk review manual
 - `FR-03.7` Catatan bebas oleh recruiter per kandidat
 - `FR-03.8` Cek otomatis blacklist saat input kandidat baru: cocokkan berdasarkan email / no. HP / NIK, tampilkan warning jika match
+- `FR-03.9` **Bulk Upload CV (AI-Assisted Entry)**: HR dapat mengunggah banyak file CV (PDF) sekaligus di halaman `/applications/new` saat membuat lamaran baru untuk suatu posisi. Alur upload:
+  1. HR membuka `/applications/new`, memilih posisi (termasuk nama client/perusahaan)
+  2. HR mengupload satu atau banyak file CV sekaligus (multi-file)
+  3. FastAPI menerima file, mengupload ke OneDrive (folder terstruktur per posisi/client), mencatat status `menunggu_screening_ai` ke DB, lalu mengirim webhook ke n8n
+  4. n8n memproses setiap CV secara asinkron: download dari OneDrive → parsing teks (PyMuPDF/OCR) → kirim ke LLM → terima JSON terstruktur + skor → POST ke FastAPI `/internal/ai/extraction-result`
+  5. Setelah selesai, sistem membuat notifikasi in-app untuk HR yang mengupload
+  6. HR membuka halaman review, melihat hasil ekstraksi AI di sebelah form kandidat, mengedit tiap field bila perlu, lalu memutuskan aksi (lihat FR-08.8)
+  - Upload melalui FastAPI (bukan langsung ke Drive) agar setiap file terasosiasi ke posisi, user, dan waktu upload yang jelas (audit trail)
 
 ### FR-04: Tracking Pipeline Rekrutmen
 - `FR-04.1` Satu kandidat dapat memiliki lebih dari satu Application (terhadap posisi/waktu berbeda) tanpa menimpa riwayat
@@ -87,13 +95,21 @@ TMS dibangun untuk mendigitalkan seluruh alur tersebut: database kandidat terpus
 - `FR-07.4` Summary/ringkasan kandidat: bisa ditulis manual oleh HR atau digenerate AI, dengan pilihan bahasa (ID/EN)
 
 ### FR-08: AI Screening & Ekstraksi CV (Fase 3)
-- `FR-08.1` Ekstraksi teks dari PDF menggunakan PyMuPDF/pdfplumber (text-based PDF); untuk CV hasil scan, gunakan OCR biasa (Tesseract/PaddleOCR) terlebih dahulu — **bukan model vision LLM** (lebih murah, sesuai keputusan klien)
+- `FR-08.1` Ekstraksi teks dari PDF menggunakan PyMuPDF/pdfplumber (text-based PDF); untuk CV hasil scan, gunakan OCR biasa (Tesseract/PaddleOCR) terlebih dahulu — **bukan model vision LLM** (lebih murah, sesuai keputusan klien). Logic parsing ditempatkan di FastAPI sebagai internal endpoint (bukan di dalam container n8n) — n8n berperan sebagai orchestrator alur, bukan processing engine
 - `FR-08.2` AI (model text-only) mengekstrak field terstruktur: nama, kontak, pendidikan, pengalaman, skill → mengisi kolom database
-- `FR-08.3` **Wajib ada UI review/edit** sebelum data hasil ekstraksi AI tersimpan final (human-in-the-loop)
-- `FR-08.4` AI mencocokkan profil kandidat dengan requirement posisi dan memberi scoring/ranking
+- `FR-08.3` **Wajib ada UI review/edit** sebelum data hasil ekstraksi AI tersimpan final (human-in-the-loop). Komponen `AIExtractionReview` menampilkan hasil AI di sebelah form kandidat; HR bisa edit tiap field sebelum simpan
+- `FR-08.4` AI mencocokkan profil kandidat dengan requirement posisi dan memberi scoring/ranking. Skor bersifat **per-posisi**, dikonfigurasi oleh Admin/Manager di master data posisi (`ai_scoring_config` JSON pada tabel `position`), mencakup: bobot per dimensi (pendidikan, lama pengalaman, kecocokan skill, relevansi domain), required skills, min pengalaman, dan threshold skor untuk tiap kategori keputusan
 - `FR-08.5` AI menyusun draft daftar "Project" dari pengalaman kerja kandidat; recruiter edit/setujui sebelum masuk CV final
 - `FR-08.6` Proses ekstraksi berjalan **asinkron** (antrian/queue) — tidak memblokir upload dan tidak membekukan UI
 - `FR-08.7` Estimasi biaya operasional AI: ~Rp 400–900 ribu/bulan untuk 200 CV/hari (text-only, tergantung model yang dipilih)
+- `FR-08.8` **Aksi HR berdasarkan skor AI** setelah review hasil ekstraksi:
+  - Skor ≥ threshold tinggi (default 80): badge "Rekomendasi Kuat" + tombol **"Terima & Buat Lamaran"** (1-click — buat `candidate` + `application` + `ai_screening_result` sekaligus)
+  - Skor antara threshold rendah–tinggi (default 60–79): badge "Perlu Pertimbangan" + tombol **"Review & Buat Lamaran"** (buka form edit lengkap sebelum simpan)
+  - Skor < threshold rendah (default 60): badge "Kurang Sesuai" + tombol **"Simpan Sebagai Kandidat"** (buat `candidate` saja, tanpa `application`) dan **"Tetap Proses"** (override manual)
+  - HR/Manager **selalu bisa override** keputusan AI apapun nilainya — skor hanya rekomendasi, bukan penentu otomatis
+- `FR-08.9` Hasil AI screening ditampilkan di halaman `/applications`:
+  - List view: kolom/badge **"AI Score"** per baris lamaran dengan warna (hijau/kuning/merah) dan status pemrosesan (⏳ Memproses / ✅ Siap Review / ✓ Sudah Direview)
+  - Detail view `/applications/[id]`: panel "Hasil AI Screening" menampilkan skor angka, catatan AI, dan ringkasan match per dimensi
 
 ### FR-09: Natural Language Search (Fase 3, Eksklusif Manager)
 - `FR-09.1` Hanya role **Manager** yang dapat mengakses fitur ini, dibatasi di level API (bukan hanya UI)
@@ -114,6 +130,14 @@ TMS dibangun untuk mendigitalkan seluruh alur tersebut: database kandidat terpus
 - `FR-11.5` Data payroll (THP, rekening, BPJS, NPWP) disimpan di tabel terpisah (Employee_Payroll) dengan akses dibatasi ke **Manager & Admin** saja
 - `FR-11.6` Dokumen karyawan disimpan sebagai baris per tipe (fleksibel, sama pola dengan dokumen kandidat)
 - `FR-11.7` Form input karyawan dibagi menjadi tab: **Data Pribadi / Kontrak / Payroll / Dokumen**
+
+### FR-12: Notifikasi In-App (Fase 3)
+- `FR-12.1` Sistem membuat notifikasi in-app untuk user HR yang melakukan upload CV saat semua CV dalam satu batch selesai diproses oleh AI (n8n POST ke `/internal/ai/extraction-result` → FastAPI buat record `notification` di DB)
+- `FR-12.2` Notifikasi ditampilkan via **bell icon di navbar** — badge angka menunjukkan jumlah notifikasi belum dibaca; frontend polling tiap 30 detik saat user aktif
+- `FR-12.3` Klik notifikasi langsung mengarahkan ke halaman `/applications/pending-review` (list semua hasil AI yang belum direview oleh HR)
+- `FR-12.4` Halaman `/applications/pending-review` menampilkan semua screening dengan status `siap_review`, diurutkan dari yang terlama menunggu, dilengkapi filter posisi dan tanggal upload
+- `FR-12.5` Manager juga menerima notifikasi yang sama sebagai pengawas (boleh dikonfigurasi — by default Manager menerima notifikasi untuk semua posisi yang ia kelola)
+- `FR-12.6` Notifikasi disimpan di tabel `notification` (DB): `id`, `user_id`, `type`, `message`, `link`, `is_read`, `created_at`
 
 ---
 

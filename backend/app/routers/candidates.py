@@ -25,6 +25,7 @@ from app.schemas.candidate import (
     ExperienceUpdate,
 )
 from app.services import candidate_service
+from app.services.ai_service import generate_project_drafts
 from app.services.storage_service import get_storage_service
 
 router = APIRouter()
@@ -73,21 +74,83 @@ def list_candidates(
     search: str | None = Query(None),
     source_channel: str | None = Query(None),
     completeness_status: str | None = Query(None),
+    city: str | None = Query(None),
+    experience_level: str | None = Query(None),
+    education: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from sqlalchemy import or_, String, func, select
+
     query = db.query(Candidate)
+    
     if search:
         pattern = f"%{search}%"
         query = query.filter(
-            (Candidate.full_name.ilike(pattern))
-            | (Candidate.email.ilike(pattern))
-            | (Candidate.phone.ilike(pattern))
+            or_(
+                Candidate.full_name.ilike(pattern),
+                Candidate.email.ilike(pattern),
+                Candidate.phone.ilike(pattern),
+                Candidate.domicile.ilike(pattern),
+                Candidate.notes.ilike(pattern),
+                Candidate.skills.cast(String).ilike(pattern),
+                Candidate.educations.any(
+                    or_(
+                        CandidateEducation.institution.ilike(pattern),
+                        CandidateEducation.major.ilike(pattern)
+                    )
+                ),
+                Candidate.experiences.any(
+                    or_(
+                        CandidateExperience.company_name.ilike(pattern),
+                        CandidateExperience.job_title.ilike(pattern),
+                        CandidateExperience.description.ilike(pattern)
+                    )
+                )
+            )
         )
+        
     if source_channel:
         query = query.filter(Candidate.source_channel == source_channel)
+        
     if completeness_status:
         query = query.filter(Candidate.completeness_status == completeness_status)
+        
+    if city:
+        jabotabek = ["jakarta", "bogor", "depok", "tangerang", "bekasi"]
+        conditions = [Candidate.domicile.ilike(f"%{c}%") for c in jabotabek]
+        if city.lower() == "jabotabek":
+            query = query.filter(or_(*conditions))
+        elif city.lower() == "non_jabotabek":
+            query = query.filter(~or_(*conditions))
+            
+    if experience_level:
+        exp_stmt = select(
+            CandidateExperience.candidate_id,
+            func.sum(
+                func.coalesce(CandidateExperience.end_date, func.current_date()) - CandidateExperience.start_date
+            ).label("total_days")
+        ).group_by(CandidateExperience.candidate_id).subquery()
+
+        query = query.outerjoin(exp_stmt, Candidate.id == exp_stmt.c.candidate_id)
+
+        if experience_level == "junior":
+            query = query.filter(or_(exp_stmt.c.total_days == None, exp_stmt.c.total_days <= 1095))
+        elif experience_level == "intermediate":
+            query = query.filter(exp_stmt.c.total_days > 1095, exp_stmt.c.total_days <= 1825)
+        elif experience_level == "senior":
+            query = query.filter(exp_stmt.c.total_days > 1825)
+            
+    if education:
+        query = query.filter(
+            Candidate.educations.any(
+                or_(
+                    CandidateEducation.institution.ilike(f"%{education}%"),
+                    CandidateEducation.major.ilike(f"%{education}%")
+                )
+            )
+        )
+
     candidates = query.offset(skip).limit(limit).all()
     # Re-compute & persist freshness for each returned candidate
     for c in candidates:
@@ -415,7 +478,7 @@ def list_documents(
 @router.post("/{candidate_id}/documents/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     candidate_id: str,
-    doc_type: str = Query(..., description="KTP/Ijazah/Transkrip/CV_asli/Foto/Sertifikat/BPJS_TK/BPJS_Kesehatan/NPWP"),
+    doc_type: str = Query(..., description="KTP/Ijazah/Transkrip/CV_asli/Foto/Sertifikat/Dokumen_Onboarding/BPJS_TK/BPJS_Kesehatan/NPWP"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
@@ -500,6 +563,20 @@ def toggle_verify_document(
     db.commit()
     db.refresh(doc)
     return doc
+
+
+@router.post("/{candidate_id}/ai/draft-projects", response_model=dict)
+def generate_candidate_project_drafts(
+    candidate_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """Generate draft project list dari pengalaman kandidat via LLM (dengan fallback heuristik)."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+
+    return generate_project_drafts(candidate, db)
 
 
 @router.delete("/{candidate_id}/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -40,6 +40,23 @@ services:
     networks:
       - tms_internal
 
+  # ── Redis (arq job queue) ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: tms_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"   # expose ke host untuk dev lokal (arq worker & FastAPI di luar Docker)
+    networks:
+      - tms_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   # ── FastAPI (Backend) ────────────────────────────────────────
   backend:
     build:
@@ -52,13 +69,43 @@ services:
     environment:
       POSTGRES_HOST: pgbouncer
       POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - pgbouncer
+      - redis
     networks:
       - tms_internal
     volumes:
       - ./backend/uploads:/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     # Port tidak diekspos langsung — diakses via Nginx
+
+  # ── arq Worker (CV pipeline + cron jobs) ────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tms_worker
+    restart: unless-stopped
+    user: "root"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: pgbouncer
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    command: arq app.worker.WorkerSettings
+    depends_on:
+      - pgbouncer
+      - redis
+    networks:
+      - tms_internal
+    volumes:
+      - ./backend/uploads:/uploads
 
   # ── Next.js (Frontend) ──────────────────────────────────────
   frontend:
@@ -76,37 +123,13 @@ services:
       - tms_internal
     # Port tidak diekspos langsung — diakses via Nginx
 
-  # ── n8n (Automation / Queue) ────────────────────────────────
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: tms_n8n
-    restart: unless-stopped
-    environment:
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      N8N_HOST: ${APP_DOMAIN}
-      N8N_PROTOCOL: https
-      N8N_PATH: /n8n/
-      N8N_EDITOR_BASE_URL: https://${APP_DOMAIN}/n8n/
-      WEBHOOK_URL: ${N8N_WEBHOOK_BASE_URL}
-      GENERIC_TIMEZONE: Asia/Jakarta
-    volumes:
-      - n8n_data:/home/node/.n8n
-    depends_on:
-      - backend
-    networks:
-      - tms_internal
-    # Port 5678 diekspos ke Nginx, tapi akses n8n UI dibatasi via Nginx auth
-
   # ── Nginx (Reverse Proxy) ───────────────────────────────────
   nginx:
     image: nginx:alpine
     container_name: tms_nginx
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
@@ -115,13 +138,13 @@ services:
     depends_on:
       - frontend
       - backend
-      - n8n
     networks:
       - tms_internal
 
 volumes:
   postgres_data:
-  n8n_data:
+  redis_data:
+  # n8n_data diarsipkan — tidak lagi dipakai (lihat n8n/README.md)
 
 networks:
   tms_internal:

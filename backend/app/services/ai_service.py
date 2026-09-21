@@ -31,6 +31,174 @@ from app.models.blacklist import Blacklist
 
 logger = logging.getLogger(__name__)
 
+
+def parse_project_drafts_response(raw_response: str | dict | None) -> dict[str, Any]:
+    """Normalisasi respons draft project dari LLM agar frontend bisa konsisten menangani hasil AI."""
+    if raw_response is None:
+        return {"drafts": []}
+
+    if isinstance(raw_response, dict):
+        payload = raw_response
+    else:
+        try:
+            payload = json.loads(raw_response)
+        except json.JSONDecodeError:
+            return {"drafts": []}
+
+    drafts = payload.get("drafts")
+    if not isinstance(drafts, list):
+        drafts = []
+
+    normalized: list[dict[str, Any]] = []
+    for item in drafts:
+        if not isinstance(item, dict):
+            continue
+        normalized.append(
+            {
+                "project_name": item.get("project_name") or "Proyek",
+                "role": item.get("role") or item.get("job_title") or "",
+                "summary": item.get("summary") or "",
+                "impact": item.get("impact") or "",
+                "tech_stack": item.get("tech_stack") or [],
+                "duration": item.get("duration") or "",
+            }
+        )
+
+    return {"drafts": normalized}
+
+
+PROJECT_DRAFTS_SYSTEM_PROMPT = """\
+Kamu adalah penulis CV yang ahli. Tugas: analisis pengalaman kerja kandidat di bawah ini,
+lalu buat 2-4 draft "project pengalaman" yang relevan untuk ditampilkan di CV proyek.
+
+Output HARUS berupa JSON dengan format:
+{
+  "drafts": [
+    {
+      "project_name": "Nama proyek (spesifik, bukan jabatan)",
+      "role": "Jabatan/peran dalam proyek",
+      "summary": "Ringkasan proyek 1-2 kalimat (Bahasa Indonesia)",
+      "impact": "Dampak/hasil yang dicapai: kuantitatif jika bisa (Bahasa Indonesia)",
+      "tech_stack": ["teknologi1", "teknologi2"],
+      "duration": "Misal: 6 bulan, 1 tahun, dst"
+    }
+  ]
+}
+
+Aturan:
+- Hanya kembalikan JSON yang valid. Jangan tambahkan teks apapun di luar JSON.
+- Buat ringkasan dan dampak SELALU dalam Bahasa Indonesia, natural, tidak bertele-tele.
+- Gunakan nama proyek yang spesifik (bukan jabatan) jika bisa disimpulkan dari job desc.
+- Jika pengalaman kurang jelas, buat proyek yang paling relevan dengan jabatan & deskripsinya.
+- tech_stack harus array string, lowercase.
+- Jangan membuat informasi fiktif yang sensasional (misal "meningkatkan revenue 500%"), realistis saja.
+- Jika kandidat baru lulus / tidak ada pengalaman, kembalikan {"drafts": []}.
+"""
+
+
+def generate_project_drafts(candidate: Candidate, db: Session) -> dict[str, Any]:
+    """
+    Mengambil pengalaman kandidat dari DB, kirim ke LLM untuk diubah jadi
+    draft project, kembalikan {drafts: [...]}. Jika LLM gagal, fallback ke
+    list kosong dan berikan pesan di key `message` untuk ditampilkan user.
+    """
+    experiences = (
+        db.query(CandidateExperience)
+        .filter(CandidateExperience.candidate_id == candidate.id)
+        .order_by(
+            CandidateExperience.end_date.is_(None).desc(),
+            CandidateExperience.start_date.desc().nullslast(),
+        )
+        .all()
+    )
+
+    if not experiences:
+        return {"drafts": [], "message": "Kandidat belum memiliki riwayat pengalaman kerja."}
+
+    user_parts: list[str] = []
+    for i, exp in enumerate(experiences, 1):
+        parts = [f"#{i} {exp.job_title or 'Jabatan tidak diketahui'} di {exp.company_name or 'Perusahaan tidak diketahui'}"]
+        if exp.start_date or exp.end_date:
+            sd = str(exp.start_date) if exp.start_date else "?"
+            ed = "sekarang" if exp.end_date is None else (str(exp.end_date) if exp.end_date else "?")
+            parts.append(f"Periode: {sd} s/d {ed}")
+        if exp.description:
+            parts.append(f"Deskripsi: {exp.description}")
+        user_parts.append("\n".join(parts))
+
+    user_content = (
+        f"Nama kandidat: {candidate.full_name}\n"
+        + (f"Skills: {', '.join(candidate.skills)}\n" if candidate.skills else "")
+        + "Riwayat pekerjaan:\n\n"
+        + "\n\n".join(user_parts)
+    )
+
+    if not settings.OPENAI_API_KEY:
+        # Fallback — generate drafts heuristik jika LLM tidak tersedia.
+        return _heuristic_project_drafts(experiences, candidate.skills)
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        resp = client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": PROJECT_DRAFTS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.5,
+            max_tokens=1200,
+            response_format={"type": "json_object"},
+        )
+        raw = resp.choices[0].message.content
+    except Exception as exc:
+        logger.warning("LLM project drafts gagal, fallback ke heuristik. error=%s", exc)
+        return _heuristic_project_drafts(experiences, candidate.skills)
+
+    normalized = parse_project_drafts_response(raw)
+    if not normalized["drafts"]:
+        # LLM balik kosong, fallback
+        return _heuristic_project_drafts(experiences, candidate.skills)
+    return normalized
+
+
+def _heuristic_project_drafts(experiences: list[CandidateExperience], skills: Any) -> dict[str, Any]:
+    """Fallback sederhana: jabatan + deskripsi = 1 draft tiap pengalaman."""
+    drafts: list[dict[str, Any]] = []
+    for exp in experiences[:4]:
+        if not exp.job_title and not exp.description:
+            continue
+        project_name = (exp.company_name or "Perusahaan") + " — " + (exp.job_title or "Proyek utama")
+        duration = ""
+        if exp.start_date and exp.end_date:
+            months = max(1, round(((exp.end_date - exp.start_date).days / 30.4)))
+            duration = f"{months} bulan" if months < 12 else f"{round(months / 12, 1)} tahun"
+        elif exp.start_date and exp.end_date is None:
+            import datetime as _dt
+            months = max(1, round(((_dt.date.today() - exp.start_date).days / 30.4)))
+            duration = f"{months} bulan (s/d sekarang)" if months < 12 else f"{round(months / 12, 1)} tahun (s/d sekarang)"
+
+        desc = (exp.description or "").strip()
+        summary = desc[:180] + ("..." if len(desc) > 180 else "") if desc else "Bertanggung jawab atas seluruh pekerjaan sesuai jabatan."
+
+        tech_stack = []
+        if isinstance(skills, list) and skills:
+            tech_stack = [str(s).strip().lower() for s in skills if isinstance(s, str)][:8]
+
+        drafts.append(
+            {
+                "project_name": project_name,
+                "role": exp.job_title or "Staff",
+                "summary": summary,
+                "impact": "Melaksanakan tanggung jawab sesuai standar departemen (catatan: hasil AI tidak tersedia).",
+                "tech_stack": tech_stack,
+                "duration": duration,
+            }
+        )
+    return {"drafts": drafts, "message": "Draft dihasilkan secara heuristik (LLM tidak tersedia)."}
+
+
 # ── Whitelist filter key yang diizinkan dari LLM ─────────────────────────────
 ALLOWED_FILTER_KEYS: frozenset[str] = frozenset({
     "skills",

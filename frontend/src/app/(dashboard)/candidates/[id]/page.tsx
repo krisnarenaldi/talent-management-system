@@ -2,9 +2,10 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { FileText } from "lucide-react";
 import api from "@/lib/api";
 import DocumentUploader from "@/components/candidates/DocumentUploader";
 import type {
@@ -13,6 +14,16 @@ import type {
   CandidateEducation,
   CandidateExperience,
 } from "@/types";
+
+interface DraftProjectItem {
+  project_name: string;
+  role: string;
+  summary: string;
+  impact: string;
+  tech_stack: string[];
+  duration: string;
+  approved?: boolean;
+}
 
 type TabKey = "profil" | "dokumen" | "lamaran" | "catatan";
 
@@ -39,6 +50,7 @@ async function fetchApplications(): Promise<Application[]> {
 export default function CandidateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [tab, setTab] = useState<TabKey>("profil");
+  const [draftProjects, setDraftProjects] = useState<DraftProjectItem[]>([]);
 
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["candidate", id],
@@ -67,6 +79,28 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
     queryKey: ["candidate-documents", id],
     queryFn: () => api.get(`/api/v1/candidates/${id}/documents/`).then((r) => r.data),
   });
+
+  const generateDraftMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post(`/api/v1/candidates/${id}/ai/draft-projects`);
+      return (response.data?.drafts ?? []) as DraftProjectItem[];
+    },
+    onSuccess: (data) => {
+      setDraftProjects(data.map((item) => ({ ...item, approved: false })));
+    },
+  });
+
+  const updateDraftProject = (
+    index: number,
+    field: keyof DraftProjectItem,
+    value: DraftProjectItem[keyof DraftProjectItem],
+  ) => {
+    setDraftProjects((current) =>
+      current.map((project, projectIndex) =>
+        projectIndex === index ? { ...project, [field]: value } : project,
+      ),
+    );
+  };
 
   if (isLoading || !candidate) {
     return <div className="p-6 text-gray-500">Memuat detail kandidat...</div>;
@@ -101,12 +135,21 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             <h1 className="mt-2 text-2xl font-bold text-gray-900">{candidate.full_name}</h1>
           </div>
         </div>
-        <Link
-          href={`/candidates/${id}/edit`}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Edit kandidat
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/candidates/${id}/cv`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100"
+          >
+            <FileText className="h-4 w-4" />
+            CV Standar
+          </Link>
+          <Link
+            href={`/candidates/${id}/edit`}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Edit kandidat
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -174,7 +217,6 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                       <p className="text-sm text-gray-600">{education.major || "-"}</p>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500">
                         {education.graduation_year && <span>Tahun: {education.graduation_year}</span>}
-                        {education.gpa && <span>IPK: {Number(education.gpa).toFixed(2)}</span>}
                       </div>
                     </div>
                   ))}
@@ -183,7 +225,18 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">Pengalaman Kerja</h2>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-gray-900">Pengalaman Kerja</h2>
+                <button
+                  type="button"
+                  onClick={() => generateDraftMutation.mutate()}
+                  disabled={generateDraftMutation.isPending || experiences.length === 0}
+                  className="rounded-lg bg-secondary px-3 py-2 text-xs font-semibold text-on-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {generateDraftMutation.isPending ? "Membuat draft..." : "Generate Draft Project AI"}
+                </button>
+              </div>
+
               {experiences.length === 0 ? (
                 <p className="text-sm text-gray-500">Belum ada pengalaman kerja.</p>
               ) : (
@@ -202,6 +255,93 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                       <p className="mt-2 whitespace-pre-line text-sm text-gray-600">{exp.description || "-"}</p>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {draftProjects.length > 0 && (
+                <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-base font-semibold text-gray-900">Draft Project AI</h3>
+                    <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                      Review sebelum CV
+                    </span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {draftProjects.map((project, index) => (
+                      <div key={`${project.project_name}-${index}`} className="rounded-xl border border-blue-100 bg-white p-4">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="block text-sm text-gray-700">
+                            <span className="mb-1 block font-medium">Nama proyek</span>
+                            <input
+                              value={project.project_name}
+                              onChange={(event) => updateDraftProject(index, "project_name", event.target.value)}
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+                            />
+                          </label>
+                          <label className="block text-sm text-gray-700">
+                            <span className="mb-1 block font-medium">Peran</span>
+                            <input
+                              value={project.role}
+                              onChange={(event) => updateDraftProject(index, "role", event.target.value)}
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <label className="block text-sm text-gray-700 md:col-span-2">
+                            <span className="mb-1 block font-medium">Summary</span>
+                            <textarea
+                              value={project.summary}
+                              onChange={(event) => updateDraftProject(index, "summary", event.target.value)}
+                              rows={3}
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+                            />
+                          </label>
+                          <label className="block text-sm text-gray-700 md:col-span-2">
+                            <span className="mb-1 block font-medium">Impact</span>
+                            <textarea
+                              value={project.impact}
+                              onChange={(event) => updateDraftProject(index, "impact", event.target.value)}
+                              rows={3}
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+                            />
+                          </label>
+                          <label className="block text-sm text-gray-700">
+                            <span className="mb-1 block font-medium">Durasi</span>
+                            <input
+                              value={project.duration}
+                              onChange={(event) => updateDraftProject(index, "duration", event.target.value)}
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+                            />
+                          </label>
+                          <label className="block text-sm text-gray-700">
+                            <span className="mb-1 block font-medium">Tech stack</span>
+                            <input
+                              value={project.tech_stack.join(", ")}
+                              onChange={(event) =>
+                                updateDraftProject(index, "tech_stack", event.target.value.split(",").map((item) => item.trim()).filter(Boolean))
+                              }
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateDraftProject(index, "approved", !(project.approved ?? false))
+                            }
+                            className={`rounded-lg px-3 py-2 text-sm font-medium ${project.approved ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                          >
+                            {project.approved ? "Disetujui" : "Setujui draft"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

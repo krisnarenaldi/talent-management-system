@@ -5,7 +5,7 @@ uvicorn[standard]==0.30.6
 # Database
 sqlalchemy==2.0.35
 alembic==1.13.3
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 
 # Auth & security
 python-jose[cryptography]==3.3.0
@@ -13,15 +13,22 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.12
 
 # Validation & settings
-pydantic==2.9.2
+pydantic>=2.11.7,<3.0.0
 pydantic-settings==2.5.2
 
-# HTTP client (Graph API, n8n, LLM)
+# HTTP client (Graph API, LLM)
 httpx==0.27.2
 
+# Async task queue (CV pipeline + cron jobs)
+arq==0.26.1
+
 # PDF parsing (Fase 2-3)
-pymupdf==1.24.10
-pdfplumber==0.11.4
+pymupdf==1.24.14
+# pdfplumber==0.11.4
+
+# PDF generation (Fase 2 — generate CV standar Altek)
+weasyprint==62.3
+Jinja2==3.1.4
 
 # OCR (Fase 3 — untuk CV scan)
 # pytesseract==0.3.13  # Butuh tesseract-ocr terinstall di OS

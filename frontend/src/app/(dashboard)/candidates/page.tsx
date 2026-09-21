@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Filter } from "lucide-react";
+import { Download, FileText, Filter } from "lucide-react";
 import api from "@/lib/api";
 import type { Candidate } from "@/types";
 import { useExport } from "@/hooks/useExport";
@@ -18,17 +18,20 @@ export default function CandidatesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-    const [positionFilter, setPositionFilter] = useState("");
-    const [startDate, setStartDate] = useState("");
-    const [endDate, setEndDate] = useState("");
-    const [showFilters, setShowFilters] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [positionFilter, setPositionFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
+  const [experienceFilter, setExperienceFilter] = useState("");
+  const [educationFilter, setEducationFilter] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const { exportCandidates } = useExport();
 
   const { data: candidates = [], isLoading } = useQuery({
-    queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate, currentPage, itemsPerPage }],
+    queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate, cityFilter, experienceFilter, educationFilter, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchCandidates({
         search: searchTerm || undefined,
@@ -37,6 +40,9 @@ export default function CandidatesPage() {
         position_id: positionFilter || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
+        city: cityFilter || undefined,
+        experience_level: experienceFilter || undefined,
+        education: educationFilter || undefined,
         skip: ((currentPage - 1) * itemsPerPage).toString(),
         limit: itemsPerPage.toString(),
       }),
@@ -118,8 +124,8 @@ export default function CandidatesPage() {
       </div>
 
       {showFilters && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm space-y-3">
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
             <div>
               <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Posisi</label>
               <input
@@ -149,6 +155,43 @@ export default function CandidatesPage() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
             </div>
+            
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Pendidikan</label>
+              <input
+                value={educationFilter}
+                onChange={(e) => setEducationFilter(e.target.value)}
+                placeholder="S1, SMA, dll"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Kota</label>
+              <select
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">Semua</option>
+                <option value="jabotabek">Jabotabek</option>
+                <option value="non_jabotabek">Non Jabotabek</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Pengalaman Kerja</label>
+              <select
+                value={experienceFilter}
+                onChange={(e) => setExperienceFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">Semua</option>
+                <option value="junior">Junior (0-3 thn)</option>
+                <option value="intermediate">Intermediate (3-5 thn)</option>
+                <option value="senior">Senior (&gt; 5 thn)</option>
+              </select>
+            </div>
 
             <div className="flex items-end">
               <button
@@ -156,6 +199,9 @@ export default function CandidatesPage() {
                   setPositionFilter("");
                   setStartDate("");
                   setEndDate("");
+                  setCityFilter("");
+                  setExperienceFilter("");
+                  setEducationFilter("");
                 }}
                 className="w-full rounded-lg bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
               >
@@ -167,17 +213,60 @@ export default function CandidatesPage() {
       )}
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div>
+        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <div className="lg:col-span-2">
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
               Cari
             </label>
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Nama, email, no. HP"
+              placeholder="Cari nama, kota, skill, institusi..."
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Pendidikan
+            </label>
+            <input
+              value={educationFilter}
+              onChange={(e) => setEducationFilter(e.target.value)}
+              placeholder="S1, SMA..."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Kota
+            </label>
+            <select
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            >
+              <option value="">Semua</option>
+              <option value="jabotabek">Jabotabek</option>
+              <option value="non_jabotabek">Non Jabotabek</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Pengalaman
+            </label>
+            <select
+              value={experienceFilter}
+              onChange={(e) => setExperienceFilter(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            >
+              <option value="">Semua</option>
+              <option value="junior">Junior (0-3 thn)</option>
+              <option value="intermediate">Intermediate (3-5 thn)</option>
+              <option value="senior">Senior (&gt; 5 thn)</option>
+            </select>
           </div>
 
           <div>
@@ -196,10 +285,12 @@ export default function CandidatesPage() {
               <option value="Referral">Referral</option>
             </select>
           </div>
-
+        </div>
+        
+        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6 mt-3">
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              Status kelengkapan
+              Kelengkapan
             </label>
             <select
               value={statusFilter}
@@ -321,12 +412,22 @@ export default function CandidatesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/candidates/${candidate.id}`}
-                        className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
-                      >
-                        Lihat detail
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/candidates/${candidate.id}/cv`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition-all hover:bg-violet-100"
+                          title="Generate CV Standar Altek"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          CV
+                        </Link>
+                        <Link
+                          href={`/candidates/${candidate.id}`}
+                          className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
+                        >
+                          Lihat detail
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))

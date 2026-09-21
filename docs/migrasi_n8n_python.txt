@@ -1,0 +1,175 @@
+Remap
+Saya cek workflow n8n:
+Webhook → Code(validate) → HTTP(parse-cv) → Code(validate text) 
+→ HTTP(fetch scoring config) → Code(merge context) → Code(LLM call)
+→ Code(parse response) → HTTP(callback success)
+                       ↘ HTTP(callback error) [on failure]
+
+
+SAya perhatikan hampir semua node adalah HTTP Request ke service saya sendiri (FastAPI) atau Code node (js murni).
+Tidak ada step yang benar-benar memanfaatkan kekuatan n8n (integrasi ke pihak ketiga; slack, gmail, dll). Sepertinya 
+semua bisa dilakukan request.post() biasa.
+
+Saya ingin pindahkan CV Parser (TASK-11.2/TASK-11.5) di file .kiro/specs/tasks.md ke Python murni.
+Ganti n8n workflow ini dengan background task di FastAPI sendiri (pakai BackgroundTask atau Celery/arq+Redis).
+Alasan:
+
+1. Hilangkan 1 network hop + 1 service yang harus dijaga uptime-nya. Saat ini alurnya: FastAPI → HTTP → n8n → HTTP → FastAPI /internal/parse-cv → balik ke n8n → HTTP ke LLM → balik ke n8n → HTTP → FastAPI /internal/ai/extraction-result. Itu 4 HTTP round-trip untuk sesuatu yang bisa jadi 1 pemanggilan fungsi in-process.
+2. Error handling & retry lebih matang di ekosistem Python — pakai tenacity untuk retry, logging yang konsisten dengan sistem lain, bisa di-unit-test dengan pytest. Debug JSON blob n8n di git diff itu menyakitkan dibanding baca kode Python.
+3. Tidak perlu shared secret + endpoint /internal/* khusus untuk "ngomong ke diri sendiri" — logic parse-cv, call LLM, dan update DB bisa langsung jadi service functions yang dipanggil dari task queue.
+4. Ribet setup n8n
+
+Kira-kira bentuknya:
+
+# services/cv_pipeline.py
+async def process_cv(screening_result_id: str):
+    try:
+        text = await parse_cv_from_onedrive(screening_result_id)
+        config = await get_scoring_config(screening_result_id)
+        result = await call_llm_extract_and_score(text, config)
+        await save_extraction_result(screening_result_id, result, status="siap_review")
+    except Exception as e:
+        await save_extraction_result(screening_result_id, None, status="error", error=str(e))
+
+# di endpoint bulk-upload-cv
+background_tasks.add_task(process_cv, screening_result_id)
+
+Kalau volume upload CV bisa banyak sekaligus (bulk upload) pakai Celery + Redis atau arq (lebih ringan, async-native).
+
+
+Buat migrasi lengkap dari n8n ke Python untuk pipeline cv parser (TASK 11.2-11.5)
+
+1. Pakai arq (async task queue berbasis Redis, native asyncio) — cocok karena codebase FastAPI sudah async. Alternatif: Celery+Redis , tapi Celery sync-first dan butuh lebih banyak boilerplate untuk dipadukan dengan FastAPI async. arq lebih ringan: cukup 1 file worker.py, tidak butuh Flower/beat terpisah untuk kasus sesederhana ini.
+
+2. Buat services/cv_pipeline.py berisi fungsi process_cv_screening(screening_result_id) yang memanggil langsung fungsi Python yang sudah ada (parse_cv, get LLM, save result) tanpa lewat HTTP sama sekali — karena semuanya jalan di proses/worker yang sama. Ini menggantikan 8 node n8n jadi satu fungsi terurut dengan try/except.
+
+3. arq butuh WorkerSettings class yang mendaftarkan process_cv_screening sebagai task, plus redis_settings dari env var REDIS_URL. Worker ini jalan sebagai container/proses terpisah dari FastAPI (tapi masih 1 codebase, 1 image).
+
+4. Endpoint POST /api/v1/applications/bulk-upload-cv tidak lagi POST ke N8N_WEBHOOK_URL, tapi langsung await redis_pool.enqueue_job('process_cv_screening', screening_result_id) per file. Ini menghapus 1 service, 1 shared secret, dan 1 potensi titik gagal.
+
+5. Hapus service n8n dan volume n8n_data. Tambah service redis (image redis:7-alpine) dan worker (image sama dengan backend, command berbeda: arq app.worker.WorkerSettings). Di nginx.conf, hapus server block n8n.subdomain kalau sudah sempat dibuat; endpoint /internal/* bisa tetap ada untuk observability/manual retry tapi tidak lagi dipanggil oleh proses eksternal.
+
+6. arq mendukung cron_jobs di WorkerSettings — daftarkan backup_database dan check_contract_expiry sebagai cron job di worker yang sama, tanpa perlu service terpisah. Ini menggantikan 2 workflow n8n cron sekaligus.
+
+7. Jalankan bulk upload dengan beberapa CV sample, pastikan status ai_screening_result berubah menjadi siap_review/error dengan benar dan notifikasi terkirim. Setelah stabil di staging, hapus container n8n dari VPS, hapus dependency n8n dari docker-compose.yml, dan update design.md bagian 6 untuk mencatat perubahan arsitektur ini beserta alasannya.
+
+Kira-kira ini kodenya:
+1. services/cv_pipeline.py — pengganti seluruh workflow n8n
+# app/services/cv_pipeline.py
+import logging
+from app.services.onedrive_service import download_file
+from app.services.pdf_service import extract_text  # PyMuPDF / OCR, sudah ada dari /internal/parse-cv
+from app.services.llm_service import extract_and_score  # panggilan LLM
+from app.db.session import get_session
+from app.models import AiScreeningResult, Position
+from app.services.notification_service import create_batch_notification
+
+logger = logging.getLogger("cv_pipeline")
+
+async def process_cv_screening(ctx, screening_result_id: str):
+    """Menggantikan seluruh node n8n: parse -> fetch config -> LLM -> save."""
+    async with get_session() as db:
+        result = await db.get(AiScreeningResult, screening_result_id)
+        if not result:
+            logger.error(f"screening_result {screening_result_id} tidak ditemukan")
+            return
+
+        try:
+            # Step 1 & 1b (ganti HTTP ke /internal/parse-cv)
+            raw_file = await download_file(result.cv_drive_item_id)
+            text = extract_text(raw_file)
+            if not text or len(text.strip()) < 20:
+                raise ValueError("Teks CV kosong atau terlalu pendek — kemungkinan hasil scan gagal OCR")
+
+            # Step 1c & 1d (ganti HTTP fetch scoring config)
+            position = await db.get(Position, result.position_id)
+            scoring_config = position.ai_scoring_config or {}
+
+            # Step 2 & 3 (panggilan LLM + parsing hasil)
+            extracted = await extract_and_score(cv_text=text, scoring_config=scoring_config)
+
+            # Step 4 (ganti HTTP callback success)
+            result.extracted_json = extracted["data"]
+            result.ai_score = extracted["score"]
+            result.ai_notes = extracted["notes"]
+            result.status = "siap_review"
+            await db.commit()
+
+        except Exception as e:
+            logger.exception(f"CV parsing gagal untuk {screening_result_id}")
+            result.status = "error"
+            result.ai_notes = str(e)
+            await db.commit()
+
+        # cek apakah semua file dalam batch sudah selesai -> notif ringkasan
+        await create_batch_notification(db, result.uploaded_by, result.id)
+
+    2. app/worker.py — pengganti n8n runtime
+
+       # app/worker.py
+from arq.connections import RedisSettings
+from arq.cron import cron
+from app.services.cv_pipeline import process_cv_screening
+from app.services.ops_jobs import backup_database, check_contract_expiry  # TASK-16
+from app.core.config import settings
+
+class WorkerSettings:
+    functions = [process_cv_screening]
+    cron_jobs = [
+        cron(backup_database, hour=2, minute=0),               # ganti n8n "Database Backup"
+        cron(check_contract_expiry, hour=8, minute=0),         # ganti n8n "Contract Expiry Alert"
+    ]
+    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    max_jobs = 10
+    job_timeout = 300  # 5 menit per CV, sesuaikan
+
+
+3. Endpoint bulk-upload — ganti trigger n8n jadi enqueue
+# routers/applications.py
+from app.core.arq_pool import get_redis_pool
+
+@router.post("/bulk-upload-cv")
+async def bulk_upload_cv(position_id: str, files: list[UploadFile], ...):
+    redis = await get_redis_pool()
+    results = []
+    for file in files:
+        drive_item_id = await onedrive_service.upload_file(file, folder_path=...)
+        screening_result = await create_screening_result(position_id, drive_item_id, uploaded_by=current_user.id)
+        await redis.enqueue_job("process_cv_screening", str(screening_result.id))
+        results.append(screening_result)
+    return results  # langsung return, tidak tunggu proses selesai — behavior sama seperti sebelumnya
+
+    services/n8n_service.py dan X-Internal-Secret header handling bisa dihapus sepenuhnya — tidak ada lagi proses eksternal yang perlu diautentikasi karena semuanya jalan di dalam trust boundary yang sama (worker container kamu sendiri).
+
+4. docker-compose.yml — service yang berubah
+
+services:
+  # HAPUS: n8n
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  worker:
+    build: ./backend        # image sama dengan backend
+    command: arq app.worker.WorkerSettings
+    env_file: .env
+    depends_on:
+      - postgres
+      - pgbouncer
+      - redis
+    restart: unless-stopped
+
+volumes:
+  # HAPUS: n8n_data
+  redis_data:
+
+  5. .env — variabel yang berubah
+  - N8N_WEBHOOK_URL=...
+- N8N_ENCRYPTION_KEY=...
+- N8N_INTERNAL_SECRET=...
++ REDIS_URL=redis://redis:6379/0
+
+
+Teruskan dengan pdf_service.py / llm_service.py (ekstraksi dari endpoint /internal/parse-cv yang sudah ada)
