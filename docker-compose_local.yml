@@ -10,8 +10,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # ports:
-    #   - "5432:5432"
+    ports:
+      - "5432:5432"
     networks:
       - tms_internal
     healthcheck:
@@ -47,8 +47,8 @@ services:
     restart: unless-stopped
     volumes:
       - redis_data:/data
-    # ports:
-    #   - "6379:6379"   # expose ke host untuk dev lokal (arq worker & FastAPI di luar Docker)
+    ports:
+      - "6379:6379"   # expose ke host untuk dev lokal (arq worker & FastAPI di luar Docker)
     networks:
       - tms_internal
     healthcheck:
@@ -76,7 +76,7 @@ services:
     networks:
       - tms_internal
     volumes:
-      - uploads_data:/uploads
+      - backend_uploads:/uploads
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
       interval: 10s
@@ -105,8 +105,7 @@ services:
     networks:
       - tms_internal
     volumes:
-      #- ./backend/uploads:/uploads
-      - uploads_data:/uploads
+      - backend_uploads:/uploads
 
   # ── Next.js (Frontend) ──────────────────────────────────────
   frontend:
@@ -136,16 +135,16 @@ services:
     container_name: tms_nginx
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro        # SSL certificates (Let's Encrypt)
       - ./nginx/logs:/var/log/nginx
     depends_on:
-      - frontend:
+      frontend:
         condition: service_healthy
-      - backend:
+      backend:
         condition: service_healthy
     networks:
       - tms_internal
@@ -153,7 +152,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  uploads_data:
+  backend_uploads:
   # n8n_data diarsipkan — tidak lagi dipakai (lihat n8n/README.md)
 
 networks:

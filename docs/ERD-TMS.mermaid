@@ -1,0 +1,221 @@
+erDiagram
+    CLIENT ||--o{ POSITION : "membutuhkan"
+    POSITION ||--o{ APPLICATION : "menerima lamaran"
+    CANDIDATE ||--o{ APPLICATION : "mengajukan lamaran"
+    USER ||--o{ APPLICATION : "ditangani recruiter"
+    APPLICATION ||--o{ STAGE_HISTORY : "punya riwayat tahapan"
+    APPLICATION ||--o| AI_SCREENING_RESULT : "dinilai AI"
+    APPLICATION ||--o| EMPLOYEE : "menjadi karyawan (jika hired)"
+    CANDIDATE ||--o{ EMPLOYEE : "riwayat penempatan (termasuk jika rehire)"
+    EMPLOYEE ||--o{ EMPLOYEE_CONTRACT : "punya riwayat kontrak/perpanjangan"
+    EMPLOYEE ||--o| EMPLOYEE_PAYROLL : "punya data payroll (akses terbatas)"
+    EMPLOYEE ||--o{ EMPLOYEE_DOCUMENT : "punya dokumen karyawan"
+    AGREEMENT_TYPE ||--o{ EMPLOYEE_CONTRACT : "jenis perjanjian Altek-Client"
+    USER ||--o{ AGREEMENT_TYPE : "dikelola oleh Admin"
+    CANDIDATE ||--o{ CANDIDATE_EDUCATION : "punya riwayat pendidikan"
+    CANDIDATE ||--o{ CANDIDATE_EXPERIENCE : "punya riwayat kerja"
+    CANDIDATE ||--o{ CANDIDATE_DOCUMENT : "mengunggah dokumen"
+    CANDIDATE ||--o{ GENERATED_CV : "punya CV standar"
+    CANDIDATE ||--o{ BLACKLIST : "berpotensi masuk daftar"
+    USER ||--o{ BLACKLIST : "menandai"
+    USER ||--o{ STAGE_HISTORY : "mengupdate"
+    BLACKLIST_STATUS_TYPE ||--o{ BLACKLIST : "kategori"
+    USER ||--o{ BLACKLIST_STATUS_TYPE : "dikelola oleh Admin"
+
+    CANDIDATE {
+        uuid id PK
+        string full_name
+        string email
+        string phone
+        string identity_no "KTP - untuk deteksi duplikat"
+        string domicile
+        string photo_url
+        string source_channel "LinkedIn/Glints/Email/dll"
+        decimal current_salary
+        decimal expected_salary
+        int notice_period_days
+        string completeness_status "lengkap/belum lengkap"
+        string contact_status "aktif/tidak_bisa_dihubungi"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CANDIDATE_EDUCATION {
+        uuid id PK
+        uuid candidate_id FK
+        string institution
+        string major
+        int graduation_year
+        decimal gpa
+    }
+
+    CANDIDATE_EXPERIENCE {
+        uuid id PK
+        uuid candidate_id FK
+        string company_name
+        string job_title
+        date start_date
+        date end_date
+        text description
+    }
+
+    CANDIDATE_DOCUMENT {
+        uuid id PK
+        uuid candidate_id FK
+        string doc_type "KTP/KK/Ijazah/Transkrip/Sertifikat/Foto/CV_asli"
+        string file_url
+        boolean is_verified
+        timestamp uploaded_at
+    }
+
+    GENERATED_CV {
+        uuid id PK
+        uuid candidate_id FK
+        uuid application_id FK
+        string template_used
+        string language
+        string summary_source "AI/HR"
+        string file_url
+        timestamp generated_at
+    }
+
+    CLIENT {
+        uuid id PK
+        string name
+        string industry
+        string pic_name
+        string pic_contact
+    }
+
+    POSITION {
+        uuid id PK
+        uuid client_id FK
+        string title
+        text requirement
+        string employment_type
+        int contract_duration_months
+        boolean is_active
+    }
+
+    USER {
+        uuid id PK
+        string name
+        string email
+        string role "admin/hr/manager"
+    }
+
+    APPLICATION {
+        uuid id PK
+        uuid candidate_id FK
+        uuid position_id FK
+        uuid recruiter_id FK
+        string current_stage
+        string status "active/rejected/hired/withdrawn"
+        date cv_submitted_to_pm_date
+        timestamp created_at
+    }
+
+    STAGE_HISTORY {
+        uuid id PK
+        uuid application_id FK
+        string stage_name "Konfirmasi/HR_Interview/Psikotest/User_Interview/Offering/Kontrak/Onboarding"
+        date scheduled_date
+        date actual_date
+        string result "pass/fail/lolos/negosiasi/reschedule"
+        decimal salary_current_input
+        decimal salary_expected_input
+        text notes
+        uuid updated_by FK
+        timestamp created_at
+    }
+
+    AI_SCREENING_RESULT {
+        uuid id PK
+        uuid application_id FK
+        decimal match_score
+        text ai_notes
+        string model_used
+        timestamp scored_at
+    }
+
+    EMPLOYEE {
+        uuid id PK
+        uuid candidate_id FK
+        uuid application_id FK "aplikasi/posisi asal yang menghasilkan status karyawan ini"
+        string employee_nip
+        string full_name
+        date birth_date "usia dihitung otomatis dari sini, tidak disimpan statis"
+        string birth_place
+        string gender
+        string blood_type
+        string personal_email
+        string office_email
+        string phone_number
+        string placement "penempatan / site client"
+        string role_level
+        string employee_status "aktif/cuti/resign"
+        string leave_status "sudah_bisa_cuti/belum"
+        date resign_date
+        string resign_reason
+        text notes "catatan HR/PM"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    EMPLOYEE_CONTRACT {
+        uuid id PK
+        uuid employee_id FK
+        uuid agreement_type_id FK
+        string contract_number
+        int duration_months
+        date join_date
+        date end_date "masa kontrak berjalan dihitung otomatis, tidak disimpan statis"
+        string status "aktif/berakhir/diperpanjang"
+    }
+
+    AGREEMENT_TYPE {
+        uuid id PK
+        string label "jenis perjanjian Altek-Client: PKWT/PKWTT/Pemborongan Pekerjaan/PPJP dll — master data, bisa ditambah Admin"
+        boolean is_active
+    }
+
+    EMPLOYEE_PAYROLL {
+        uuid id PK
+        uuid employee_id FK
+        decimal thp
+        string allowance_used "tunjangan/pinjaman"
+        string payroll_bank
+        string bank_account_number
+        string bpjs_tk_status
+        string bpjs_tk_number
+        string bpjs_kesehatan_status
+        string bpjs_kesehatan_number
+        string npwp_number
+    }
+
+    EMPLOYEE_DOCUMENT {
+        uuid id PK
+        uuid employee_id FK
+        string doc_type "CV_terupdate/CV_template_Altek/Offering_Payslip/Application_Form/KK/KTP/Ijazah/Transkrip/Kartu_BPJS_TK/Kartu_BPJS_Kesehatan/NPWP"
+        string file_url
+        boolean is_verified
+        timestamp uploaded_at
+    }
+
+    BLACKLIST {
+        uuid id PK
+        uuid candidate_id FK
+        uuid status_type_id FK
+        string reason
+        text notes
+        date blacklisted_date
+        uuid pic_user_id FK
+    }
+
+    BLACKLIST_STATUS_TYPE {
+        uuid id PK
+        string label "master data, bisa ditambah Admin"
+        boolean is_active
+        uuid created_by FK
+        timestamp created_at
+    }
