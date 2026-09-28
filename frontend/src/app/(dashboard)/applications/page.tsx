@@ -11,9 +11,15 @@ import type { Application } from "@/types";
 import { useExport } from "@/hooks/useExport";
 import ExportButton from "@/components/ExportButton";
 
-async function fetchApplications(params?: Record<string, string | undefined>) {
+interface ApplicationsResult {
+  items: Application[];
+  total: number;
+}
+
+async function fetchApplications(params?: Record<string, string | undefined>): Promise<ApplicationsResult> {
   const response = await api.get("/api/v1/applications", { params });
-  return response.data as Application[];
+  const total = parseInt(response.headers["x-total-count"] ?? "0", 10);
+  return { items: response.data as Application[], total };
 }
 
 const stageOptions = [
@@ -111,13 +117,19 @@ export default function ApplicationsPage() {
   const [endDate, setEndDate] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const itemsPerPage = 20;
   const user = useAuthStore((state) => state.user);
   const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
 
   const { exportPipeline } = useExport();
 
-  const { data: applications = [], isLoading } = useQuery({
+  // Reset to page 1 whenever any filter changes
+  const handleFilterChange = (setter: (v: string) => void) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
+    setter(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const { data, isLoading } = useQuery({
     queryKey: ["applications", { statusFilter, stageFilter, startDate, endDate, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchApplications({
@@ -129,6 +141,12 @@ export default function ApplicationsPage() {
         limit: itemsPerPage.toString(),
       }),
   });
+
+  const applications = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / itemsPerPage));
+  const firstItem = total === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const lastItem = Math.min(currentPage * itemsPerPage, total);
 
   const handleExport = async () => {
     try {
@@ -226,7 +244,7 @@ export default function ApplicationsPage() {
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={handleFilterChange(setStatusFilter)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             >
               <option value="">Semua</option>
@@ -241,7 +259,7 @@ export default function ApplicationsPage() {
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Tahap</label>
             <select
               value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
+              onChange={handleFilterChange(setStageFilter)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             >
               <option value="">Semua</option>
@@ -258,7 +276,7 @@ export default function ApplicationsPage() {
             <input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={handleFilterChange(setStartDate)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
           </div>
@@ -268,7 +286,7 @@ export default function ApplicationsPage() {
             <input
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={handleFilterChange(setEndDate)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
           </div>
@@ -333,16 +351,24 @@ export default function ApplicationsPage() {
                           <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${aiScoreBadgeClass(application.ai_score)}`}>
                             {aiStatusIcon(application.ai_screening_status)} {application.ai_score}
                           </span>
-                          <span className="text-xs text-gray-400">{application.ai_screening_status === "sudah_direview" ? "Terd_review" : application.ai_screening_status === "siap_review" ? "Siap review" : "Menunggu"}</span>
+                          <span className="text-xs text-gray-400">{application.ai_screening_status === "sudah_direview" ? "Done_review" : application.ai_screening_status === "siap_review" ? "Siap review" : "Menunggu"}</span>
                         </div>
                       ) : (
                         <span className="text-xs text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(application.status)}`}>
-                        {application.status}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(application.status)}`}>
+                          {application.status}
+                        </span>
+                        {application.status === "rejected" && application.is_blacklisted && (
+                          <span className="inline-flex items-center rounded-full bg-red-200 px-2 py-0.5 text-xs font-medium text-red-800">
+                            <span className="material-symbols-outlined text-xs mr-0.5">block</span>
+                            Blacklist
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-700">
                       {application.updated_at ? format(new Date(application.updated_at), "dd MMM yyyy", { locale: idLocale }) : "-"}
@@ -361,6 +387,32 @@ export default function ApplicationsPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between py-4 px-4 border-t border-gray-200">
+          <div className="text-sm text-gray-500">
+            {total === 0
+              ? "Tidak ada lamaran"
+              : `Menampilkan ${firstItem}–${lastItem} dari ${total} lamaran`}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1 || isLoading}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Sebelumnya
+            </button>
+            <span className="text-sm font-medium text-gray-700">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+              disabled={currentPage >= totalPages || isLoading}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Selanjutnya
+            </button>
+          </div>
         </div>
       </div>
     </div>

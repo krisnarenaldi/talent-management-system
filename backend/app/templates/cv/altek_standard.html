@@ -444,7 +444,13 @@
       </tr>
       <tr>
         <td class="label-cell">Project</td>
-        <td>-</td>
+        <td>
+          {% if approved_projects %}
+            {{ approved_projects | map(attribute='project_name') | join(", ") }}
+          {% else %}
+            -
+          {% endif %}
+        </td>
       </tr>
       <tr>
         <td class="label-cell">Tools</td>

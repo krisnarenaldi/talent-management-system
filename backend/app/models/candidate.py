@@ -57,6 +57,7 @@ class Candidate(Base):
     educations = relationship("CandidateEducation", back_populates="candidate", cascade="all, delete-orphan")
     experiences = relationship("CandidateExperience", back_populates="candidate", cascade="all, delete-orphan")
     documents = relationship("CandidateDocument", back_populates="candidate", cascade="all, delete-orphan")
+    projects = relationship("CandidateProject", back_populates="candidate", cascade="all, delete-orphan")
     applications = relationship("Application", back_populates="candidate")
     blacklists = relationship("Blacklist", back_populates="candidate")
 

@@ -1,10 +1,15 @@
 from datetime import date, datetime, timedelta, timezone
+import json
+from pathlib import Path
+
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
+from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.application import (
     APPLICATION_STATUSES,
@@ -30,6 +35,7 @@ from app.schemas.application import (
     StageHistoryResponse,
 )
 from app.services import employee_service
+from app.services.candidate_service import normalize_phone, _phone_variants
 from app.services.storage_service import get_storage_service
 from app.core.arq_pool import get_redis_pool
 
@@ -38,15 +44,162 @@ storage_service = get_storage_service()
 router = APIRouter()
 
 
+def _normalize_extracted_json(value: any) -> dict:
+    """Normalizes extracted_json to always return a dict.
+
+    Handles cases where the JSONB column stores a double-encoded JSON string
+    (i.e. a string that is itself valid JSON) by attempting a second parse.
+    """
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            # double-encoded: the result of first parse is still a string
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
 def _check_candidate_blacklisted(db: Session, candidate_id: str) -> Blacklist | None:
-    """Cek apakah kandidat ada di blacklist (aktif + disetujui). Return record blacklist jika ya, None jika tidak."""
-    return db.execute(
+    """
+    Cek apakah kandidat ada di blacklist (aktif + disetujui).
+    Juga memeriksa sibling candidates yang punya phone/email sama (normalized).
+    Return record blacklist jika ya, None jika tidak.
+    """
+    # Direct check first
+    direct = db.execute(
         select(Blacklist).where(
             Blacklist.candidate_id == candidate_id,
             Blacklist.is_active == True,
             Blacklist.is_approved == True,
         )
     ).scalar_one_or_none()
+    if direct:
+        return direct
+
+    # Also check sibling candidates with same phone (normalised variants)
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        return None
+
+    sibling_ids = _get_sibling_candidate_ids(db, candidate)
+    if not sibling_ids:
+        return None
+
+    return db.execute(
+        select(Blacklist).where(
+            Blacklist.candidate_id.in_(list(sibling_ids)),
+            Blacklist.is_active == True,
+            Blacklist.is_approved == True,
+        )
+    ).scalars().first()
+
+
+def _get_sibling_candidate_ids(db: Session, candidate: Candidate) -> set[str]:
+    """
+    Kembalikan sekumpulan candidate_id (string) yang memiliki email atau phone
+    yang sama dengan kandidat yang diberikan.
+
+    Phone matching uses all normalised variants (0812... and +62812...) so that
+    candidates stored with different phone formats are treated as siblings.
+    Kandidat sumber (candidate.id sendiri) TIDAK disertakan — pemanggil wajib
+    menggabungkannya secara eksplisit.
+    """
+    siblings: set[str] = set()
+
+    filters = []
+    if candidate.email:
+        filters.append(Candidate.email == candidate.email)
+    if candidate.phone:
+        # Match any stored variant of this phone number
+        variants = _phone_variants(candidate.phone)
+        if variants:
+            filters.append(Candidate.phone.in_(variants))
+
+    if not filters:
+        return siblings
+
+    rows = (
+        db.query(Candidate.id)
+        .filter(
+            or_(*filters),
+            Candidate.id != candidate.id,
+        )
+        .all()
+    )
+    for (cid,) in rows:
+        siblings.add(str(cid))
+    return siblings
+
+
+def _find_cooldown_blocking_application(
+    db: Session,
+    candidate_ids: list[str],
+    position_id: str,
+) -> "Application | None":
+    """
+    Cari lamaran yang memblokir cooldown untuk kumpulan kandidat + posisi tertentu.
+
+    Cek dua kondisi:
+    (a) Application.status == "rejected"  — kandidat sudah secara formal ditolak.
+    (b) Application.status == "active" AND terdapat StageHistory dengan result
+        'fail' atau 'tidak_lolos' di tahap MANAPUN — kandidat gagal di suatu
+        tahap tapi lamaran belum di-close secara formal. Tidak dibatasi hanya
+        current_stage agar fail di stage sebelumnya tetap terdeteksi meskipun
+        current_stage sudah berubah.
+
+    Kembalikan lamaran dengan tanggal terbaru, atau None jika tidak ada.
+    """
+    # (a) Lamaran dengan status rejected
+    rejected = (
+        db.query(Application)
+        .filter(
+            Application.candidate_id.in_(candidate_ids),
+            Application.position_id == position_id,
+            Application.status == "rejected",
+        )
+        .order_by(Application.updated_at.desc(), Application.created_at.desc())
+        .first()
+    )
+
+    # (b) Lamaran aktif yang di tahap MANAPUN pernah ditandai fail/tidak_lolos.
+    # Sengaja tidak filter stage_name == current_stage karena current_stage bisa
+    # berubah (mis. HR advance ke stage lain padahal stage sebelumnya sudah fail),
+    # sehingga fail di stage lama tetap terdeteksi sebagai blocking.
+    failed_active = (
+        db.query(Application)
+        .join(
+            StageHistory,
+            (StageHistory.application_id == Application.id)
+            & (StageHistory.result.in_(["fail", "tidak_lolos"])),
+        )
+        .filter(
+            Application.candidate_id.in_(candidate_ids),
+            Application.position_id == position_id,
+            Application.status == "active",
+        )
+        .order_by(Application.updated_at.desc(), Application.created_at.desc())
+        .first()
+    )
+
+    # Pilih yang lebih baru
+    candidates_blocking = [a for a in (rejected, failed_active) if a is not None]
+    if not candidates_blocking:
+        return None
+
+    def _ref_date(app: "Application"):
+        d = app.updated_at or app.created_at
+        if d and d.tzinfo is None:
+            return d.replace(tzinfo=timezone.utc)
+        return d or datetime.min.replace(tzinfo=timezone.utc)
+
+    return max(candidates_blocking, key=_ref_date)
 
 
 # ── List ─────────────────────────────────────────────────────────────────────
@@ -71,6 +224,8 @@ def list_applications(
             joinedload(Application.position).joinedload(Position.client),
             joinedload(Application.recruiter),
             joinedload(Application.stage_histories),
+            joinedload(Application.ai_screening_result),
+            joinedload(Application.candidate).joinedload(Candidate.blacklists),
         )
     )
     if position_id:
@@ -85,7 +240,14 @@ def list_applications(
         query = query.filter(Application.created_at >= start_date)
     if end_date:
         query = query.filter(Application.created_at <= end_date + timedelta(days=1))
-    return query.offset(skip).limit(limit).all()
+
+    total = query.count()
+    items = query.order_by(Application.created_at.desc()).offset(skip).limit(limit).all()
+
+    serialized = [ApplicationResponse.model_validate(item).model_dump(mode="json") for item in items]
+    resp = JSONResponse(content=serialized)
+    resp.headers["X-Total-Count"] = str(total)
+    return resp
 
 
 # ── Create ───────────────────────────────────────────────────────────────────
@@ -128,10 +290,34 @@ def create_application(
     position = db.query(Position).filter(Position.id == payload.position_id).first()
     if not position:
         raise HTTPException(status_code=404, detail="Position tidak ditemukan")
+    if not position.is_active:
+        raise HTTPException(status_code=400, detail="Posisi ini sudah tidak aktif.")
+
+    # Validasi recruiter_id (jika diisi)
+    if payload.recruiter_id:
+        from app.models.user import User
+        recruiter = db.query(User).filter(User.id == payload.recruiter_id).first()
+        if not recruiter:
+            raise HTTPException(status_code=404, detail="Recruiter (user) tidak ditemukan")
+        if not recruiter.is_active:
+            raise HTTPException(status_code=400, detail="Akun recruiter tidak aktif")
+        if recruiter.role not in ("hr", "manager", "admin"):
+            raise HTTPException(status_code=400, detail="Recruiter harus memiliki role HR, Manager, atau Admin")
+
+    # Validasi current_stage
+    if payload.current_stage not in STAGE_NAMES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"current_stage '{payload.current_stage}' tidak valid. Tahapan yang diperbolehkan: {list(STAGE_NAMES)}",
+        )
 
     # Cek duplikasi lamaran aktif ke posisi sama
+    # Cek juga kandidat lain dengan email/phone yang sama (AI extraction bisa menghasilkan format berbeda)
+    sibling_candidate_ids = _get_sibling_candidate_ids(db, candidate)
+    all_candidate_ids = list({str(payload.candidate_id)} | sibling_candidate_ids)
+
     existing = db.query(Application).filter(
-        Application.candidate_id == payload.candidate_id,
+        Application.candidate_id.in_(all_candidate_ids),
         Application.position_id == payload.position_id,
         Application.status == "active",
     ).first()
@@ -140,6 +326,37 @@ def create_application(
             status_code=409,
             detail=f"Kandidat sudah memiliki lamaran aktif untuk posisi ini (ID: {existing.id})",
         )
+
+    # Cek masa tunggu (cooldown) untuk lamaran yang pernah ditolak di posisi sama.
+    # Mencakup:
+    # (a) lamaran dengan status "rejected" (formal — stage moved to Rejected)
+    # (b) lamaran dengan status "active" yang current stage-nya sudah memiliki
+    #     result fail/tidak_lolos (stage gagal tapi belum di-move ke Rejected)
+    # Pencarian dilakukan terhadap semua kandidat dengan email/phone yang sama
+    # agar tidak lolos meski AI ekstraksi menghasilkan format kontak yang sedikit berbeda.
+    if not payload.force_cooldown:
+        rejected_app = _find_cooldown_blocking_application(
+            db, all_candidate_ids, str(payload.position_id)
+        )
+        if rejected_app:
+            ref_date = rejected_app.updated_at or rejected_app.created_at
+            if ref_date:
+                now = datetime.now(timezone.utc)
+                if ref_date.tzinfo is None:
+                    ref_date = ref_date.replace(tzinfo=timezone.utc)
+                elapsed_days = (now - ref_date).days
+                cooldown_days = getattr(settings, "APPLICATION_REJECTED_COOLDOWN_DAYS", 90)
+                if elapsed_days < cooldown_days:
+                    remaining_days = cooldown_days - elapsed_days
+                    rej_str = ref_date.strftime("%Y-%m-%d")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Kandidat ini pernah ditolak untuk posisi ini pada {rej_str}. "
+                            f"Harap tunggu {remaining_days} hari lagi (masa sanggah/cooldown {cooldown_days} hari) "
+                            f"sebelum melamar kembali."
+                        ),
+                    )
 
     application = Application(
         candidate_id=payload.candidate_id,
@@ -240,7 +457,7 @@ def list_pending_reviews(
     if position_id:
         query = query.filter(AIScreeningResult.position_id == position_id)
 
-    results = query.order_by(AIScreeningResult.created_at.asc()).all()
+    results = query.order_by(AIScreeningResult.created_at.desc(), AIScreeningResult.id.desc()).all()
 
     return [
         {
@@ -253,7 +470,7 @@ def list_pending_reviews(
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "ai_score": r.ai_score,
             "ai_notes": r.ai_notes,
-            "extracted_json": r.extracted_json,
+            "extracted_json": _normalize_extracted_json(r.extracted_json),
             "status": r.status,
         }
         for r in results
@@ -295,7 +512,7 @@ def get_screening_result(
         "cv_drive_item_id": screening.cv_drive_item_id,
         "ai_score": screening.ai_score,
         "ai_notes": screening.ai_notes,
-        "extracted_json": screening.extracted_json,
+        "extracted_json": _normalize_extracted_json(screening.extracted_json),
         "status": screening.status,
         "reviewed_by": str(screening.reviewed_by) if screening.reviewed_by else None,
         "reviewed_at": screening.reviewed_at.isoformat() if screening.reviewed_at else None,
@@ -341,6 +558,12 @@ def review_screening_result(
     screening.reviewed_at = datetime.now(timezone.utc)
     if payload.candidate_id:
         screening.candidate_id = _uuid.UUID(payload.candidate_id)
+        # Propagasi source_channel dari screening ke candidate
+        if screening.source_channel:
+            candidate = db.query(Candidate).filter(Candidate.id == screening.candidate_id).first()
+            if candidate:
+                candidate.source_channel = screening.source_channel
+                db.add(candidate)
     if payload.application_id:
         screening.application_id = _uuid.UUID(payload.application_id)
     if payload.notes:
@@ -468,7 +691,7 @@ def get_application(
     application = (
         db.query(Application)
         .options(
-            joinedload(Application.candidate),
+            joinedload(Application.candidate).joinedload(Candidate.blacklists),
             joinedload(Application.position).joinedload(Position.client),
             joinedload(Application.recruiter),
             joinedload(Application.stage_histories).joinedload(StageHistory.handler),
@@ -494,7 +717,7 @@ def get_application(
             "ai_screening_status": sr.status,
             "score": sr.ai_score,
             "notes": sr.ai_notes,
-            "extracted_summary": sr.extracted_json,
+            "extracted_summary": _normalize_extracted_json(sr.extracted_json),
         }
 
     return {
@@ -515,6 +738,8 @@ def get_application(
         "ai_score": ai_screening["score"] if ai_screening else None,
         "ai_screening_status": ai_screening["ai_screening_status"] if ai_screening else None,
         "ai_screening": ai_screening,
+        "is_blacklisted": application.is_blacklisted,
+        "blacklist_reason": application.blacklist_reason,
         "stage_history": [
             {
                 "id": str(h.id),
@@ -577,7 +802,7 @@ def update_stage(
         raise HTTPException(status_code=404, detail="Lamaran tidak ditemukan")
 
     # Cek apakah kandidat ada di blacklist (aktif + disetujui) — kecuali untuk Rejected/Withdrawn
-    if payload.stage_name not in ("Rejected", "Withdrawn"):
+    if not payload.force_blacklisted and payload.stage_name not in ("Rejected", "Withdrawn"):
         bl_entry = _check_candidate_blacklisted(db, str(application.candidate_id))
         if bl_entry:
             raise HTTPException(
@@ -731,6 +956,11 @@ def assign_recruiter(
 
 # ── Bulk Upload CV ───────────────────────────────────────────────────────────
 
+_BULK_CV_MAX_FILES = 50
+_BULK_CV_MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+_BULK_CV_ALLOWED_EXTENSIONS = {".pdf", ".docx"}
+
+
 @router.post("/bulk-upload-cv", response_model=ApplicationBulkUploadResponse, status_code=status.HTTP_201_CREATED)
 async def bulk_upload_cv(
     position_id: str = Form(...),
@@ -743,8 +973,20 @@ async def bulk_upload_cv(
     Upload banyak CV sekaligus untuk satu posisi.
     HR + Manager only. Setiap file di-enqueue ke arq worker via Redis.
     Return immediately — tidak tunggu proses selesai.
+
+    Batasan:
+    - Maksimal 50 file per request.
+    - Ukuran maksimal 5 MB per file.
+    - Format yang diizinkan: .pdf dan .docx.
     """
     import uuid as _uuid
+
+    # Validasi jumlah file
+    if len(files) > _BULK_CV_MAX_FILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maksimal {_BULK_CV_MAX_FILES} file per upload. Anda mengirim {len(files)} file.",
+        )
 
     # Validasi posisi
     position = db.query(Position).options(joinedload(Position.client)).filter(Position.id == position_id).first()
@@ -753,10 +995,20 @@ async def bulk_upload_cv(
     if not position.is_active:
         raise HTTPException(status_code=400, detail="Position tidak aktif")
 
-    # Validasi tipe file
+    # Validasi tipe file dan ukuran
     for f in files:
-        if not f.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail=f"File '{f.filename}' bukan PDF")
+        ext = Path(f.filename).suffix.lower() if f.filename else ""
+        if ext not in _BULK_CV_ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format file '{f.filename}' tidak diizinkan. Hanya PDF dan DOCX yang diterima.",
+            )
+        # Cek ukuran via Content-Length header jika tersedia, fallback ke baca parsial
+        if f.size is not None and f.size > _BULK_CV_MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File '{f.filename}' melebihi batas ukuran 5 MB ({f.size / 1024 / 1024:.1f} MB).",
+            )
 
     client_name = position.client_name or "unknown"
     folder = f"{position_id}/{client_name}/cv_uploads"
@@ -768,6 +1020,13 @@ async def bulk_upload_cv(
         content = await f.read()
         if len(content) == 0:
             continue
+
+        # Fallback validasi ukuran setelah baca konten (jika f.size tidak tersedia saat pre-check)
+        if len(content) > _BULK_CV_MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File '{f.filename}' melebihi batas ukuran 5 MB ({len(content) / 1024 / 1024:.1f} MB).",
+            )
 
         # Upload file ke storage (local atau OneDrive)
         upload_result = await storage_service.upload(

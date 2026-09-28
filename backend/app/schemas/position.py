@@ -10,6 +10,7 @@ class PositionCreate(BaseModel):
     client_id: str
     title: str
     requirement: str | None = None
+    job_description: str | None = None
     employment_type: str | None = None
     contract_duration_months: int | None = None
     is_active: bool = True
@@ -19,6 +20,7 @@ class PositionCreate(BaseModel):
 class PositionUpdate(BaseModel):
     title: str | None = None
     requirement: str | None = None
+    job_description: str | None = None
     employment_type: str | None = None
     contract_duration_months: int | None = None
     is_active: bool | None = None
@@ -31,6 +33,7 @@ class PositionResponse(BaseModel):
     client_name: str
     title: str
     requirement: str | None
+    job_description: str | None
     employment_type: str | None
     contract_duration_months: int | None
     is_active: bool

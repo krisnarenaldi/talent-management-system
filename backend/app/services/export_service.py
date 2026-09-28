@@ -191,6 +191,7 @@ def _get_excel_response_for_pipeline(
             joinedload(Application.position).joinedload(Position.client),
             joinedload(Application.recruiter),
             joinedload(Application.stage_histories),
+            joinedload(Application.ai_screening_result),
         )
     )
 

@@ -12,16 +12,21 @@ router = APIRouter()
 
 @router.get("/recruiters", response_model=list[UserResponse])
 def list_recruiters(
+    search: str | None = Query(None, description="Filter by name or email"),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
     """Daftar user HR/Manager aktif — digunakan untuk pilih recruiter di form lamaran."""
-    return (
+    query = (
         db.query(User)
         .filter(User.role.in_(["hr", "manager", "admin"]), User.is_active == True)
-        .order_by(User.name.asc())
-        .all()
     )
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            (User.name.ilike(pattern)) | (User.email.ilike(pattern))
+        )
+    return query.order_by(User.name.asc()).all()
 
 
 @router.get("", response_model=list[UserResponse])

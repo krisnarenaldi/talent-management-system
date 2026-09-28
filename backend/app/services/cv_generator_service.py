@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience
+from app.models.candidate_project import CandidateProject
 from app.models.generated_cv import GeneratedCV
 from app.services.storage_service import get_storage_service
 
@@ -387,6 +388,17 @@ async def generate_cv(
     if candidate is None:
         raise ValueError(f"Kandidat {candidate_id} tidak ditemukan")
 
+    # 1b. Load approved projects
+    approved_projects: list[CandidateProject] = (
+        db.query(CandidateProject)
+        .filter(
+            CandidateProject.candidate_id == candidate_id,
+            CandidateProject.is_draft == False,
+        )
+        .order_by(CandidateProject.created_at.asc())
+        .all()
+    )
+
     # 2. Ambil existing CV (paling baru untuk kombinasi candidate+language)
     existing_cv: GeneratedCV | None = (
         db.query(GeneratedCV)
@@ -411,12 +423,12 @@ async def generate_cv(
     if final_summary_text:
         final_summary_source = "HR"
     else:
-        # Jika CV lama ada dan sumber-nya HR → jangan overwrite
-        if existing_cv and existing_cv.summary_source == "HR" and existing_cv.summary_text:
+        # Jika CV lama ada dan ada summary tersimpan (HR maupun AI) → pakai, jangan generate ulang
+        if existing_cv and existing_cv.summary_text:
             final_summary_text = existing_cv.summary_text
-            final_summary_source = "HR"
+            final_summary_source = existing_cv.summary_source or "AI"
         else:
-            # Generate via LLM
+            # Belum ada summary sama sekali → generate via LLM
             final_summary_text = _generate_summary_with_llm(
                 candidate,
                 candidate.experiences,
@@ -453,6 +465,7 @@ async def generate_cv(
         "candidate": candidate,
         "educations": candidate.educations,
         "experiences": sorted_exp,
+        "approved_projects": approved_projects,
         "summary_text": final_summary_text,
         "position_title": position_title or "-",
         "age": _compute_age(candidate.birth_date),

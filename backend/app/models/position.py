@@ -14,6 +14,7 @@ class Position(Base):
     client_id = Column(UUID(as_uuid=True), ForeignKey("client.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     requirement = Column(Text)
+    job_description = Column(Text, nullable=True)
     employment_type = Column(String(100))       # PKWT, PKWTT, dll
     contract_duration_months = Column(Integer)
     is_active = Column(Boolean, default=True, nullable=False)

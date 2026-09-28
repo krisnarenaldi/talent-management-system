@@ -6,11 +6,6 @@ if [ -d /uploads ]; then
 fi
 
 echo "Running database migrations..."
-if ! alembic upgrade head 2>&1; then
-  echo "Migration failed, attempting to stamp head (schema may already be up-to-date)..."
-  alembic stamp head
-  echo "Stamped head. Retrying upgrade..."
-  alembic upgrade head
-fi
+alembic upgrade head
 
 exec gosu appuser "$@"

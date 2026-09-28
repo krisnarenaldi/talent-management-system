@@ -3,6 +3,7 @@ Endpoint internal — hanya dipanggil oleh n8n (callback setelah async processin
 Diproteksi dengan X-Internal-Secret header.
 Nginx memblokir akses ke /api/v1/internal/* dari internet.
 """
+import json
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -51,7 +52,7 @@ async def parse_cv(
 
 class ExtractionResultPayload(BaseModel):
     screening_result_id: str = Field(..., min_length=1)
-    extracted_json: dict | None = None
+    extracted_json: dict | str | None = None
     # SEC-05: ai_score divalidasi range 0-100 di layer Pydantic
     ai_score: float | None = Field(None, ge=0.0, le=100.0)
     ai_notes: str | None = None
@@ -73,7 +74,13 @@ def receive_extraction_result(
         raise HTTPException(status_code=404, detail="Screening result tidak ditemukan")
 
     # Update fields
-    screening.extracted_json = payload.extracted_json
+    if isinstance(payload.extracted_json, str):
+        try:
+            screening.extracted_json = json.loads(payload.extracted_json)
+        except Exception:
+            screening.extracted_json = {"raw": payload.extracted_json}
+    else:
+        screening.extracted_json = payload.extracted_json
     # SEC-05: clamp ai_score 0–100 sebagai defense-in-depth (sudah divalidasi Pydantic di atas)
     if payload.ai_score is not None:
         screening.ai_score = max(0.0, min(100.0, payload.ai_score))

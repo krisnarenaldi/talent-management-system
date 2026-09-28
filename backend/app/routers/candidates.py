@@ -10,9 +10,13 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.blacklist import Blacklist
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience, CandidateDocument
+from app.models.candidate_project import CandidateProject
+from app.models.employee import Employee
 from app.schemas.candidate import (
     CandidateCreate,
     CandidateFlagsPatch,
+    CandidateProjectResponse,
+    CandidateProjectUpdate,
     CandidateResponse,
     CandidateUpdate,
     CandidateWithWarnings,
@@ -25,6 +29,7 @@ from app.schemas.candidate import (
     ExperienceUpdate,
 )
 from app.services import candidate_service
+from app.services.candidate_service import normalize_phone as _normalize_phone
 from app.services.ai_service import generate_project_drafts
 from app.services.storage_service import get_storage_service
 
@@ -151,20 +156,32 @@ def list_candidates(
             )
         )
 
+    # Exclude candidates who are already active employees
+    query = query.filter(
+        ~Candidate.id.in_(
+            db.query(Employee.candidate_id).filter(Employee.employee_status == "aktif")
+        )
+    )
+
     candidates = query.offset(skip).limit(limit).all()
-    # Re-compute & persist freshness for each returned candidate
+    # Re-compute & persist freshness, and collect blacklist status before commit
+    blacklisted_ids: set[str] = set()
     for c in candidates:
-      new_status = _recalc_completeness(str(c.id), db)
-      if c.completeness_status != new_status:
-          c.completeness_status = new_status
-      # Determine blacklist status
-      bl_exists = db.query(Blacklist).filter(
-          Blacklist.candidate_id == c.id,
-          Blacklist.is_active == True,
-          Blacklist.is_approved == True
-      ).first()
-      c.is_blacklisted = bool(bl_exists)
+        new_status = _recalc_completeness(str(c.id), db)
+        if c.completeness_status != new_status:
+            c.completeness_status = new_status
+        # Determine blacklist status (collect IDs before commit expires objects)
+        bl_exists = db.query(Blacklist).filter(
+            Blacklist.candidate_id == c.id,
+            Blacklist.is_active == True,
+            Blacklist.is_approved == True,
+        ).first()
+        if bl_exists:
+            blacklisted_ids.add(str(c.id))
     db.commit()
+    # Re-apply is_blacklisted after commit (db.commit() expires all ORM attributes)
+    for c in candidates:
+        c.is_blacklisted = str(c.id) in blacklisted_ids
     return candidates
 
 
@@ -176,6 +193,9 @@ def create_candidate(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
+    # Normalise phone number before duplicate check and save
+    payload.phone = _normalize_phone(payload.phone)
+
     # Duplikat check
     dup = candidate_service.check_duplicate(db, payload.email, payload.phone, payload.identity_no)
     if dup["is_duplicate"]:
@@ -219,6 +239,13 @@ def get_candidate(candidate_id: str, db: Session = Depends(get_db), current_user
         raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
     # Override stored status dengan computed status dari dokumen
     candidate.completeness_status = _recalc_completeness(candidate_id, db)
+    # Set is_blacklisted secara eksplisit — field ini tidak ada di kolom DB,
+    # harus dihitung dari relasi blacklist. Tanpa ini selalu mengembalikan False (schema default).
+    candidate.is_blacklisted = db.query(Blacklist).filter(
+        Blacklist.candidate_id == candidate.id,
+        Blacklist.is_active == True,
+        Blacklist.is_approved == True,
+    ).first() is not None
     return candidate
 
 
@@ -265,6 +292,10 @@ def update_candidate(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Email/phone/NIK sudah digunakan kandidat lain (ID: {dup['existing_id']})",
             )
+
+    # Normalise phone if included in update
+    if "phone" in payload.model_dump(exclude_unset=True):
+        payload.phone = _normalize_phone(payload.phone)
 
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(candidate, key, value)
@@ -565,18 +596,90 @@ def toggle_verify_document(
     return doc
 
 
-@router.post("/{candidate_id}/ai/draft-projects", response_model=dict)
+@router.get("/{candidate_id}/projects", response_model=list[CandidateProjectResponse])
+def list_candidate_projects(
+    candidate_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Ambil semua project milik kandidat."""
+    db.query(Candidate).filter(Candidate.id == candidate_id).first() or _raise_404("Kandidat tidak ditemukan")
+    return (
+        db.query(CandidateProject)
+        .filter(CandidateProject.candidate_id == candidate_id)
+        .order_by(CandidateProject.created_at.asc())
+        .all()
+    )
+
+
+@router.post("/{candidate_id}/ai/draft-projects", response_model=list[CandidateProjectResponse])
 def generate_candidate_project_drafts(
     candidate_id: str,
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
-    """Generate draft project list dari pengalaman kandidat via LLM (dengan fallback heuristik)."""
+    """
+    Generate draft project list dari pengalaman kandidat via LLM.
+    - Jika sudah ada project tersimpan di DB → kembalikan itu.
+    - Jika belum ada → panggil AI, simpan hasilnya, kembalikan.
+    """
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
 
-    return generate_project_drafts(candidate, db)
+    existing = (
+        db.query(CandidateProject)
+        .filter(CandidateProject.candidate_id == candidate_id)
+        .all()
+    )
+    if existing:
+        return existing
+
+    result = generate_project_drafts(candidate, db)
+    drafts = result.get("drafts", [])
+
+    saved: list[CandidateProject] = []
+    for draft in drafts:
+        project = CandidateProject(
+            candidate_id=candidate_id,
+            project_name=draft.get("project_name", "Proyek"),
+            role=draft.get("role"),
+            summary=draft.get("summary"),
+            impact=draft.get("impact"),
+            tech_stack=draft.get("tech_stack") or [],
+            duration=draft.get("duration"),
+            is_draft=True,
+        )
+        db.add(project)
+        saved.append(project)
+
+    db.commit()
+    for p in saved:
+        db.refresh(p)
+    return saved
+
+
+@router.patch("/{candidate_id}/projects/{project_id}", response_model=CandidateProjectResponse)
+def update_candidate_project(
+    candidate_id: str,
+    project_id: str,
+    payload: CandidateProjectUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """Update field project (termasuk set is_draft=False untuk approve)."""
+    project = db.query(CandidateProject).filter(
+        CandidateProject.id == project_id,
+        CandidateProject.candidate_id == candidate_id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project tidak ditemukan")
+
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(project, key, value)
+    db.commit()
+    db.refresh(project)
+    return project
 
 
 @router.delete("/{candidate_id}/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)

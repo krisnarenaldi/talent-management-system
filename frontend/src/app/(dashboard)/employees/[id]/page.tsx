@@ -466,6 +466,13 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
     retry: false,
   });
 
+  const [draft, setDraft] = useState<EmployeePayroll | null>(null);
+  const [emptyForm, setEmptyForm] = useState<Partial<EmployeePayroll>>({});
+
+  useEffect(() => {
+    if (payroll) setDraft(payroll);
+  }, [payroll]);
+
   const updateMutation = useMutation({
     mutationFn: (payload: Partial<EmployeePayroll>) => updatePayroll(employeeId, payload),
     onSuccess: () => {
@@ -526,10 +533,12 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
               </label>
               <input
                 type={type ?? (key === "thp" ? "number" : "text")}
+                value={String(emptyForm[key] ?? "")}
                 onChange={(e) =>
-                  createMutation.mutate({
+                  setEmptyForm((prev) => ({
+                    ...prev,
                     [key]: key === "thp" ? Number(e.target.value) : e.target.value,
-                  } as Partial<EmployeePayroll>)
+                  }))
                 }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
               />
@@ -539,7 +548,7 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
         <div className="mt-4 flex justify-end">
           <button
             type="button"
-            onClick={() => createMutation.mutate({})}
+            onClick={() => createMutation.mutate(emptyForm)}
             disabled={createMutation.isPending}
             className="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-secondary/90 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
@@ -549,6 +558,8 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
       </div>
     );
   }
+
+  const current = draft ?? payroll;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -560,12 +571,20 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
               {label}
             </label>
             <input
-              type={type ?? (typeof payroll[key] === "number" ? "number" : "text")}
-              value={String(payroll[key] ?? "")}
+              type={type ?? (typeof current[key] === "number" ? "number" : "text")}
+              value={String(current[key] ?? "")}
               onChange={(e) =>
-                updateMutation.mutate({
-                  [key]: typeof payroll[key] === "number" ? Number(e.target.value) : e.target.value,
-                } as Partial<EmployeePayroll>)
+                setDraft((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        [key]:
+                          typeof prev[key] === "number"
+                            ? Number(e.target.value)
+                            : e.target.value,
+                      }
+                    : prev,
+                )
               }
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             />
@@ -575,7 +594,7 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
       <div className="mt-4 flex justify-end">
         <button
           type="button"
-          onClick={() => updateMutation.mutate(payroll)}
+          onClick={() => updateMutation.mutate(current)}
           disabled={updateMutation.isPending}
           className="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-secondary/90 disabled:cursor-not-allowed disabled:bg-gray-300"
         >

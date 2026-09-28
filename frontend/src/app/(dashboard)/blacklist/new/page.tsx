@@ -42,7 +42,7 @@ export default function NewBlacklistPage() {
 
   const [picSearchTerm, setPicSearchTerm] = useState("");
   const [showPicDropdown, setShowPicDropdown] = useState(false);
-  const [selectedPic, setSelectedPic] = useState<Employee | null>(null);
+  const [selectedPic, setSelectedPic] = useState<{ id: string; name: string; email: string } | null>(null);
   const picDropdownRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close dropdowns
@@ -91,17 +91,19 @@ export default function NewBlacklistPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // PIC employee search (only for HR/Manager)
-  const { data: picEmployees = [] } = useQuery({
-    queryKey: ["employees-search-pic", picSearchTerm],
+  // PIC user search — real-time search via API
+  const { data: allRecruiters = [] } = useQuery({
+    queryKey: ["users-recruiters", picSearchTerm],
     queryFn: async () => {
       if (!picSearchTerm.trim()) return [];
-      const response = await api.get("/api/v1/employees", { params: { search: picSearchTerm } });
-      return response.data as Employee[];
+      const response = await api.get("/api/v1/users/recruiters", { params: { search: picSearchTerm } });
+      return response.data as { id: string; name: string; email: string }[];
     },
-    enabled: isHRorManager && picSearchTerm.length >= 2,
+    enabled: picSearchTerm.length >= 2,
     staleTime: 5 * 60 * 1000,
   });
+
+  const picUsers = allRecruiters;
 
   const createMutation = useMutation({
     mutationFn: (payload: FormValues) => {
@@ -149,10 +151,10 @@ export default function NewBlacklistPage() {
     setShowDropdown(false);
   };
 
-  const handleSelectPIC = (employee: Employee) => {
-    setSelectedPic(employee);
-    setValue("pic_user_id", employee.id);
-    setPicSearchTerm(employee.full_name);
+  const handleSelectPIC = (user: { id: string; name: string; email: string }) => {
+    setSelectedPic(user);
+    setValue("pic_user_id", user.id);
+    setPicSearchTerm(user.name);
     setShowPicDropdown(false);
   };
 
@@ -318,22 +320,27 @@ export default function NewBlacklistPage() {
                   if (e.target.value.length < 2) setSelectedPic(null);
                 }}
                 onFocus={() => setShowPicDropdown(true)}
-                placeholder="Cari karyawan..."
+                placeholder="Cari nama atau email user..."
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
               />
-              {showPicDropdown && picEmployees.length > 0 && (
+              {showPicDropdown && picUsers.length > 0 && (
                 <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
-                  {picEmployees.map((emp) => (
+                  {picUsers.map((u) => (
                     <button
-                      key={emp.id}
+                      key={u.id}
                       type="button"
-                      onClick={() => handleSelectPIC(emp)}
+                      onClick={() => handleSelectPIC(u)}
                       className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
                     >
-                      <p className="font-medium text-gray-900">{emp.full_name}</p>
-                      <p className="text-xs text-gray-500">{emp.office_email || emp.phone_number}</p>
+                      <p className="font-medium text-gray-900">{u.name}</p>
+                      <p className="text-xs text-gray-500">{u.email}</p>
                     </button>
                   ))}
+                </div>
+              )}
+              {showPicDropdown && picUsers.length === 0 && picSearchTerm.length >= 2 && (
+                <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg py-3 text-center text-sm text-gray-500">
+                  Tidak ditemukan
                 </div>
               )}
             </div>

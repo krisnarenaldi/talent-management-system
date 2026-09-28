@@ -144,6 +144,8 @@ function getNotificationIcon(type: string): string {
       return "task_alt";
     case "system_alert":
       return "warning";
+    case "blacklist_review_request":
+      return "gavel";
     default:
       return "notifications";
   }

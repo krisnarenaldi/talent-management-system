@@ -14,6 +14,20 @@ class StageHistoryCreate(BaseModel):
     salary_current_input: Decimal | None = None
     salary_expected_input: Decimal | None = None
     notes: str | None = None
+    force_blacklisted: bool = False
+
+    @field_validator("scheduled_date")
+    @classmethod
+    def validate_scheduled_date(cls, value: date | None) -> date | None:
+        if value is None:
+            return value
+        today = date.today()
+        # Tidak boleh lebih dari 365 hari ke belakang
+        if (today - value).days > 365:
+            raise ValueError(
+                "scheduled_date tidak boleh lebih dari 365 hari di masa lalu"
+            )
+        return value
 
 
 class StageHistoryResponse(BaseModel):
@@ -51,6 +65,7 @@ class ApplicationCreate(BaseModel):
     recruiter_id: str | None = None
     current_stage: str = "Dijadwalkan_Interview"
     force_blacklisted: bool = False
+    force_cooldown: bool = False
 
 
 class ApplicationUpdate(BaseModel):
@@ -84,6 +99,8 @@ class ApplicationResponse(BaseModel):
     ai_score: float | None = None
     ai_screening_status: str | None = None
     ai_screening: AIScreeningInfo | None = None
+    is_blacklisted: bool = False
+    blacklist_reason: str | None = None
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod

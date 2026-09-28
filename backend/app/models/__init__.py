@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.client import Client
 from app.models.position import Position
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience, CandidateDocument, SourceChannel
+from app.models.candidate_project import CandidateProject
 from app.models.application import Application, StageHistory, AIScreeningResult
 from app.models.notification import Notification
 from app.models.blacklist import Blacklist, BlacklistStatusType

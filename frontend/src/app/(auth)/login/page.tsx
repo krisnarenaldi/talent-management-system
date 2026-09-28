@@ -45,14 +45,15 @@ function LoginForm() {
       });
       setSuccess(true);
       setTimeout(() => {
-        router.push(redirectTo);
+        // Gunakan window.location.href agar browser mengirim cookie access_token
+        // pada request berikutnya, sehingga Next.js middleware dapat memvalidasi sesi.
+        window.location.href = redirectTo;
       }, 800);
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { detail?: string } } })?.response?.data
           ?.detail || "Login gagal. Periksa email dan password Anda.";
       setError(message);
-    } finally {
       setLoading(false);
     }
   };

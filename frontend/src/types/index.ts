@@ -51,6 +51,7 @@ export interface Position {
   client_name: string;
   title: string;
   requirement: string | null;
+  job_description: string | null;
   employment_type: string | null;
   contract_duration_months: number | null;
   is_active: boolean;
@@ -178,6 +179,8 @@ export interface Application {
     notes?: string | null;
     extracted_summary?: Record<string, unknown> | null;
   } | null;
+  is_blacklisted?: boolean;
+  blacklist_reason?: string | null;
 }
 
 export interface StageHistory {
@@ -364,6 +367,7 @@ export interface Blacklist {
   target_type: "candidate" | "employee";
   status_type_label: string;
   pic_name?: string | null;
+  rejected_application_count?: number;
 }
 
 // --- Pagination ---

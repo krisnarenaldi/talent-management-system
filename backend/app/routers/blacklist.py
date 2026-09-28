@@ -2,15 +2,17 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select, func
+from sqlalchemy import or_, select, update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_role
 from app.core.pydantic_utils import AutoStrUUID
 from app.db.database import get_db
+from app.models.application import Application
 from app.models.blacklist import Blacklist, BlacklistStatusType
 from app.models.candidate import Candidate
 from app.models.employee import Employee
+from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.blacklist import BlacklistCreate, BlacklistResponse
 
@@ -223,6 +225,33 @@ def add_to_blacklist(
     # Fetch target and PIC details for response
     details = _fetch_target_details(db, blacklist)
 
+    # ── Kirim notifikasi ke semua user role manager & admin ───────────────────
+    target_label = (
+        details["target_name"] or
+        (f"Kandidat ID {blacklist.candidate_id}" if blacklist.candidate_id else f"Karyawan ID {blacklist.employee_id}")
+    )
+    notif_message = (
+        f"Mohon review blacklist baru: {target_label} "
+        f"({status_type.label}) ditambahkan oleh {current_user.name}. "
+        f"Silakan setujui atau tolak."
+    )
+    reviewers = (
+        db.query(User)
+        .filter(User.role.in_(["manager", "admin"]), User.is_active == True)
+        .all()
+    )
+    for reviewer in reviewers:
+        notif = Notification(
+            user_id=reviewer.id,
+            type="blacklist_review_request",
+            message=notif_message,
+            link="/blacklist",
+        )
+        db.add(notif)
+    if reviewers:
+        db.commit()
+    # ─────────────────────────────────────────────────────────────────────────
+
     return BlacklistResponse(
         id=blacklist.id,
         candidate_id=blacklist.candidate_id,
@@ -271,6 +300,47 @@ def approve_blacklist(
     details = _fetch_target_details(db, blacklist)
     status_type = db.get(BlacklistStatusType, blacklist.status_type_id)
 
+    # Auto-reject active applications for blacklisted candidates
+    rejected_count = 0
+    if blacklist.candidate_id:
+        # Find all active applications for this candidate
+        active_apps = (
+            db.query(Application)
+            .filter(
+                Application.candidate_id == blacklist.candidate_id,
+                Application.status == "active",
+            )
+            .all()
+        )
+        for app in active_apps:
+            app.status = "rejected"
+            app.current_stage = "Rejected"
+            rejected_count += 1
+        if rejected_count > 0:
+            db.commit()
+
+        # Notify HR/users about rejections
+        if rejected_count > 0:
+            target_label = details["target_name"] or f"Kandidat ID {blacklist.candidate_id}"
+            notif_msg = (
+                f"Blacklist untuk {target_label} telah disetujui. "
+                f"{rejected_count} lamaran aktif kandidat ini telah diubah menjadi Rejected."
+            )
+            hr_users = (
+                db.query(User)
+                .filter(User.role.in_(["hr", "manager", "admin"]), User.is_active == True)
+                .all()
+            )
+            for user in hr_users:
+                notif = Notification(
+                    user_id=user.id,
+                    type="blacklist_rejected_application",
+                    message=notif_msg,
+                    link=f"/applications?status_filter=rejected",
+                )
+                db.add(notif)
+            db.commit()
+
     return BlacklistResponse(
         id=blacklist.id,
         candidate_id=blacklist.candidate_id,
@@ -296,6 +366,7 @@ def approve_blacklist(
         target_email=details["target_email"],
         target_phone=details["target_phone"],
         target_type=details["target_type"],
+        rejected_application_count=rejected_count,
     )
 
 

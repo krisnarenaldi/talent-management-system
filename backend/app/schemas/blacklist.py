@@ -52,6 +52,7 @@ class BlacklistResponse(BaseModel):
     target_email: str | None
     target_phone: str | None
     target_type: str
+    rejected_application_count: int = 0
 
     class Config:
         from_attributes = True

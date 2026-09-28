@@ -78,7 +78,7 @@ class Settings(BaseSettings):
 
     # Storage backend — "local" (default) atau "onedrive"
     STORAGE_BACKEND: str = "local"
-    UPLOAD_DIR: str = str(BASE_DIR / "uploads")
+    UPLOAD_DIR: str = "/uploads"
     STORAGE_BASE_URL: str = ""  # kosong = relative path; isi = base URL saat production
 
     # Redis (arq job queue)
@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
 
+    # Model khusus untuk ekstraksi data CV (nama, email, HP, skills, dll).
+    # Bisa diset ke model lebih ringan/murah karena tugasnya hanya structured extraction.
+    # Screening/penilaian tetap menggunakan OPENAI_MODEL.
+    LLM_MODEL_EXTRACT: str = "gpt-4o-mini"
+
     # Email
     EMAIL_FROM: str = "noreply@altek.id"
     SMTP_HOST: str = "smtp.gmail.com"
@@ -101,6 +106,9 @@ class Settings(BaseSettings):
 
     # Password reset token expiry (menit)
     RESET_TOKEN_EXPIRE_MINUTES: int = 15
+
+    # Application policy
+    APPLICATION_REJECTED_COOLDOWN_DAYS: int = 90
 
 
 settings = Settings()

@@ -46,7 +46,11 @@ async function fetchPendingReviews() {
         )
         .join("&"),
   });
-  return response.data as PendingReviewData[];
+  const data = response.data as PendingReviewData[];
+  // Ensure descending order by date (most recent first)
+  return data.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 }
 
 export default function PendingReviewPage() {

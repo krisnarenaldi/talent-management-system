@@ -43,6 +43,7 @@ app.add_middleware(
     allow_credentials=True,  # Penting untuk httpOnly cookie
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Total-Count"],
 )
 
 # Static file endpoints used by stored document/photo URLs.

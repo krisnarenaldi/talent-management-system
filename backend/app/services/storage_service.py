@@ -11,7 +11,10 @@ from typing import BinaryIO
 from app.core.config import settings
 
 UPLOAD_ROOT = Path(settings.UPLOAD_DIR)
-UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+try:
+    UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
 
 
 class StorageService:

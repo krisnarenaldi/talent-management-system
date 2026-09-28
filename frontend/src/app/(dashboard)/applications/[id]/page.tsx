@@ -11,7 +11,7 @@ import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import type { Application, StageHistory, User } from "@/types";
-import { FileText } from "lucide-react";
+import { FileText, AlertTriangle } from "lucide-react";
 
 const FAIL_RESULTS = new Set(["fail", "tidak_lolos"]);
 
@@ -25,7 +25,7 @@ async function fetchStageHistory(id: string) {
   return response.data as StageHistory[];
 }
 
-async function updateStage(id: string, payload: Record<string, string | number | null | undefined>) {
+async function updateStage(id: string, payload: Record<string, any>) {
   const response = await api.patch(`/api/v1/applications/${id}/stages`, payload);
   return response.data;
 }
@@ -92,6 +92,12 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [notes, setNotes] = useState("");
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignRecruiterInput, setAssignRecruiterInput] = useState("");
+  // Confirmation modal for irreversible reject action
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [pendingRejectPayload, setPendingRejectPayload] = useState<Record<string, any> | null>(null);
+  // Blacklist confirmation modal
+  const [showBlacklistModal, setShowBlacklistModal] = useState(false);
+  const [pendingStagePayload, setPendingStagePayload] = useState<Record<string, any> | null>(null);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["application", trimmedId],
@@ -116,8 +122,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   }, [application]);
 
   const mutation = useMutation({
-    mutationFn: (payload: Record<string, string | number | null | undefined>) => updateStage(trimmedId, payload),
-    onSuccess: () => {
+    mutationFn: (payload: Record<string, any>) => updateStage(trimmedId, payload),
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["application", trimmedId] });
       queryClient.invalidateQueries({ queryKey: ["application-stages", trimmedId] });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
@@ -128,14 +134,32 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       setNotes("");
       
       // If stage was updated to "Existing", show toast and redirect to employee detail
-      if (selectedStage === "Existing") {
-        // Give backend a moment to create the employee, then show toast and redirect
+      if (variables.stage_name === "Existing") {
         setTimeout(() => {
           const showToast = useToastStore.getState().showToast;
           showToast("success", "Karyawan berhasil dibuat, silahkan lengkapi data berikut");
           router.push("/employees");
         }, 1000);
       }
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.message || "";
+      if (typeof errorMessage === "string" && errorMessage.toLowerCase().includes("blacklist")) {
+        // Fallback: simpan pending payload dan tampilkan modal blacklist
+        setPendingStagePayload(buildPayload());
+        setShowBlacklistModal(true);
+      }
+    },
+  });
+
+  // Separate mutation for the second step of reject flow (stage_name: "Rejected")
+  const rejectMutation = useMutation({
+    mutationFn: (payload: Record<string, any>) => updateStage(trimmedId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["application", trimmedId] });
+      queryClient.invalidateQueries({ queryKey: ["application-stages", trimmedId] });
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      useToastStore.getState().showToast("success", "Lamaran telah ditutup sebagai Rejected");
     },
   });
 
@@ -153,7 +177,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const nextStages = application?.next_possible_stages ?? [];
   const currentStage = application?.current_stage ?? "";
   const stageList = currentStage ? [currentStage, ...nextStages] : nextStages;
-  const allStageOptions: string[] = Array.from(new Set(stageList)).filter(
+  const baseStageOptions: string[] = Array.from(new Set(stageList)).filter(
     (stage) => stage !== ""
   );
 
@@ -162,28 +186,89 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   // Hanya manager/admin yang bisa assign recruiter
   const canAssignRecruiter = currentUser?.role === "manager" || currentUser?.role === "admin";
 
-  // Cek apakah current stage sudah punya hasil FAIL → kunci form (kecuali Rejected/Withdrawn)
+  // Cek apakah current stage sudah punya hasil FAIL → tampilkan banner + tombol reject langsung
   const lastResult = application?.last_result ?? null;
   const isStageFailed = lastResult !== null && FAIL_RESULTS.has(lastResult);
-  // Stage locked = fail AND selected stage bukan Rejected/Withdrawn
-  const isFormLocked = isStageFailed && selectedStage !== "Rejected" && selectedStage !== "Withdrawn";
+  // Application sudah ditutup (rejected/withdrawn) — form tidak relevan lagi
+  const isApplicationClosed = application?.status === "rejected" || application?.status === "withdrawn";
 
-  const handleSubmit = () => {
-    if (!selectedStage) return;
-
-    const payload: Record<string, string | number | null | undefined> = {
+  const buildPayload = (): Record<string, any> => {
+    const payload: Record<string, any> = {
       stage_name: selectedStage,
       scheduled_date: scheduledDate || null,
       result: result || null,
       notes: notes || null,
     };
-
     if (selectedStage === "Interview_HR" || selectedStage === "Offering") {
       payload.salary_current_input = salaryCurrent ? Number(salaryCurrent) : null;
       payload.salary_expected_input = salaryExpected ? Number(salaryExpected) : null;
     }
+    return payload;
+  };
 
-    mutation.mutate(payload);
+  const handleSubmit = () => {
+    if (!selectedStage) return;
+
+    // Jika hasil adalah fail/tidak_lolos → tampilkan konfirmasi reject
+    if (result && FAIL_RESULTS.has(result)) {
+      const payload = buildPayload();
+      setPendingRejectPayload(payload);
+      setShowRejectConfirm(true);
+      return;
+    }
+
+    // Jika kandidat sedang blacklist, tampilkan konfirmasi
+    if (application?.is_blacklisted) {
+      const payload = buildPayload();
+      setPendingStagePayload(payload);
+      setShowBlacklistModal(true);
+      return;
+    }
+
+    mutation.mutate(buildPayload());
+  };
+
+  const handleConfirmReject = async () => {
+    if (!pendingRejectPayload) return;
+    setShowRejectConfirm(false);
+
+    const isDirectReject = pendingRejectPayload.stage_name === "Rejected";
+
+    if (isDirectReject) {
+      // Kasus: stage sudah FAIL dari sebelumnya, langsung reject
+      rejectMutation.mutate({ stage_name: "Rejected", notes: pendingRejectPayload.notes ?? null });
+    } else {
+      // Kasus: user baru saja memilih result=fail → simpan dulu, lalu reject
+      try {
+        await updateStage(trimmedId, pendingRejectPayload);
+        rejectMutation.mutate({ stage_name: "Rejected", notes: null });
+      } catch {
+        queryClient.invalidateQueries({ queryKey: ["application", trimmedId] });
+      }
+    }
+    setPendingRejectPayload(null);
+  };
+
+  const handleDirectReject = () => {
+    setPendingRejectPayload({
+      stage_name: "Rejected",
+      result: null,
+      notes: notes || null,
+    });
+    setShowRejectConfirm(true);
+  };
+
+  const handleConfirmBlacklisted = () => {
+    const payloadToSubmit = pendingStagePayload || buildPayload();
+    setShowBlacklistModal(false);
+    mutation.reset();
+    mutation.mutate({ ...payloadToSubmit, force_blacklisted: true });
+    setPendingStagePayload(null);
+  };
+
+  const handleCancelBlacklisted = () => {
+    setShowBlacklistModal(false);
+    setPendingStagePayload(null);
   };
 
   if (isLoading || !application) {
@@ -407,21 +492,38 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               <h2 className="text-lg font-semibold text-gray-900">Update Tahapan</h2>
             </div>
 
-            {allStageOptions.length === 0 ? (
+            {isApplicationClosed ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">
+                <p className="font-medium text-gray-800">
+                  Lamaran sudah ditutup dengan status{" "}
+                  <span className={`font-semibold ${application.status === "rejected" ? "text-red-600" : "text-gray-700"}`}>
+                    {application.status === "rejected" ? "Rejected" : "Withdrawn"}
+                  </span>.
+                </p>
+                <p className="mt-1 text-gray-500">Tidak ada tindakan lebih lanjut yang dapat dilakukan.</p>
+              </div>
+            ) : baseStageOptions.length === 0 ? (
               <p className="text-sm text-gray-500">Tidak ada tahapan berikutnya yang tersedia.</p>
             ) : (
               <div className="space-y-4">
-                {/* Banner: stage terkunci karena hasil FAIL */}
+                {/* Banner: stage sudah FAIL — tampilkan tombol reject langsung */}
                 {isStageFailed && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     <p className="font-medium">
                       Tahap <span className="font-semibold">{formatStageLabel(currentStage)}</span> sudah ditandai{" "}
                       <span className="font-semibold uppercase">{lastResult}</span>.
                     </p>
-                    <p className="mt-1 text-red-600">
-                      Form dinonaktifkan. Pilih <span className="font-semibold">Rejected</span> atau{" "}
-                      <span className="font-semibold">Withdrawn</span> untuk menutup lamaran ini.
+                    <p className="mt-1 text-red-600 mb-3">
+                      Kandidat tidak lolos. Klik tombol di bawah untuk menutup lamaran ini sebagai <span className="font-semibold">Rejected</span>.
                     </p>
+                    <button
+                      type="button"
+                      onClick={handleDirectReject}
+                      disabled={!canEdit || mutation.isPending}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300"
+                    >
+                      Reject Lamaran Ini
+                    </button>
                   </div>
                 )}
 
@@ -432,18 +534,16 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   <select
                     value={selectedStage}
                     onChange={(e) => setSelectedStage(e.target.value)}
-                    disabled={!canEdit}
+                    disabled={!canEdit || isStageFailed}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
-                    {allStageOptions
-                      .filter((stage) => !isStageFailed || stage === currentStage || stage === "Rejected" || stage === "Withdrawn")
-                      .map((stage) => (
-                        <option key={stage} value={stage}>
-                          {stage === currentStage
-                            ? `${formatStageLabel(stage)} (Tahap saat ini — update jadwal/catatan)`
-                            : formatStageLabel(stage)}
-                        </option>
-                      ))}
+                    {baseStageOptions.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage === currentStage
+                          ? `${formatStageLabel(stage)} (Tahap saat ini — update jadwal/catatan)`
+                          : formatStageLabel(stage)}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -453,7 +553,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     <select
                       value={result}
                       onChange={(e) => setResult(e.target.value)}
-                      disabled={isFormLocked}
+                      disabled={isStageFailed}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Pilih hasil</option>
@@ -496,7 +596,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                       type="date"
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
-                      disabled={isFormLocked}
+                      disabled={isStageFailed}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                   </div>
@@ -510,7 +610,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                         type="number"
                         value={salaryCurrent}
                         onChange={(e) => setSalaryCurrent(e.target.value)}
-                        disabled={isFormLocked}
+                        disabled={isStageFailed}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="0"
                       />
@@ -521,7 +621,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                         type="number"
                         value={salaryExpected}
                         onChange={(e) => setSalaryExpected(e.target.value)}
-                        disabled={isFormLocked}
+                        disabled={isStageFailed}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="0"
                       />
@@ -535,13 +635,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     rows={4}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    disabled={!canEdit || isFormLocked}
+                    disabled={!canEdit || isStageFailed}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Tambahkan catatan atau keputusan interview..."
                   />
                 </div>
 
-                {mutation.isError && (
+                {mutation.isError && !showBlacklistModal && !getErrorMessage(mutation.error, "").toLowerCase().includes("blacklist") && (
                   <p className="text-sm text-red-600">
                     {getErrorMessage(mutation.error, "Gagal memperbarui tahapan.")}
                   </p>
@@ -551,7 +651,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   <button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={mutation.isPending || !canEdit || isFormLocked}
+                    disabled={mutation.isPending || !canEdit || isStageFailed}
                     className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md disabled:cursor-not-allowed disabled:bg-gray-300"
                   >
                     {mutation.isPending ? "Menyimpan..." : "Simpan update"}
@@ -606,6 +706,87 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
               >
                 {assignMutation.isPending ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Konfirmasi Reject ──────────────────────────────────────────── */}
+      {showRejectConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="mb-2 text-base font-semibold text-gray-900">Konfirmasi: Reject Lamaran</h3>
+            <p className="mb-1 text-sm text-gray-700">
+              Tindakan ini akan mengubah status lamaran menjadi <span className="font-semibold text-red-600">Rejected</span> secara permanen.
+            </p>
+            <p className="mb-5 text-sm text-red-600 font-medium">Proses ini tidak dapat dibatalkan.</p>
+            {rejectMutation.isError && (
+              <p className="mb-3 text-sm text-red-600">
+                {getErrorMessage(rejectMutation.error, "Gagal menutup lamaran.")}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowRejectConfirm(false); setPendingRejectPayload(null); }}
+                disabled={rejectMutation.isPending}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                disabled={rejectMutation.isPending}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300"
+              >
+                {rejectMutation.isPending ? "Memproses..." : "Ya, Reject Lamaran"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Peringatan Blacklist ─────────────────────────────────────────── */}
+      {showBlacklistModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Kandidat Dalam Blacklist</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Kandidat ini terdaftar dalam daftar blacklist dan tidak dapat diproses secara normal.
+                </p>
+              </div>
+            </div>
+            <p className="mb-5 text-sm text-gray-700">
+              Apakah Anda yakin ingin tetap melanjutkan dan mengabaikan status blacklist ini?
+            </p>
+            {mutation.isError && !getErrorMessage(mutation.error, "").toLowerCase().includes("blacklist") && (
+              <p className="mb-3 text-sm text-red-600">
+                {getErrorMessage(mutation.error, "Gagal mengupdate tahapan.")}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleCancelBlacklisted}
+                disabled={mutation.isPending}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBlacklisted}
+                disabled={mutation.isPending}
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-300"
+              >
+                {mutation.isPending ? "Memproses..." : "Ya, Tetap Proses"}
               </button>
             </div>
           </div>

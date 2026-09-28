@@ -75,6 +75,7 @@ class CandidateCreate(BaseModel):
     current_salary: Decimal | None = None
     expected_salary: Decimal | None = None
     notice_period_days: int | None = None
+    notes: str | None = None
     skills: List[str] | None = None
 
 
@@ -136,6 +137,45 @@ class CandidateWithWarnings(BaseModel):
     duplicate_candidate_id: AutoStrUUID | None
     is_blacklisted: bool
     blacklist_entries: list[dict]
+
+
+# ── CandidateProject ──────────────────────────────────────────────────────────
+
+class CandidateProjectCreate(BaseModel):
+    project_name: str
+    role: str | None = None
+    summary: str | None = None
+    impact: str | None = None
+    tech_stack: List[str] | None = None
+    duration: str | None = None
+    is_draft: bool = True
+
+
+class CandidateProjectUpdate(BaseModel):
+    project_name: str | None = None
+    role: str | None = None
+    summary: str | None = None
+    impact: str | None = None
+    tech_stack: List[str] | None = None
+    duration: str | None = None
+    is_draft: bool | None = None
+
+
+class CandidateProjectResponse(BaseModel):
+    id: AutoStrUUID
+    candidate_id: AutoStrUUID
+    project_name: str
+    role: str | None
+    summary: str | None
+    impact: str | None
+    tech_stack: List[str] | None
+    duration: str | None
+    is_draft: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # ── Document ─────────────────────────────────────────────────────────────────

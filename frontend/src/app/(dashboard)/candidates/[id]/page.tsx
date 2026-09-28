@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { FileText } from "lucide-react";
@@ -16,13 +16,14 @@ import type {
 } from "@/types";
 
 interface DraftProjectItem {
+  id: string;
   project_name: string;
   role: string;
   summary: string;
   impact: string;
   tech_stack: string[];
   duration: string;
-  approved?: boolean;
+  is_draft: boolean;
 }
 
 type TabKey = "profil" | "dokumen" | "lamaran" | "catatan";
@@ -47,10 +48,15 @@ async function fetchApplications(): Promise<Application[]> {
   return response.data;
 }
 
+async function fetchCandidateProjects(id: string): Promise<DraftProjectItem[]> {
+  const response = await api.get(`/api/v1/candidates/${id}/projects`);
+  return response.data;
+}
+
 export default function CandidateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [tab, setTab] = useState<TabKey>("profil");
-  const [draftProjects, setDraftProjects] = useState<DraftProjectItem[]>([]);
+  const queryClient = useQueryClient();
 
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["candidate", id],
@@ -80,26 +86,57 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
     queryFn: () => api.get(`/api/v1/candidates/${id}/documents/`).then((r) => r.data),
   });
 
+  // Fetch existing projects on page load
+  const { data: savedProjects = [] } = useQuery({
+    queryKey: ["candidate-projects", id],
+    queryFn: () => fetchCandidateProjects(id),
+  });
+
   const generateDraftMutation = useMutation({
     mutationFn: async () => {
       const response = await api.post(`/api/v1/candidates/${id}/ai/draft-projects`);
-      return (response.data?.drafts ?? []) as DraftProjectItem[];
+      return response.data as DraftProjectItem[];
     },
-    onSuccess: (data) => {
-      setDraftProjects(data.map((item) => ({ ...item, approved: false })));
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["candidate-projects", id] });
     },
   });
 
-  const updateDraftProject = (
-    index: number,
+  // PATCH individual project fields (debounce not needed — called on blur / explicit action)
+  const updateProjectMutation = useMutation({
+    mutationFn: async ({
+      projectId,
+      payload,
+    }: {
+      projectId: string;
+      payload: Partial<DraftProjectItem>;
+    }) => {
+      const response = await api.patch(
+        `/api/v1/candidates/${id}/projects/${projectId}`,
+        payload,
+      );
+      return response.data as DraftProjectItem;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["candidate-projects", id] });
+    },
+  });
+
+  const handleFieldBlur = (
+    project: DraftProjectItem,
     field: keyof DraftProjectItem,
     value: DraftProjectItem[keyof DraftProjectItem],
   ) => {
-    setDraftProjects((current) =>
-      current.map((project, projectIndex) =>
-        projectIndex === index ? { ...project, [field]: value } : project,
-      ),
-    );
+    // Only call API if value actually changed
+    if (project[field] === value) return;
+    updateProjectMutation.mutate({ projectId: project.id, payload: { [field]: value } });
+  };
+
+  const handleApproveToggle = (project: DraftProjectItem) => {
+    updateProjectMutation.mutate({
+      projectId: project.id,
+      payload: { is_draft: !project.is_draft },
+    });
   };
 
   if (isLoading || !candidate) {
@@ -258,7 +295,7 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                 </div>
               )}
 
-              {draftProjects.length > 0 && (
+              {savedProjects.length > 0 && (
                 <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h3 className="text-base font-semibold text-gray-900">Draft Project AI</h3>
@@ -268,78 +305,14 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                   </div>
 
                   <div className="space-y-4">
-                    {draftProjects.map((project, index) => (
-                      <div key={`${project.project_name}-${index}`} className="rounded-xl border border-blue-100 bg-white p-4">
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <label className="block text-sm text-gray-700">
-                            <span className="mb-1 block font-medium">Nama proyek</span>
-                            <input
-                              value={project.project_name}
-                              onChange={(event) => updateDraftProject(index, "project_name", event.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
-                            />
-                          </label>
-                          <label className="block text-sm text-gray-700">
-                            <span className="mb-1 block font-medium">Peran</span>
-                            <input
-                              value={project.role}
-                              onChange={(event) => updateDraftProject(index, "role", event.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
-                            />
-                          </label>
-                        </div>
-
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
-                          <label className="block text-sm text-gray-700 md:col-span-2">
-                            <span className="mb-1 block font-medium">Summary</span>
-                            <textarea
-                              value={project.summary}
-                              onChange={(event) => updateDraftProject(index, "summary", event.target.value)}
-                              rows={3}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
-                            />
-                          </label>
-                          <label className="block text-sm text-gray-700 md:col-span-2">
-                            <span className="mb-1 block font-medium">Impact</span>
-                            <textarea
-                              value={project.impact}
-                              onChange={(event) => updateDraftProject(index, "impact", event.target.value)}
-                              rows={3}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
-                            />
-                          </label>
-                          <label className="block text-sm text-gray-700">
-                            <span className="mb-1 block font-medium">Durasi</span>
-                            <input
-                              value={project.duration}
-                              onChange={(event) => updateDraftProject(index, "duration", event.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
-                            />
-                          </label>
-                          <label className="block text-sm text-gray-700">
-                            <span className="mb-1 block font-medium">Tech stack</span>
-                            <input
-                              value={project.tech_stack.join(", ")}
-                              onChange={(event) =>
-                                updateDraftProject(index, "tech_stack", event.target.value.split(",").map((item) => item.trim()).filter(Boolean))
-                              }
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
-                            />
-                          </label>
-                        </div>
-
-                        <div className="mt-4 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateDraftProject(index, "approved", !(project.approved ?? false))
-                            }
-                            className={`rounded-lg px-3 py-2 text-sm font-medium ${project.approved ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                          >
-                            {project.approved ? "Disetujui" : "Setujui draft"}
-                          </button>
-                        </div>
-                      </div>
+                    {savedProjects.map((project) => (
+                      <ProjectCard
+                        key={project.id}
+                        project={project}
+                        onBlur={handleFieldBlur}
+                        onApproveToggle={handleApproveToggle}
+                        isSaving={updateProjectMutation.isPending}
+                      />
                     ))}
                   </div>
                 </div>
@@ -446,6 +419,138 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
       <p className="mt-1 text-sm text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+// ── ProjectCard ───────────────────────────────────────────────────────────────
+
+function ProjectCard({
+  project,
+  onBlur,
+  onApproveToggle,
+  isSaving,
+}: {
+  project: DraftProjectItem;
+  onBlur: (
+    project: DraftProjectItem,
+    field: keyof DraftProjectItem,
+    value: DraftProjectItem[keyof DraftProjectItem],
+  ) => void;
+  onApproveToggle: (project: DraftProjectItem) => void;
+  isSaving: boolean;
+}) {
+  // Local state for controlled inputs — synced to DB on blur
+  const [fields, setFields] = useState({
+    project_name: project.project_name,
+    role: project.role,
+    summary: project.summary,
+    impact: project.impact,
+    tech_stack: project.tech_stack,
+    duration: project.duration,
+  });
+
+  const handleChange = (field: keyof typeof fields, value: string | string[]) => {
+    setFields((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const approved = !project.is_draft;
+
+  return (
+    <div className="rounded-xl border border-blue-100 bg-white p-4">
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="block text-sm text-gray-700">
+          <span className="mb-1 block font-medium">Nama proyek</span>
+          <input
+            value={fields.project_name}
+            onChange={(e) => handleChange("project_name", e.target.value)}
+            onBlur={(e) => onBlur(project, "project_name", e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+          />
+        </label>
+        <label className="block text-sm text-gray-700">
+          <span className="mb-1 block font-medium">Peran</span>
+          <input
+            value={fields.role}
+            onChange={(e) => handleChange("role", e.target.value)}
+            onBlur={(e) => onBlur(project, "role", e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <label className="block text-sm text-gray-700 md:col-span-2">
+          <span className="mb-1 block font-medium">Summary</span>
+          <textarea
+            value={fields.summary}
+            onChange={(e) => handleChange("summary", e.target.value)}
+            onBlur={(e) => onBlur(project, "summary", e.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+          />
+        </label>
+        <label className="block text-sm text-gray-700 md:col-span-2">
+          <span className="mb-1 block font-medium">Impact</span>
+          <textarea
+            value={fields.impact}
+            onChange={(e) => handleChange("impact", e.target.value)}
+            onBlur={(e) => onBlur(project, "impact", e.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+          />
+        </label>
+        <label className="block text-sm text-gray-700">
+          <span className="mb-1 block font-medium">Durasi</span>
+          <input
+            value={fields.duration}
+            onChange={(e) => handleChange("duration", e.target.value)}
+            onBlur={(e) => onBlur(project, "duration", e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+          />
+        </label>
+        <label className="block text-sm text-gray-700">
+          <span className="mb-1 block font-medium">Tech stack</span>
+          <input
+            value={fields.tech_stack.join(", ")}
+            onChange={(e) =>
+              handleChange(
+                "tech_stack",
+                e.target.value
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              )
+            }
+            onBlur={(e) =>
+              onBlur(
+                project,
+                "tech_stack",
+                e.target.value
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              )
+            }
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          disabled={isSaving}
+          onClick={() => onApproveToggle(project)}
+          className={`rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-60 ${
+            approved
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          }`}
+        >
+          {approved ? "Disetujui ✓" : "Setujui draft"}
+        </button>
+      </div>
     </div>
   );
 }

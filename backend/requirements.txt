@@ -27,7 +27,8 @@ pymupdf==1.24.14
 # pdfplumber==0.11.4
 
 # PDF generation (Fase 2 — generate CV standar Altek)
-weasyprint==62.3
+weasyprint==60.0
+pydyf>=0.8.0,<0.11.0   # pydyf 0.11.0+ breaks WeasyPrint 60 (PDF.__init__ API change)
 Jinja2==3.1.4
 
 # OCR (Fase 3 — untuk CV scan)

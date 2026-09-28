@@ -19,6 +19,7 @@ const positionCreateSchema = z.object({
   client_id: z.string().min(1, "Klien wajib dipilih"),
   title: z.string().min(1, "Judul posisi wajib diisi"),
   requirement: z.string().optional(),
+  job_description: z.string().optional(),
   employment_type: z.string().optional(),
   contract_duration_months: z
     .number()
@@ -31,6 +32,7 @@ const positionUpdateSchema = z
   .object({
     title: z.string().min(1, "Judul posisi wajib diisi").optional(),
     requirement: z.string().optional(),
+    job_description: z.string().optional(),
     employment_type: z.string().optional(),
     contract_duration_months: z
       .number()
@@ -478,6 +480,7 @@ function PositionFormModal({
           client_id: "",
           title: "",
           requirement: "",
+          job_description: "",
           employment_type: "",
           contract_duration_months: undefined,
           is_active: true,
@@ -486,6 +489,7 @@ function PositionFormModal({
           client_id: position?.client_id ?? "",
           title: position?.title ?? "",
           requirement: position?.requirement ?? "",
+          job_description: position?.job_description ?? "",
           employment_type: position?.employment_type ?? "",
           contract_duration_months: position?.contract_duration_months ?? undefined,
           is_active: position?.is_active ?? true,
@@ -635,6 +639,22 @@ function PositionFormModal({
             />
             {errors.requirement && (
               <p className="text-error text-xs mt-1">{errors.requirement.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-label-md text-on-surface mb-1.5">
+              Deskripsi Pekerjaan
+              <span className="text-on-surface-variant font-normal ml-1">(opsional)</span>
+            </label>
+            <textarea
+              placeholder={"• Bertanggung jawab atas pengembangan fitur baru\n• Berkolaborasi dengan tim lintas fungsi\n• Melakukan code review dan menjaga kualitas kode"}
+              {...register("job_description")}
+              rows={5}
+              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-y"
+            />
+            {errors.job_description && (
+              <p className="text-error text-xs mt-1">{errors.job_description.message}</p>
             )}
           </div>
 

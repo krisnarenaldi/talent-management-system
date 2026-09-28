@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
+from app.models.blacklist import Blacklist
 
 APPLICATION_STATUSES = ("active", "rejected", "hired", "withdrawn")
 
@@ -104,6 +105,37 @@ class Application(Base):
             return []
         transitions = VALID_TRANSITIONS.get(self.current_stage, [])
         return transitions + ["Rejected", "Withdrawn"]
+
+    @property
+    def ai_score(self) -> float | None:
+        """Skor AI dari screening result terkait (jika ada)."""
+        if self.ai_screening_result:
+            return self.ai_screening_result.ai_score
+        return None
+
+    @property
+    def ai_screening_status(self) -> str | None:
+        """Status screening AI dari screening result terkait (jika ada)."""
+        if self.ai_screening_result:
+            return self.ai_screening_result.status
+        return None
+
+    @property
+    def is_blacklisted(self) -> bool:
+        """Apakah kandidat dalam lamaran ini sedang di-blacklist (aktif & disetujui)."""
+        if not self.candidate:
+            return False
+        return any(bl.is_active and bl.is_approved for bl in self.candidate.blacklists)
+
+    @property
+    def blacklist_reason(self) -> str | None:
+        """Alasan blacklist pertama yang aktif & disetujui."""
+        if not self.candidate:
+            return None
+        for bl in self.candidate.blacklists:
+            if bl.is_active and bl.is_approved and bl.reason:
+                return bl.reason
+        return None
 
 
 class StageHistory(Base):

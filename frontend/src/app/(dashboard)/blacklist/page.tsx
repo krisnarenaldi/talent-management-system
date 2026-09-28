@@ -14,6 +14,7 @@ export default function BlacklistPage() {
   const queryClient = useQueryClient();
   const isRole = useAuthStore((state) => state.isRole);
   const showToast = useToastStore((state) => state.showToast);
+  const [confirmItem, setConfirmItem] = useState<Blacklist | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusTypeFilter, setStatusTypeFilter] = useState("");
@@ -43,9 +44,16 @@ export default function BlacklistPage() {
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => blacklistApi.approve(id),
-    onSuccess: () => {
+    onSuccess: (response, id) => {
       queryClient.invalidateQueries({ queryKey: ["blacklist"] });
-      showToast("success", "Blacklist berhasil disetujui.");
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      const blacklistItem = response as Blacklist;
+      const rejectedCount = blacklistItem.rejected_application_count || 0;
+      if (rejectedCount > 0) {
+        showToast("success", `Blacklist disetujui. ${rejectedCount} lamaran otomatis diubah ke Rejected.`);
+      } else {
+        showToast("success", "Blacklist berhasil disetujui.");
+      }
     },
     onError: (err) => showToast("error", getErrorMessage(err, "Gagal menyetujui blacklist.")),
   });
@@ -58,6 +66,21 @@ export default function BlacklistPage() {
     },
     onError: (err) => showToast("error", getErrorMessage(err, "Gagal mencabut blacklist.")),
   });
+
+  const showConfirmDialog = (item: Blacklist) => {
+    setConfirmItem(item);
+  };
+
+  const handleConfirmApprove = () => {
+    if (confirmItem) {
+      approveMutation.mutate(confirmItem.id);
+      setConfirmItem(null);
+    }
+  };
+
+  const handleCancelConfirm = () => {
+    setConfirmItem(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -191,7 +214,7 @@ export default function BlacklistPage() {
                         <div className="flex justify-end gap-2">
                           {!item.is_approved && (
                             <button
-                              onClick={() => approveMutation.mutate(item.id)}
+                              onClick={() => showConfirmDialog(item)}
                               disabled={approveMutation.isPending}
                               className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                             >
@@ -239,6 +262,70 @@ export default function BlacklistPage() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                <span className="material-symbols-outlined text-red-600">warning</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Konfirmasi Approval</h3>
+            </div>
+
+            <div className="mb-6 space-y-3">
+              <p className="text-sm text-gray-600">
+                Kamu akan menyetujui blacklist untuk:
+              </p>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="font-medium text-gray-900">{confirmItem.target_name}</p>
+                <p className="text-xs text-gray-500">
+                  {confirmItem.target_type === "candidate" ? "Kandidat" : "Karyawan"} •{" "}
+                  {confirmItem.status_type_label}
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-red-50 p-3">
+                <p className="text-sm font-medium text-red-800">
+                  ⚠️ PERHATIAN:
+                </p>
+                <p className="mt-1 text-sm text-red-700">
+                  Setelah disetujui, semua lamaran aktif kandidat ini akan otomatis diubah menjadi{' '}
+                  <strong>Rejected</strong>. Tindakan ini tidak dapat dibatalkan.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleCancelConfirm}
+                disabled={approveMutation.isPending}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmApprove}
+                disabled={approveMutation.isPending}
+                className="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {approveMutation.isPending ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Memproses...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-sm mr-1">check</span>
+                    Ya, Setujui
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -33,6 +33,8 @@ export default function NewApplicationPage() {
   const [showCandidateDropdown, setShowCandidateDropdown] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [showBlacklistModal, setShowBlacklistModal] = useState(false);
+  const [showCooldownModal, setShowCooldownModal] = useState(false);
+  const [cooldownMessage, setCooldownMessage] = useState<string>("");
   const [pendingFormValues, setPendingFormValues] = useState<FormValues | null>(null);
 
   const [positionSearch, setPositionSearch] = useState("");
@@ -142,13 +144,52 @@ export default function NewApplicationPage() {
     },
   });
 
+  const BULK_CV_MAX_FILES = 50;
+  const BULK_CV_MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+  const BULK_CV_ALLOWED_EXT = [".pdf", ".docx"];
+
   const addFiles = useCallback((incoming: FileList | File[]) => {
-    const pdfs = Array.from(incoming).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
-    const skipped = Array.from(incoming).length - pdfs.length;
-    if (skipped > 0) showToast("error", `${skipped} file diabaikan — hanya PDF yang diizinkan.`);
+    const all = Array.from(incoming);
+
+    // Filter format
+    const valid = all.filter((f) => {
+      const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+      return BULK_CV_ALLOWED_EXT.includes(ext);
+    });
+    const invalidFormat = all.length - valid.length;
+    if (invalidFormat > 0) {
+      showToast("error", `${invalidFormat} file diabaikan — hanya PDF dan DOCX yang diizinkan.`);
+    }
+
+    // Filter ukuran
+    const tooBig = valid.filter((f) => f.size > BULK_CV_MAX_FILE_SIZE);
+    if (tooBig.length > 0) {
+      showToast(
+        "error",
+        `${tooBig.length} file diabaikan karena melebihi batas ukuran 5 MB: ${tooBig.map((f) => f.name).join(", ")}`
+      );
+    }
+    const sizeOk = valid.filter((f) => f.size <= BULK_CV_MAX_FILE_SIZE);
+
     setCvFiles((prev) => {
       const existing = new Set(prev.map((f) => f.name + f.size));
-      return [...prev, ...pdfs.filter((f) => !existing.has(f.name + f.size))];
+      const deduped = sizeOk.filter((f) => !existing.has(f.name + f.size));
+      const merged = [...prev, ...deduped];
+
+      // Cek limit total
+      if (merged.length > BULK_CV_MAX_FILES) {
+        const allowed = BULK_CV_MAX_FILES - prev.length;
+        if (allowed <= 0) {
+          showToast("error", `Batas maksimal ${BULK_CV_MAX_FILES} file sudah tercapai.`);
+          return prev;
+        }
+        showToast(
+          "error",
+          `Hanya ${allowed} file yang ditambahkan — batas maksimal ${BULK_CV_MAX_FILES} file per upload.`
+        );
+        return [...prev, ...deduped.slice(0, allowed)];
+      }
+      return merged;
     });
   }, [showToast]);
 
@@ -167,11 +208,15 @@ export default function NewApplicationPage() {
       showToast("error", "Pilih minimal satu file CV.");
       return;
     }
+    if (cvFiles.length > BULK_CV_MAX_FILES) {
+      showToast("error", `Maksimal ${BULK_CV_MAX_FILES} file per upload. Hapus beberapa file terlebih dahulu.`);
+      return;
+    }
     bulkUploadMutation.mutate({ positionId: selectedUploadPosition.id, files: cvFiles, sourceChannel: uploadSourceChannel });
   };
 
   const createMutation = useMutation({
-    mutationFn: (payload: FormValues & { force_blacklisted?: boolean }) =>
+    mutationFn: (payload: FormValues & { force_blacklisted?: boolean; force_cooldown?: boolean }) =>
       api.post("/api/v1/applications", payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
@@ -179,7 +224,22 @@ export default function NewApplicationPage() {
       router.push(`/applications/${response.data.id}`);
     },
     onError: (err) => {
-      showToast("error", getErrorMessage(err, "Gagal membuat lamaran."));
+      const msg = getErrorMessage(err, "Gagal membuat lamaran.");
+      if ((err as any)?.response?.status === 400) {
+        // Cooldown error → tampilkan modal konfirmasi agar HR bisa force-bypass
+        if (msg.includes("pernah ditolak")) {
+          setCooldownMessage(msg);
+          setShowCooldownModal(true);
+          return;
+        }
+        // Blacklist error dari backend (fallback jika pre-check di onSubmit tidak menangkap)
+        // → tampilkan modal konfirmasi yang sama dengan alur blacklist normal
+        if (msg.includes("blacklist")) {
+          setShowBlacklistModal(true);
+          return;
+        }
+      }
+      showToast("error", msg);
     },
   });
 
@@ -218,6 +278,7 @@ export default function NewApplicationPage() {
       showToast("warning", `Peringatan: Kandidat ${selectedCandidate.full_name} sedang dalam daftar blacklist.`);
       return;
     }
+    setPendingFormValues(values);
     createMutation.mutate(values);
   };
 
@@ -231,6 +292,18 @@ export default function NewApplicationPage() {
   const handleCancelBlacklisted = () => {
     setShowBlacklistModal(false);
     setPendingFormValues(null);
+  };
+
+  const handleConfirmCooldown = () => {
+    if (!pendingFormValues) return;
+    setShowCooldownModal(false);
+    createMutation.mutate({ ...pendingFormValues, force_cooldown: true });
+    setPendingFormValues(null);
+  };
+
+  const handleCancelCooldown = () => {
+    setShowCooldownModal(false);
+    setCooldownMessage("");
   };
 
   return (
@@ -449,6 +522,45 @@ export default function NewApplicationPage() {
         </div>
       )}
 
+      {/* ── Cooldown Confirmation Modal ──────────────────────────────────────── */}
+      {showCooldownModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-orange-200 p-6 space-y-4 mx-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 rounded-full bg-orange-100 p-2">
+                <svg className="h-5 w-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Masa Tunggu (Cooldown) Belum Selesai</h3>
+                <p className="mt-1 text-sm text-gray-600">{cooldownMessage}</p>
+                <p className="mt-2 text-sm text-gray-700">
+                  Apakah Anda yakin ingin tetap melanjutkan dan mengabaikan masa tunggu ini?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCancelCooldown}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCooldown}
+                disabled={createMutation.isPending}
+                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {createMutation.isPending ? "Menyimpan..." : "Ya, Tetap Proses"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Upload CV untuk AI Screening (Langkah Tambahan) ────────────────────────────── */}
       <div className="rounded-xl border border-violet-200 bg-violet-50/30 p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
@@ -596,13 +708,13 @@ export default function NewApplicationPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-8m0 0l-3 3m3-3l3 3M3 17a4 4 0 008 0h1a5 5 0 000-10h-.5A5.5 5.5 0 003 12v5z" />
               </svg>
               <p className="mt-3 text-sm font-medium text-gray-700">
-                Drag & drop file PDF di sini, atau klik untuk memilih
+                Drag & drop file CV di sini, atau klik untuk memilih
               </p>
-              <p className="mt-1 text-xs text-gray-500">Hanya PDF • Bisa pilih beberapa file sekaligus</p>
+              <p className="mt-1 text-xs text-gray-500">PDF atau DOCX • Maks. 50 file • Maks. 5 MB per file</p>
               <input
                 ref={cvFileInputRef}
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.docx"
                 multiple
                 className="hidden"
                 onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }}
@@ -615,7 +727,11 @@ export default function NewApplicationPage() {
                 {cvFiles.map((file, idx) => (
                   <li key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm">
                     <div className="flex items-center gap-3 min-w-0">
-                      <svg className="h-4 w-4 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                      <svg
+                        className={`h-4 w-4 shrink-0 ${file.name.toLowerCase().endsWith(".docx") ? "text-blue-500" : "text-red-500"}`}
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
                         <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                       </svg>
                       <span className="truncate font-medium text-gray-800">{file.name}</span>
@@ -638,7 +754,9 @@ export default function NewApplicationPage() {
 
             <div className="flex items-center justify-between gap-3 pt-2">
               <span className="text-sm text-gray-500">
-                {cvFiles.length > 0 ? `${cvFiles.length} file dipilih` : "Belum ada file dipilih"}
+                {cvFiles.length > 0
+                  ? `${cvFiles.length} / ${BULK_CV_MAX_FILES} file dipilih`
+                  : "Belum ada file dipilih"}
               </span>
               <button
                 type="button"
