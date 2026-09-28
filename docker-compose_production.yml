@@ -143,9 +143,9 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl:ro        # SSL certificates (Let's Encrypt)
       - ./nginx/logs:/var/log/nginx
     depends_on:
-      - frontend:
+      frontend:
         condition: service_healthy
-      - backend:
+      backend:
         condition: service_healthy
     networks:
       - tms_internal
