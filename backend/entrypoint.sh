@@ -6,6 +6,11 @@ if [ -d /uploads ]; then
 fi
 
 echo "Running database migrations..."
-alembic upgrade head
+if alembic upgrade head; then
+  echo "Migrations completed successfully."
+else
+  echo "ERROR: Migration failed!"
+  exit 1
+fi
 
 exec gosu appuser "$@"
