@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useModalEscape } from "@/hooks/useModalEscape";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -453,6 +454,8 @@ function UserFormModal({
   const schema = isCreating ? userCreateSchema : userUpdateSchema;
   const isSubmitting = isCreating ? isCreatingPending : isUpdatingPending;
 
+  useModalEscape(onClose, !isSubmitting);
+
   const {
     register,
     handleSubmit,
@@ -625,6 +628,7 @@ function DeleteConfirmModal({
   onConfirm: () => void;
   isPending: boolean;
 }) {
+  useModalEscape(onClose, !isPending);
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4">

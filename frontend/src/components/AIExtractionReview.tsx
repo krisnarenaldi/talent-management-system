@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
 import type { AIScreeningResult } from "@/types";
+import { useModalEscape } from "@/hooks/useModalEscape";
 
 interface AIExtractionReviewProps {
   screening: AIScreeningResult;
@@ -410,6 +411,10 @@ export default function AIExtractionReview({ screening }: AIExtractionReviewProp
   }
 
   const scoreBadge = getScoreBadge(screening.ai_score);
+
+  // Close modals with Esc key
+  useModalEscape(() => { setCooldownPending(null); setCooldownMessage(""); }, cooldownPending !== null && !submitting);
+  useModalEscape(() => setBlacklistPending(null), blacklistPending !== null && !submitting);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

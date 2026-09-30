@@ -93,8 +93,7 @@ ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS source_channel_id UUID 
 -- h5i6j7k8l9m0: unique constraint on client pic_contact (may already exist)
 DO $$ BEGIN
     ALTER TABLE client ADD CONSTRAINT uq_client_pic_contact UNIQUE (pic_contact);
-EXCEPTION WHEN duplicate_table THEN NULL;
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL;
 END $$;
 
 -- i6j7k8l9m0n1: handler_id on stage_history

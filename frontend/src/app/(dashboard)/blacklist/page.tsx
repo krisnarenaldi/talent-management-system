@@ -9,6 +9,7 @@ import api from "@/lib/api";
 import { blacklistApi } from "@/lib/api/blacklist";
 import { getErrorMessage } from "@/lib/errors";
 import type { Blacklist, BlacklistStatusType } from "@/types";
+import { useModalEscape } from "@/hooks/useModalEscape";
 
 export default function BlacklistPage() {
   const queryClient = useQueryClient();
@@ -81,6 +82,8 @@ export default function BlacklistPage() {
   const handleCancelConfirm = () => {
     setConfirmItem(null);
   };
+
+  useModalEscape(handleCancelConfirm, confirmItem !== null && !approveMutation.isPending);
 
   return (
     <div className="space-y-6">

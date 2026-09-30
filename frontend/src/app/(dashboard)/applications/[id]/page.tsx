@@ -12,6 +12,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import type { Application, StageHistory, User } from "@/types";
 import { FileText, AlertTriangle } from "lucide-react";
+import { useModalEscape } from "@/hooks/useModalEscape";
 
 const FAIL_RESULTS = new Set(["fail", "tidak_lolos"]);
 
@@ -270,6 +271,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     setShowBlacklistModal(false);
     setPendingStagePayload(null);
   };
+
+  // Close modals with Esc key
+  useModalEscape(() => { setShowAssignModal(false); setAssignRecruiterInput(""); }, showAssignModal && !assignMutation.isPending);
+  useModalEscape(() => { setShowRejectConfirm(false); setPendingRejectPayload(null); }, showRejectConfirm && !rejectMutation.isPending);
+  useModalEscape(handleCancelBlacklisted, showBlacklistModal && !mutation.isPending);
 
   if (isLoading || !application) {
     return <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Memuat detail lamaran...</div>;

@@ -13,6 +13,7 @@ import { useToastStore } from "@/stores/toast.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { getErrorMessage } from "@/lib/errors";
 import type { Candidate, Position, SourceChannel } from "@/types";
+import { useModalEscape } from "@/hooks/useModalEscape";
 
 const formSchema = z.object({
   candidate_id: z.string().min(1, "Pilih kandidat terlebih dahulu"),
@@ -305,6 +306,9 @@ export default function NewApplicationPage() {
     setShowCooldownModal(false);
     setCooldownMessage("");
   };
+
+  useModalEscape(handleCancelBlacklisted, showBlacklistModal && !createMutation.isPending);
+  useModalEscape(handleCancelCooldown, showCooldownModal && !createMutation.isPending);
 
   return (
     <div className="space-y-6">

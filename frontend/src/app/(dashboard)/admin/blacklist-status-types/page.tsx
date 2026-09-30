@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useModalEscape } from "@/hooks/useModalEscape";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -199,6 +200,8 @@ function BlacklistStatusTypeFormModal({
   onClose: () => void;
   onSubmit: (payload: FormValues) => void;
 }) {
+  useModalEscape(onClose, !pending);
+
   const {
     register,
     handleSubmit,

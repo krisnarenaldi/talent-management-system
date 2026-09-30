@@ -139,8 +139,8 @@ function SimpleHorizontalBarChart({ data, valueLabel = "Jumlah" }: { data: { nam
   const barAreaWidth = chartWidth - 170;
 
   return (
-    <div ref={containerRef}>
-      <div className="flex flex-col gap-3">
+    <div ref={containerRef} className="overflow-x-auto">
+      <div className="flex flex-col gap-3 min-w-full">
         {data.map((item, idx) => {
           const barWidth = barAreaWidth > 0 ? Math.max(2, (item.value / maxValue) * barAreaWidth) : 0;
           return (
@@ -192,8 +192,8 @@ function HorizontalBarChart({ data }: { data: RecruiterWorkload[] }) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   return (
-    <div ref={containerRef}>
-      <div className="flex flex-col gap-3">
+    <div ref={containerRef} className="overflow-x-auto">
+      <div className="flex flex-col gap-3 min-w-full">
         {data.map((item, idx) => {
           const barWidth = barAreaWidth > 0 ? Math.max(2, (item.active_candidates / maxActive) * barAreaWidth) : 0;
           const total = item.total_applications_all_time || 0;
@@ -317,7 +317,7 @@ export default function AnalyticsPage() {
         </p>
       </div>
 
-      <div ref={chartRef} className="bg-surface-container-low rounded-xl border border-outline-variant p-6 shadow-sm">
+      <div ref={chartRef} className="bg-surface-container-low rounded-xl border border-outline-variant p-6 shadow-sm overflow-x-auto">
         <h2 className="text-title-md font-semibold text-on-surface mb-4">
           Tren Kandidat Masuk per Bulan
         </h2>

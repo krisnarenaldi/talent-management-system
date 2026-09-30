@@ -99,7 +99,7 @@ export default function DashboardLayout({
   return (
     <TokenRefreshProvider>
       <AuthProvider>
-      <div className="flex h-full bg-surface text-on-surface overflow-hidden">
+      <div className="flex h-full bg-surface text-on-surface">
         <Sidebar />
 
         {/* Content area — offset by sidebar width */}
@@ -161,7 +161,7 @@ export default function DashboardLayout({
           </header>
 
           {/* Scrollable page content */}
-          <main className="flex-1 overflow-y-auto mt-16 bg-surface-bright px-container-padding">
+          <main className="flex-1 overflow-y-auto overflow-x-auto mt-16 bg-surface-bright px-container-padding">
             {isUnauthorizedAdminRoute ? (
               <div className="p-container-padding">
                 <div className="max-w-2xl mx-auto bg-error-container border border-error/20 rounded-xl px-4 py-3 flex items-center gap-2">
