@@ -6,6 +6,7 @@ ALTER TABLE candidate ADD COLUMN IF NOT EXISTS birth_date DATE;
 ALTER TABLE candidate ADD COLUMN IF NOT EXISTS birth_place VARCHAR(255);
 ALTER TABLE candidate ADD COLUMN IF NOT EXISTS gender VARCHAR(20);
 ALTER TABLE candidate ADD COLUMN IF NOT EXISTS blood_type VARCHAR(5);
+ALTER TABLE candidate ADD COLUMN IF NOT EXISTS marital_status VARCHAR(50);
 
 -- d1e2f3a4b5c6: skills JSONB on candidate
 ALTER TABLE candidate ADD COLUMN IF NOT EXISTS skills JSONB DEFAULT '[]';
@@ -101,5 +102,24 @@ END $$;
 ALTER TABLE stage_history ADD COLUMN IF NOT EXISTS handler_id UUID REFERENCES "user"(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS ix_stage_history_handler_id ON stage_history (handler_id);
 
--- position: ai_scoring_config JSONB
+-- position: ai_scoring_config JSONB and job_description Text
 ALTER TABLE position ADD COLUMN IF NOT EXISTS ai_scoring_config JSONB;
+ALTER TABLE position ADD COLUMN IF NOT EXISTS job_description TEXT;
+
+-- p3q4r5s6t7u8: label on candidate_document
+ALTER TABLE candidate_document ADD COLUMN IF NOT EXISTS label VARCHAR(255);
+
+-- l9m0n1o2p3q4: candidate_project table
+CREATE TABLE IF NOT EXISTS candidate_project (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    candidate_id UUID NOT NULL REFERENCES candidate(id) ON DELETE CASCADE,
+    project_name VARCHAR(255) NOT NULL,
+    role VARCHAR(200),
+    start_date DATE,
+    end_date DATE,
+    description TEXT,
+    project_url VARCHAR(500),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_candidate_project_candidate_id ON candidate_project (candidate_id);
