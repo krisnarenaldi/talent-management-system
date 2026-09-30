@@ -319,259 +319,13 @@ export default function NewApplicationPage() {
         <h1 className="mt-2 text-2xl font-bold text-gray-900">Tambah Lamaran</h1>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-16">
-        {/* Candidate Selection */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Pilih Kandidat</h2>
-
-          <div className="relative" ref={candidateRef}>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Nama Kandidat <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={candidateSearch}
-              onChange={(e) => {
-                setCandidateSearch(e.target.value);
-                setShowCandidateDropdown(true);
-                if (e.target.value.length < 2) setSelectedCandidate(null);
-              }}
-              onFocus={() => setShowCandidateDropdown(true)}
-              placeholder="Ketik nama kandidat..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
-            />
-            {errors.candidate_id && (
-              <p className="mt-1 text-xs text-red-600">{errors.candidate_id.message}</p>
-            )}
-
-            {showCandidateDropdown && candidates.length > 0 && (
-              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
-                {candidates.map((candidate) => (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    onClick={() => handleSelectCandidate(candidate)}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0 flex items-center gap-3"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">{candidate.full_name}</p>
-                      <p className="text-xs text-gray-500">
-                        {candidate.email || candidate.phone || "-"}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {showCandidateDropdown && candidates.length === 0 && candidateSearch.length >= 2 && (
-              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg py-3 text-center text-sm text-gray-500">
-                Tidak ditemukan
-              </div>
-            )}
-          </div>
-
-          {selectedCandidate && (
-            <div className={`rounded-lg px-4 py-3 text-sm border ${selectedCandidate.is_blacklisted ? "bg-amber-50 border-amber-300" : "bg-blue-50 border-blue-200"}`}>
-              <div className="flex items-center gap-2">
-                <p className={`font-medium ${selectedCandidate.is_blacklisted ? "text-amber-900" : "text-blue-900"}`}>
-                  {selectedCandidate.full_name}
-                </p>
-                {selectedCandidate.is_blacklisted && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                    ⚠ Blacklist
-                  </span>
-                )}
-              </div>
-              <p className={`text-xs mt-1 ${selectedCandidate.is_blacklisted ? "text-amber-700" : "text-blue-700"}`}>
-                {selectedCandidate.email && `Email: ${selectedCandidate.email}  •  `}
-                {selectedCandidate.phone && `HP: ${selectedCandidate.phone}`}
-              </p>
-              {selectedCandidate.is_blacklisted && (
-                <p className="mt-1.5 text-xs text-amber-800 font-medium">
-                  Kandidat ini terdaftar dalam blacklist. Anda masih dapat melanjutkan proses lamaran, namun konfirmasi diperlukan.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Position Selection */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Pilih Posisi</h2>
-
-          <div className="relative" ref={positionRef}>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Judul Posisi <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={positionSearch}
-              onChange={(e) => {
-                setPositionSearch(e.target.value);
-                setShowPositionDropdown(true);
-                if (e.target.value.length < 2) setSelectedPosition(null);
-              }}
-              onFocus={() => setShowPositionDropdown(true)}
-              placeholder="Ketik judul posisi..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
-            />
-            {errors.position_id && (
-              <p className="mt-1 text-xs text-red-600">{errors.position_id.message}</p>
-            )}
-
-            {showPositionDropdown && positions.length > 0 && (
-              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
-                {positions.map((pos) => (
-                  <button
-                    key={pos.id}
-                    type="button"
-                    onClick={() => handleSelectPosition(pos)}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                  >
-                    <p className="font-medium text-gray-900">{pos.title}</p>
-                    <p className="text-xs text-gray-500">{pos.client_name || "-"}</p>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {showPositionDropdown && positions.length === 0 && positionSearch.length >= 2 && (
-              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg py-3 text-center text-sm text-gray-500">
-                Tidak ditemukan
-              </div>
-            )}
-          </div>
-
-          {selectedPosition && (
-            <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
-              <p className="font-medium text-blue-900">{selectedPosition.title}</p>
-              <p className="text-blue-700 text-xs mt-1">
-                Client: {selectedPosition.client_name || "-"}  •  {selectedPosition.employment_type || "Full-time"}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Recruiter */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Recruiter</h2>
-          <p className="text-sm text-gray-500">
-            Recruiter akan diisi otomatis dengan user saat ini.
-          </p>
-          <input type="hidden" {...register("recruiter_id")} />
-          <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-700">
-            {currentUser?.name || "-"} ({currentUser?.email || "-"})
-          </div>
-        </div>
-
-        {/* Stage (hidden, default value) */}
-        <input type="hidden" {...register("current_stage")} />
-
-        <div className="flex justify-end gap-3">
-          <Link
-            href="/applications"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Batal
-          </Link>
-          <button
-            type="submit"
-            disabled={isSubmitting || createMutation.isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
-            {createMutation.isPending ? "Menyimpan..." : "Simpan Lamaran"}
-          </button>
-        </div>
-      </form>
-
-      {/* ── Blacklist Confirmation Modal ─────────────────────────────────────── */}
-      {showBlacklistModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-amber-200 p-6 space-y-4 mx-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 rounded-full bg-amber-100 p-2">
-                <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Kandidat Dalam Blacklist</h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  Kandidat <span className="font-semibold text-amber-800">{selectedCandidate?.full_name}</span> saat ini terdaftar dalam daftar blacklist.
-                </p>
-                <p className="mt-2 text-sm text-gray-700">
-                  Apakah Anda yakin ingin tetap melanjutkan proses Application untuk kandidat ini?
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleCancelBlacklisted}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmBlacklisted}
-                disabled={createMutation.isPending}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-              >
-                {createMutation.isPending ? "Menyimpan..." : "Ya, Lanjutkan"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Cooldown Confirmation Modal ──────────────────────────────────────── */}
-      {showCooldownModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-orange-200 p-6 space-y-4 mx-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 rounded-full bg-orange-100 p-2">
-                <svg className="h-5 w-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Masa Tunggu (Cooldown) Belum Selesai</h3>
-                <p className="mt-1 text-sm text-gray-600">{cooldownMessage}</p>
-                <p className="mt-2 text-sm text-gray-700">
-                  Apakah Anda yakin ingin tetap melanjutkan dan mengabaikan masa tunggu ini?
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleCancelCooldown}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmCooldown}
-                disabled={createMutation.isPending}
-                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-              >
-                {createMutation.isPending ? "Menyimpan..." : "Ya, Tetap Proses"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Upload CV untuk AI Screening (Langkah Tambahan) ────────────────────────────── */}
+      {/* ── Upload CV untuk AI Screening ────────────────────────────── */}
       <div className="rounded-xl border border-violet-200 bg-violet-50/30 p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
           <svg className="h-5 w-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2h-2" />
           </svg>
-          <h3 className="text-lg font-semibold text-violet-900">Upload CV untuk AI Screening</h3>          
+          <h3 className="text-lg font-semibold text-violet-900">Upload CV untuk AI Screening</h3>
         </div>
         <p className="text-sm text-gray-600">
           Sebagai tambahan dari form lamaran di atas, silakan upload CV (PDF) untuk screening otomatis oleh AI.
@@ -789,6 +543,253 @@ export default function NewApplicationPage() {
           </>
         )}
       </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-16">
+        {/* Candidate Selection */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900">Pilih Kandidat</h2>
+
+          <div className="relative" ref={candidateRef}>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Nama Kandidat <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={candidateSearch}
+              onChange={(e) => {
+                setCandidateSearch(e.target.value);
+                setShowCandidateDropdown(true);
+                if (e.target.value.length < 2) setSelectedCandidate(null);
+              }}
+              onFocus={() => setShowCandidateDropdown(true)}
+              placeholder="Ketik nama kandidat..."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            />
+            {errors.candidate_id && (
+              <p className="mt-1 text-xs text-red-600">{errors.candidate_id.message}</p>
+            )}
+
+            {showCandidateDropdown && candidates.length > 0 && (
+              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
+                {candidates.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    onClick={() => handleSelectCandidate(candidate)}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0 flex items-center gap-3"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">{candidate.full_name}</p>
+                      <p className="text-xs text-gray-500">
+                        {candidate.email || candidate.phone || "-"}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {showCandidateDropdown && candidates.length === 0 && candidateSearch.length >= 2 && (
+              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg py-3 text-center text-sm text-gray-500">
+                Tidak ditemukan
+              </div>
+            )}
+          </div>
+
+          {selectedCandidate && (
+            <div className={`rounded-lg px-4 py-3 text-sm border ${selectedCandidate.is_blacklisted ? "bg-amber-50 border-amber-300" : "bg-blue-50 border-blue-200"}`}>
+              <div className="flex items-center gap-2">
+                <p className={`font-medium ${selectedCandidate.is_blacklisted ? "text-amber-900" : "text-blue-900"}`}>
+                  {selectedCandidate.full_name}
+                </p>
+                {selectedCandidate.is_blacklisted && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                    ⚠ Blacklist
+                  </span>
+                )}
+              </div>
+              <p className={`text-xs mt-1 ${selectedCandidate.is_blacklisted ? "text-amber-700" : "text-blue-700"}`}>
+                {selectedCandidate.email && `Email: ${selectedCandidate.email}  •  `}
+                {selectedCandidate.phone && `HP: ${selectedCandidate.phone}`}
+              </p>
+              {selectedCandidate.is_blacklisted && (
+                <p className="mt-1.5 text-xs text-amber-800 font-medium">
+                  Kandidat ini terdaftar dalam blacklist. Anda masih dapat melanjutkan proses lamaran, namun konfirmasi diperlukan.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Position Selection */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900">Pilih Posisi</h2>
+
+          <div className="relative" ref={positionRef}>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Judul Posisi <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={positionSearch}
+              onChange={(e) => {
+                setPositionSearch(e.target.value);
+                setShowPositionDropdown(true);
+                if (e.target.value.length < 2) setSelectedPosition(null);
+              }}
+              onFocus={() => setShowPositionDropdown(true)}
+              placeholder="Ketik judul posisi..."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            />
+            {errors.position_id && (
+              <p className="mt-1 text-xs text-red-600">{errors.position_id.message}</p>
+            )}
+
+            {showPositionDropdown && positions.length > 0 && (
+              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
+                {positions.map((pos) => (
+                  <button
+                    key={pos.id}
+                    type="button"
+                    onClick={() => handleSelectPosition(pos)}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                  >
+                    <p className="font-medium text-gray-900">{pos.title}</p>
+                    <p className="text-xs text-gray-500">{pos.client_name || "-"}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {showPositionDropdown && positions.length === 0 && positionSearch.length >= 2 && (
+              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg py-3 text-center text-sm text-gray-500">
+                Tidak ditemukan
+              </div>
+            )}
+          </div>
+
+          {selectedPosition && (
+            <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
+              <p className="font-medium text-blue-900">{selectedPosition.title}</p>
+              <p className="text-blue-700 text-xs mt-1">
+                Client: {selectedPosition.client_name || "-"}  •  {selectedPosition.employment_type || "Full-time"}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Recruiter */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900">Recruiter</h2>
+          <p className="text-sm text-gray-500">
+            Recruiter akan diisi otomatis dengan user saat ini.
+          </p>
+          <input type="hidden" {...register("recruiter_id")} />
+          <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-700">
+            {currentUser?.name || "-"} ({currentUser?.email || "-"})
+          </div>
+        </div>
+
+        {/* Stage (hidden, default value) */}
+        <input type="hidden" {...register("current_stage")} />
+
+        <div className="flex justify-end gap-3">
+          <Link
+            href="/applications"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Batal
+          </Link>
+          <button
+            type="submit"
+            disabled={isSubmitting || createMutation.isPending}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            {createMutation.isPending ? "Menyimpan..." : "Simpan Lamaran"}
+          </button>
+        </div>
+      </form>
+
+      {/* ── Blacklist Confirmation Modal ──────────────────────────────────────── */}
+      {showBlacklistModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-amber-200 p-6 space-y-4 mx-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 rounded-full bg-amber-100 p-2">
+                <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Kandidat Dalam Blacklist</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Kandidat <span className="font-semibold text-amber-800">{selectedCandidate?.full_name}</span> saat ini terdaftar dalam daftar blacklist.
+                </p>
+                <p className="mt-2 text-sm text-gray-700">
+                  Apakah Anda yakin ingin tetap melanjutkan proses Application untuk kandidat ini?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCancelBlacklisted}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBlacklisted}
+                disabled={createMutation.isPending}
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {createMutation.isPending ? "Menyimpan..." : "Ya, Lanjutkan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cooldown Confirmation Modal ──────────────────────────────────────── */}
+      {showCooldownModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-orange-200 p-6 space-y-4 mx-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 rounded-full bg-orange-100 p-2">
+                <svg className="h-5 w-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Masa Tunggu (Cooldown) Belum Selesai</h3>
+                <p className="mt-1 text-sm text-gray-600">{cooldownMessage}</p>
+                <p className="mt-2 text-sm text-gray-700">
+                  Apakah Anda yakin ingin tetap melanjutkan dan mengabaikan masa tunggu ini?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCancelCooldown}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCooldown}
+                disabled={createMutation.isPending}
+                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {createMutation.isPending ? "Menyimpan..." : "Ya, Tetap Proses"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
