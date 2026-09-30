@@ -87,7 +87,8 @@ CREATE TABLE IF NOT EXISTS source_channel (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- g4h5i6j7k8l9: source_channel_id on ai_screening_result
+-- g4h5i6j7k8l9: source_channel and source_channel_id on ai_screening_result
+ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS source_channel VARCHAR(100);
 ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS source_channel_id UUID REFERENCES source_channel(id) ON DELETE SET NULL;
 
 -- h5i6j7k8l9m0: unique constraint on client pic_contact (may already exist)
