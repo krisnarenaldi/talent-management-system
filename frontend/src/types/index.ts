@@ -105,6 +105,7 @@ export interface Candidate {
   birth_place?: string;
   gender?: string;
   blood_type?: string;
+  marital_status?: string;
   domicile?: string;
   photo_url?: string;
   source_channel?: string;
@@ -145,6 +146,7 @@ export interface CandidateDocument {
   id: string;
   candidate_id: string;
   doc_type: string;
+  label?: string | null;
   file_url?: string;
   drive_item_id?: string;
   is_verified: boolean;

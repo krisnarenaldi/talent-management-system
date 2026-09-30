@@ -69,6 +69,7 @@ class CandidateCreate(BaseModel):
     birth_place: str | None = None
     gender: str | None = None
     blood_type: str | None = None
+    marital_status: str | None = None
     domicile: str | None = None
     photo_url: str | None = None
     source_channel: str | None = None
@@ -88,6 +89,7 @@ class CandidateUpdate(BaseModel):
     birth_place: str | None = None
     gender: str | None = None
     blood_type: str | None = None
+    marital_status: str | None = None
     domicile: str | None = None
     photo_url: str | None = None
     source_channel: str | None = None
@@ -113,6 +115,7 @@ class CandidateResponse(BaseModel):
     birth_place: str | None
     gender: str | None
     blood_type: str | None
+    marital_status: str | None
     domicile: str | None
     photo_url: str | None
     source_channel: str | None
@@ -184,6 +187,7 @@ class DocumentResponse(BaseModel):
     id: AutoStrUUID
     candidate_id: AutoStrUUID
     doc_type: str
+    label: str | None
     file_url: str | None
     drive_item_id: str | None
     is_verified: bool

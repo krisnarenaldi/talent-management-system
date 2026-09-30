@@ -19,18 +19,25 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'notification',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True, default=sa.func.uuid_generate_v4()),
-        sa.Column('user_id', UUID(as_uuid=True), sa.ForeignKey('user.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('type', sa.String(length=100), nullable=False),
-        sa.Column('message', sa.Text(), nullable=False),
-        sa.Column('link', sa.String(length=500), nullable=True),
-        sa.Column('is_read', sa.Boolean(), nullable=False, server_default=sa.text('false')),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    )
-    op.create_index(op.f('ix_notification_user_id'), 'notification', ['user_id'], unique=False)
-    op.create_index(op.f('ix_notification_is_read'), 'notification', ['is_read'], unique=False)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if 'notification' not in inspector.get_table_names():
+        op.create_table(
+            'notification',
+            sa.Column('id', UUID(as_uuid=True), primary_key=True, default=sa.func.uuid_generate_v4()),
+            sa.Column('user_id', UUID(as_uuid=True), sa.ForeignKey('user.id', ondelete='CASCADE'), nullable=False),
+            sa.Column('type', sa.String(length=100), nullable=False),
+            sa.Column('message', sa.Text(), nullable=False),
+            sa.Column('link', sa.String(length=500), nullable=True),
+            sa.Column('is_read', sa.Boolean(), nullable=False, server_default=sa.text('false')),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+        )
+
+    existing_indexes = [idx['name'] for idx in inspector.get_indexes('notification')]
+    if 'ix_notification_user_id' not in existing_indexes:
+        op.create_index(op.f('ix_notification_user_id'), 'notification', ['user_id'], unique=False)
+    if 'ix_notification_is_read' not in existing_indexes:
+        op.create_index(op.f('ix_notification_is_read'), 'notification', ['is_read'], unique=False)
 
 
 def downgrade() -> None:

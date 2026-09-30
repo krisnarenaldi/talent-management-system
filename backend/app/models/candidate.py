@@ -33,6 +33,7 @@ class Candidate(Base):
     birth_place = Column(String(255))
     gender = Column(String(20))
     blood_type = Column(String(5))
+    marital_status = Column(String(50))
     domicile = Column(String(255))
     photo_url = Column(String(500))
     source_channel = Column(String(100))                 # LinkedIn/Glints/Email/dll
@@ -96,6 +97,7 @@ class CandidateDocument(Base):
     candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidate.id", ondelete="CASCADE"), nullable=False, index=True)
     # Tipe dokumen: CV_asli, Foto, KTP, KK, Ijazah, Transkrip, Sertifikat, BI_Checking
     doc_type = Column(String(100), nullable=False)
+    label = Column(String(255), nullable=True)    # Keterangan tambahan, mis. "Ijazah S1", "Sertifikat AWS"
     file_url = Column(String(500))           # OneDrive drive item ID atau URL referensi
     drive_item_id = Column(String(500))      # Microsoft Graph drive item ID
     is_verified = Column(Boolean, default=False)

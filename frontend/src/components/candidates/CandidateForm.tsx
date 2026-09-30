@@ -39,6 +39,7 @@ const candidateFormSchema = z.object({
   birth_place: z.string().optional().or(z.literal("")),
   gender: z.string().optional().or(z.literal("")),
   blood_type: z.string().optional().or(z.literal("")),
+  marital_status: z.string().optional().or(z.literal("")),
   domicile: z.string().optional().or(z.literal("")),
   source_channel: z.string().optional().or(z.literal("")),
   current_salary: z.string().optional().or(z.literal("")),
@@ -120,6 +121,7 @@ export default function CandidateForm({
       birth_place: "",
       gender: "",
       blood_type: "",
+      marital_status: "",
       domicile: "",
       source_channel: "",
       current_salary: "",
@@ -178,6 +180,7 @@ export default function CandidateForm({
           birth_place: candidate.birth_place || "",
           gender: candidate.gender || "",
           blood_type: candidate.blood_type || "",
+          marital_status: candidate.marital_status || "",
           domicile: candidate.domicile || "",
           source_channel: candidate.source_channel || "",
           current_salary: candidate.current_salary != null ? String(candidate.current_salary) : "",
@@ -233,6 +236,7 @@ export default function CandidateForm({
         birth_place: values.birth_place?.trim() || null,
         gender: values.gender?.trim() || null,
         blood_type: values.blood_type?.trim() || null,
+        marital_status: values.marital_status?.trim() || null,
         domicile: values.domicile?.trim() || null,
         source_channel: values.source_channel?.trim() || null,
         current_salary: toNumber(values.current_salary),
@@ -443,6 +447,17 @@ export default function CandidateForm({
                 <option value="B">B</option>
                 <option value="AB">AB</option>
                 <option value="O">O</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Status Perkawinan</label>
+              <select {...form.register("marital_status")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
+                <option value="">Pilih</option>
+                <option value="Belum Menikah">Belum Menikah</option>
+                <option value="Menikah">Menikah</option>
+                <option value="Cerai Hidup">Cerai Hidup</option>
+                <option value="Cerai Mati">Cerai Mati</option>
               </select>
             </div>
 

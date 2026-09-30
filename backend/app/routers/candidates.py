@@ -510,6 +510,7 @@ def list_documents(
 async def upload_document(
     candidate_id: str,
     doc_type: str = Query(..., description="KTP/Ijazah/Transkrip/CV_asli/Foto/Sertifikat/Dokumen_Onboarding/BPJS_TK/BPJS_Kesehatan/NPWP"),
+    label: str | None = Query(None, description="Keterangan tambahan, mis. 'Ijazah S1 UI', 'Sertifikat AWS 2024'"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
@@ -534,6 +535,7 @@ async def upload_document(
     doc = CandidateDocument(
         candidate_id=candidate_id,
         doc_type=doc_type,
+        label=label or None,
         file_url=result["file_url"],
         drive_item_id=None,  # local storage — drive_item_id tidak dipakai
     )

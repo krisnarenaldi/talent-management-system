@@ -36,7 +36,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
-from app.models.candidate import Candidate, CandidateEducation, CandidateExperience
+from app.models.candidate import Candidate, CandidateDocument, CandidateEducation, CandidateExperience
 from app.models.candidate_project import CandidateProject
 from app.models.generated_cv import GeneratedCV
 from app.services.storage_service import get_storage_service
@@ -89,7 +89,21 @@ def _make_jinja_env() -> Environment:
         except Exception:
             return str(value)
 
+    def _format_date_full(value: datetime.date | None) -> str:
+        """Return full date like '5 Desember 1998'."""
+        if value is None:
+            return "-"
+        try:
+            MONTHS_FULL = [
+                "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+            ]
+            return f"{value.day} {MONTHS_FULL[value.month]} {value.year}"
+        except Exception:
+            return str(value)
+
     env.filters["format_date"] = _format_date
+    env.filters["format_date_full"] = _format_date_full
     return env
 
 
@@ -161,6 +175,162 @@ def _compute_age(birth_date: datetime.date | None) -> str | None:
         (today.month, today.day) < (birth_date.month, birth_date.day)
     )
     return f"{years} tahun"
+
+
+# ── Attachment docs (Ijazah / Sertifikat / Transkrip) ────────────────────────
+
+# doc_type values that get embedded as images in the generated CV
+_ATTACHMENT_DOC_TYPES = {"Ijazah", "Sertifikat", "Transkrip"}
+
+# Sort order for display: Ijazah first, then Transkrip, then Sertifikat
+_ATTACHMENT_SORT_ORDER = {"Ijazah": 0, "Transkrip": 1, "Sertifikat": 2}
+
+_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+
+
+def _load_attachment_docs(
+    db: Session,
+    candidate_id: str,
+) -> list[dict]:
+    """
+    Load Ijazah, Transkrip and Sertifikat documents from DB, encode image files as base64.
+    Only image formats (jpg/jpeg/png/webp/gif/bmp) are supported — PDF is skipped.
+
+    Label priority:
+      1. doc.label  — user-supplied keterangan (e.g. "Ijazah S1 Universitas Indonesia")
+      2. doc.doc_type — fallback (e.g. "Ijazah")
+
+    Returns list of dicts: {label, img_base64, img_mime}, sorted by doc_type order
+    then upload time.
+    """
+    docs: list[CandidateDocument] = (
+        db.query(CandidateDocument)
+        .filter(
+            CandidateDocument.candidate_id == candidate_id,
+            CandidateDocument.is_deleted == False,
+            CandidateDocument.doc_type.in_(list(_ATTACHMENT_DOC_TYPES)),
+        )
+        .order_by(CandidateDocument.uploaded_at)
+        .all()
+    )
+
+    # Sort: Ijazah → Transkrip → Sertifikat, preserving upload order within each group
+    docs.sort(key=lambda d: (_ATTACHMENT_SORT_ORDER.get(d.doc_type, 99), d.uploaded_at or ""))
+
+    result = []
+    for doc in docs:
+        file_url = doc.file_url or ""
+        ext = Path(file_url).suffix.lower()
+        if ext not in _IMAGE_EXTENSIONS:
+            # PDF / unknown — not embeddable in HTML→PDF via WeasyPrint
+            logger.debug("Skip non-image attachment %s (%s)", file_url, ext)
+            continue
+
+        img_b64, img_mime = _load_image_as_base64(None, file_url)
+        # Use user-supplied label if present, fall back to doc_type
+        display_label = (doc.label or "").strip() or doc.doc_type
+        result.append({
+            "label": display_label,
+            "doc_type": doc.doc_type,
+            "img_base64": img_b64,
+            "img_mime": img_mime,
+        })
+
+    return result
+
+
+# ── Position title helpers ────────────────────────────────────────────────────
+
+# Regex to extract a meaningful title from an original CV filename.
+# Patterns like:  "EMAIL QA - Muhammad Ikhsan.pdf"
+#                 "DATABASE_Rivaldo Antonend P_ ACC.pdf"
+#                 "GLINTS PROGRAMMER - DWI WAHYU.pdf"
+#                 "Achmad Sholeh - Programmer or IT Helpdesk.pdf"
+_CV_FILENAME_TITLE_RE = re.compile(
+    r"""
+    (?:
+      # "EMAIL <TITLE> - Name"  or  "GLINTS <TITLE> - Name"
+      (?:email|glints|linkedin|tapker|taploker|jobstreet|web)\s+(.+?)\s*[-–]\s
+      |
+      # "<CATEGORY>_<TITLE>_Name" or "<CATEGORY> <TITLE> - Name"
+      [A-Z][A-Z_]+[_ ]+(.+?)[_\s]+[-–\s]
+      |
+      # "Name - <TITLE>" or "Name — <TITLE>"
+      .+?\s+[-–]\s+(.+?)
+    )
+    (?:\.pdf|\.docx)?$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Source keywords that prefix the actual position (skip these)
+_SKIP_PREFIXES = {
+    "email", "glints", "linkedin", "tapker", "taploker",
+    "jobstreet", "database", "web", "acc", "approved",
+}
+
+
+def _extract_position_from_filename(filename: str) -> str | None:
+    """
+    Try to infer a position/job title from the original CV filename.
+
+    Handles naming patterns used in the system:
+      "EMAIL QA - Muhammad Ikhsan.pdf"          → "QA"
+      "EMAIL QA AUTO - Sendi Septian.pdf"        → "QA Auto"
+      "GLINTS PROGRAMMER - DWI WAHYU.pdf"        → "Programmer"
+      "EMAIL MOB DEV - FAJAR RIANTO.pdf"         → "Mobile Dev"
+      "EMAIL UAT Tester - Abdul Karman.pdf"      → "UAT Tester"
+      "EMAIL SA or FD or DE - RICKY.pdf"         → "SA / FD / DE"
+      "Achmad Sholeh - Programmer or IT Helpdesk.pdf" → "Programmer or IT Helpdesk"
+      "DATABASE_Rivaldo Antonend P_ ACC.pdf"     → from last experience title (fallback)
+
+    Returns the extracted title string (title-cased) or None.
+    """
+    if not filename:
+        return None
+
+    stem = Path(filename).stem.strip()
+
+    # ── Pattern A: "SOURCE TITLE - Name"  (dash separates title from name)
+    # e.g. "EMAIL QA AUTO - Sendi Septian Hadi"
+    # e.g. "GLINTS PROGRAMMER - DWI"
+    parts = re.split(r"\s[-–]\s", stem, maxsplit=1)
+    if len(parts) == 2:
+        left, right = parts[0].strip(), parts[1].strip()
+        left_words = left.split()
+
+        # If left starts with a source keyword, strip it to get the title
+        if left_words and left_words[0].upper() in {w.upper() for w in _SKIP_PREFIXES}:
+            title_words = left_words[1:]
+            if title_words:
+                return " ".join(title_words).title()
+            # Only one word after stripping (too short?) → skip, handled by right side
+        else:
+            # Left has no source keyword → right side might be the title
+            # e.g. "Achmad Sholeh - Programmer or IT Helpdesk"
+            # Check if right looks like a title (has job-like words) rather than a plain name
+            if right and not re.match(r"^[A-Z][a-z]+(?:\s[A-Z][a-z]+)*$", right):
+                # Right has job keywords (uppercase words / abbreviations / slashes)
+                return right.title()
+            # Otherwise left is likely a name → return right if it looks title-like
+            if right and len(right.split()) >= 1:
+                return right.title()
+
+    # ── Pattern B: "DATABASE_Title_Name_ACC" (underscore-separated, first is source)
+    parts_us = [p.strip() for p in stem.split("_") if p.strip()]
+    if len(parts_us) >= 2:
+        first_up = parts_us[0].upper()
+        # Known source/category prefixes in underscore filenames
+        if first_up in {"DATABASE", "MOB", "SA", "FD", "DE"} or first_up in {w.upper() for w in _SKIP_PREFIXES}:
+            # Title is the second segment — but verify it's not just a person name
+            candidate_title = parts_us[1]
+            # Person names are typically "Firstname" (single capitalised word)
+            # Titles tend to be multi-word or abbreviations
+            is_probably_name = bool(re.match(r"^[A-Z][a-z]+$", candidate_title))
+            if not is_probably_name and len(candidate_title) >= 2:
+                return candidate_title.title()
+
+    return None
 
 
 def _is_stale(
@@ -358,19 +528,22 @@ async def generate_cv(
     summary_source: str | None = None,
     position_title: str | None = None,
     force_regenerate: bool = False,
+    cv_original_filename: str | None = None,
 ) -> GeneratedCV:
     """
     Main entry point. Called by the endpoint.
 
     Args:
-        db              : SQLAlchemy session
-        candidate_id    : UUID str
-        application_id  : UUID str | None
-        language        : "ID" atau "EN"
-        summary_text    : Jika diisi oleh HR → pakai ini, set summary_source="HR"
-        summary_source  : "HR" atau "AI"; override otomatis jika summary_text diisi
-        position_title  : Ditampilkan di cover halaman CV
-        force_regenerate: Paksa generate ulang meskipun tidak stale
+        db                    : SQLAlchemy session
+        candidate_id          : UUID str
+        application_id        : UUID str | None
+        language              : "ID" atau "EN"
+        summary_text          : Jika diisi oleh HR → pakai ini, set summary_source="HR"
+        summary_source        : "HR" atau "AI"; override otomatis jika summary_text diisi
+        position_title        : Ditampilkan di cover halaman CV (dari application.position.title)
+        force_regenerate      : Paksa generate ulang meskipun tidak stale
+        cv_original_filename  : Nama file CV asli kandidat; dipakai sebagai fallback
+                                untuk menebak position title.
 
     Returns:
         GeneratedCV record (baru atau yang sudah ada jika masih fresh)
@@ -449,6 +622,50 @@ async def generate_cv(
         reverse=True,
     )
 
+    # 5b. Resolve position title with fallback chain:
+    #   1. Explicit position_title (from application.position.title) — highest priority
+    #   2. Extract from original CV filename (e.g. "EMAIL QA - Muhammad Ikhsan.pdf")
+    #   3. Most recent job title from experience history
+    #   4. Fall through to "-"
+    resolved_position_title: str = position_title or ""
+    if not resolved_position_title:
+        # Try filename first
+        if not cv_original_filename:
+            # Look up CV_asli document for this candidate
+            cv_doc = (
+                db.query(CandidateDocument)
+                .filter(
+                    CandidateDocument.candidate_id == candidate_id,
+                    CandidateDocument.doc_type == "CV_asli",
+                    CandidateDocument.is_deleted == False,
+                )
+                .order_by(CandidateDocument.uploaded_at.desc())
+                .first()
+            )
+            if cv_doc and cv_doc.file_url:
+                cv_original_filename = Path(cv_doc.file_url).name
+
+        if cv_original_filename:
+            extracted = _extract_position_from_filename(cv_original_filename)
+            if extracted:
+                resolved_position_title = extracted
+                logger.info(
+                    "Position title inferred from filename '%s' → '%s'",
+                    cv_original_filename, resolved_position_title,
+                )
+
+    if not resolved_position_title and sorted_exp:
+        # Use most recent job title as last resort
+        resolved_position_title = sorted_exp[0].job_title or ""
+        if resolved_position_title:
+            logger.info(
+                "Position title fallback to most recent job title: '%s'",
+                resolved_position_title,
+            )
+
+    if not resolved_position_title:
+        resolved_position_title = "-"
+
     # 6. Load logo
     logo_b64, _ = _load_image_as_base64(_LOGO_PATH, None)
 
@@ -459,6 +676,9 @@ async def generate_cv(
     skills = candidate.skills or []
     skill_cats = _classify_skills(skills)
 
+    # 8b. Load Ijazah & Sertifikat image attachments
+    attachment_docs = _load_attachment_docs(db, candidate_id)
+
     # 9. Build template context
     context: dict[str, Any] = {
         "language": "id" if language.upper() == "ID" else "en",
@@ -467,7 +687,7 @@ async def generate_cv(
         "experiences": sorted_exp,
         "approved_projects": approved_projects,
         "summary_text": final_summary_text,
-        "position_title": position_title or "-",
+        "position_title": resolved_position_title,
         "age": _compute_age(candidate.birth_date),
         "logo_base64": logo_b64,
         "photo_base64": photo_b64,
@@ -476,6 +696,7 @@ async def generate_cv(
         "skills_database": skill_cats["database"],
         "skills_other_tech": skill_cats["other_tech"],
         "skills_soft": skill_cats["soft"],
+        "attachment_docs": attachment_docs,
     }
 
     # 10. Render → PDF
