@@ -96,11 +96,6 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   // Confirmation modal for irreversible reject action
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [pendingRejectPayload, setPendingRejectPayload] = useState<Record<string, any> | null>(null);
-  // Blacklist confirmation modal
-  const [showBlacklistModal, setShowBlacklistModal] = useState(false);
-  const [pendingStagePayload, setPendingStagePayload] = useState<Record<string, any> | null>(null);
-  // Once HR confirms blacklist override once, skip the modal for subsequent stage updates in this session
-  const [blacklistConfirmed, setBlacklistConfirmed] = useState(false);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["application", trimmedId],
@@ -145,15 +140,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         }, 1000);
       }
     },
-    onError: (error: any) => {
-      const errorMessage = error?.response?.data?.detail || error?.message || "";
-      if (typeof errorMessage === "string" && errorMessage.toLowerCase().includes("blacklist")) {
-        // Fallback: backend masih menolak — reset konfirmasi dan tampilkan modal kembali
-        setBlacklistConfirmed(false);
-        setPendingStagePayload(buildPayload());
-        setShowBlacklistModal(true);
-      }
-    },
+    onError: () => {},
   });
 
   // Separate mutation for the second step of reject flow (stage_name: "Rejected")
@@ -207,6 +194,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       payload.salary_current_input = salaryCurrent ? Number(salaryCurrent) : null;
       payload.salary_expected_input = salaryExpected ? Number(salaryExpected) : null;
     }
+    // Jika kandidat blacklist, selalu sertakan flag override — lamaran sudah dibuat dengan persetujuan HR
+    if (application?.is_blacklisted) {
+      payload.force_blacklisted = true;
+    }
     return payload;
   };
 
@@ -218,14 +209,6 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       const payload = buildPayload();
       setPendingRejectPayload(payload);
       setShowRejectConfirm(true);
-      return;
-    }
-
-    // Jika kandidat sedang blacklist dan belum dikonfirmasi di sesi ini → tampilkan konfirmasi sekali
-    if (application?.is_blacklisted && !blacklistConfirmed) {
-      const payload = buildPayload();
-      setPendingStagePayload(payload);
-      setShowBlacklistModal(true);
       return;
     }
 
@@ -262,24 +245,9 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     setShowRejectConfirm(true);
   };
 
-  const handleConfirmBlacklisted = () => {
-    const payloadToSubmit = pendingStagePayload || buildPayload();
-    setShowBlacklistModal(false);
-    setBlacklistConfirmed(true);
-    mutation.reset();
-    mutation.mutate({ ...payloadToSubmit, force_blacklisted: true });
-    setPendingStagePayload(null);
-  };
-
-  const handleCancelBlacklisted = () => {
-    setShowBlacklistModal(false);
-    setPendingStagePayload(null);
-  };
-
   // Close modals with Esc key
   useModalEscape(() => { setShowAssignModal(false); setAssignRecruiterInput(""); }, showAssignModal && !assignMutation.isPending);
   useModalEscape(() => { setShowRejectConfirm(false); setPendingRejectPayload(null); }, showRejectConfirm && !rejectMutation.isPending);
-  useModalEscape(handleCancelBlacklisted, showBlacklistModal && !mutation.isPending);
 
   if (isLoading || !application) {
     return <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Memuat detail lamaran...</div>;
@@ -664,7 +632,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   />
                 </div>
 
-                {mutation.isError && !showBlacklistModal && !getErrorMessage(mutation.error, "").toLowerCase().includes("blacklist") && (
+                {mutation.isError && (
                   <p className="text-sm text-red-600">
                     {getErrorMessage(mutation.error, "Gagal memperbarui tahapan.")}
                   </p>
@@ -771,50 +739,6 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      {/* ── Modal Peringatan Blacklist ─────────────────────────────────────────── */}
-      {showBlacklistModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Kandidat Dalam Blacklist</h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  Kandidat ini terdaftar dalam daftar blacklist dan tidak dapat diproses secara normal.
-                </p>
-              </div>
-            </div>
-            <p className="mb-5 text-sm text-gray-700">
-              Apakah Anda yakin ingin tetap melanjutkan dan mengabaikan status blacklist ini?
-            </p>
-            {mutation.isError && !getErrorMessage(mutation.error, "").toLowerCase().includes("blacklist") && (
-              <p className="mb-3 text-sm text-red-600">
-                {getErrorMessage(mutation.error, "Gagal mengupdate tahapan.")}
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleCancelBlacklisted}
-                disabled={mutation.isPending}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmBlacklisted}
-                disabled={mutation.isPending}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-300"
-              >
-                {mutation.isPending ? "Memproses..." : "Ya, Tetap Proses"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
