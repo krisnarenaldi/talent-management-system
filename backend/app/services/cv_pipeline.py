@@ -78,7 +78,11 @@ def _build_extract_prompt(cv_text: str, was_truncated: bool) -> str:
         "}\n\n"
         "Ketentuan:\n"
         "- Output HARUS berupa JSON valid saja, TANPA teks apapun di luar JSON, TANPA markdown code fence.\n"
-        "- Isi field dengan data faktual dari CV. Gunakan null jika data tidak tersedia.\n\n"
+        "- Isi field dengan data faktual dari CV. Gunakan null jika data tidak tersedia.\n"
+        "- Field 'skills' HARUS berisi nama skill/teknologi konkret (contoh: 'JavaScript', 'React', 'Python', 'Docker', 'Figma'). "
+        "JANGAN isi dengan kategori atau judul section (contoh: JANGAN tulis 'Frontend Development', 'Soft Skills', 'Web Development', 'Programming'). "
+        "Kumpulkan semua item skill individual dari seluruh section skills di CV, termasuk sub-kategori seperti 'Frontend Development', 'Backend Development', 'Tools & Collaboration', dll. "
+        "Jika CV punya section SKILLS dengan sub-label (misal 'Frontend Development: Next.js, React'), ekstrak item-itemnya: ['Next.js', 'React'], bukan labelnya.\n\n"
         f"=== MULAI TEKS CV ===\n{cv_text}\n=== AKHIR TEKS CV ==="
     )
 
