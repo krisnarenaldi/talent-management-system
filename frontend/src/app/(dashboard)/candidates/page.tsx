@@ -57,9 +57,15 @@ export default function CandidatesPage() {
   const handleExport = async () => {
     try {
       await exportCandidates({
+        search: searchTerm || undefined,
+        source_channel: sourceFilter || undefined,
         completeness_status: statusFilter || undefined,
+        position_id: positionFilter || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
+        city: cityFilter || undefined,
+        experience_level: experienceFilter || undefined,
+        education: educationFilter || undefined,
       });
     } catch (error) {
       console.error("Export gagal:", error);

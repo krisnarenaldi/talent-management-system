@@ -6,10 +6,11 @@ from typing import Optional
 from fastapi import HTTPException
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.application import Application, STAGE_NAMES
-from app.models.candidate import Candidate, CandidateDocument
+from app.models.candidate import Candidate, CandidateDocument, CandidateEducation, CandidateExperience
 from app.models.position import Position
 
 
@@ -23,11 +24,18 @@ def _get_excel_response_for_candidates(
     completeness_status: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    search: Optional[str] = None,
+    source_channel: Optional[str] = None,
+    city: Optional[str] = None,
+    experience_level: Optional[str] = None,
+    education: Optional[str] = None,
 ) -> bytes:
     """
     Generate Excel file with candidates data.
     Returns bytes of the Excel file.
     """
+    from sqlalchemy import select
+
     # Build query with joins
     query = (
         db.query(Candidate)
@@ -53,6 +61,68 @@ def _get_excel_response_for_candidates(
         query = query.filter(Candidate.created_at >= start_date)
     if end_date:
         query = query.filter(Candidate.created_at <= end_date)
+
+    if search:
+        from sqlalchemy import String
+        pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                Candidate.full_name.ilike(pattern),
+                Candidate.email.ilike(pattern),
+                Candidate.phone.ilike(pattern),
+                Candidate.domicile.ilike(pattern),
+                Candidate.notes.ilike(pattern),
+                Candidate.skills.cast(String).ilike(pattern),
+                Candidate.educations.any(
+                    or_(
+                        CandidateEducation.institution.ilike(pattern),
+                        CandidateEducation.major.ilike(pattern),
+                    )
+                ),
+                Candidate.experiences.any(
+                    or_(
+                        CandidateExperience.company_name.ilike(pattern),
+                        CandidateExperience.job_title.ilike(pattern),
+                    )
+                ),
+            )
+        )
+
+    if source_channel:
+        query = query.filter(Candidate.source_channel == source_channel)
+
+    if city:
+        jabotabek = ["jakarta", "bogor", "depok", "tangerang", "bekasi"]
+        conditions = [Candidate.domicile.ilike(f"%{c}%") for c in jabotabek]
+        if city.lower() == "jabotabek":
+            query = query.filter(or_(*conditions))
+        elif city.lower() == "non_jabotabek":
+            query = query.filter(~or_(*conditions))
+
+    if experience_level:
+        exp_stmt = select(
+            CandidateExperience.candidate_id,
+            func.sum(
+                func.coalesce(CandidateExperience.end_date, func.current_date()) - CandidateExperience.start_date
+            ).label("total_days")
+        ).group_by(CandidateExperience.candidate_id).subquery()
+        query = query.outerjoin(exp_stmt, Candidate.id == exp_stmt.c.candidate_id)
+        if experience_level == "junior":
+            query = query.filter(or_(exp_stmt.c.total_days == None, exp_stmt.c.total_days <= 1095))
+        elif experience_level == "intermediate":
+            query = query.filter(exp_stmt.c.total_days > 1095, exp_stmt.c.total_days <= 1825)
+        elif experience_level == "senior":
+            query = query.filter(exp_stmt.c.total_days > 1825)
+
+    if education:
+        query = query.filter(
+            Candidate.educations.any(
+                or_(
+                    CandidateEducation.institution.ilike(f"%{education}%"),
+                    CandidateEducation.major.ilike(f"%{education}%"),
+                )
+            )
+        )
 
     candidates = query.all()
 

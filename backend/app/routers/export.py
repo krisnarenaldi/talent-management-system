@@ -39,6 +39,11 @@ def export_candidates(
     completeness_status: str | None = Query(None),
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
+    search: str | None = Query(None),
+    source_channel: str | None = Query(None),
+    city: str | None = Query(None),
+    experience_level: str | None = Query(None),
+    education: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
@@ -50,6 +55,11 @@ def export_candidates(
             completeness_status=completeness_status,
             start_date=_parse_date(start_date),
             end_date=_parse_date(end_date),
+            search=search,
+            source_channel=source_channel,
+            city=city,
+            experience_level=experience_level,
+            education=education,
         )
         filename = f"candidates_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         return StreamingResponse(
