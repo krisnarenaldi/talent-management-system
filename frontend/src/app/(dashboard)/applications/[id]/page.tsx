@@ -99,6 +99,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   // Blacklist confirmation modal
   const [showBlacklistModal, setShowBlacklistModal] = useState(false);
   const [pendingStagePayload, setPendingStagePayload] = useState<Record<string, any> | null>(null);
+  // Once HR confirms blacklist override once, skip the modal for subsequent stage updates in this session
+  const [blacklistConfirmed, setBlacklistConfirmed] = useState(false);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["application", trimmedId],
@@ -146,7 +148,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.detail || error?.message || "";
       if (typeof errorMessage === "string" && errorMessage.toLowerCase().includes("blacklist")) {
-        // Fallback: simpan pending payload dan tampilkan modal blacklist
+        // Fallback: backend masih menolak — reset konfirmasi dan tampilkan modal kembali
+        setBlacklistConfirmed(false);
         setPendingStagePayload(buildPayload());
         setShowBlacklistModal(true);
       }
@@ -218,8 +221,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       return;
     }
 
-    // Jika kandidat sedang blacklist, tampilkan konfirmasi
-    if (application?.is_blacklisted) {
+    // Jika kandidat sedang blacklist dan belum dikonfirmasi di sesi ini → tampilkan konfirmasi sekali
+    if (application?.is_blacklisted && !blacklistConfirmed) {
       const payload = buildPayload();
       setPendingStagePayload(payload);
       setShowBlacklistModal(true);
@@ -262,6 +265,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const handleConfirmBlacklisted = () => {
     const payloadToSubmit = pendingStagePayload || buildPayload();
     setShowBlacklistModal(false);
+    setBlacklistConfirmed(true);
     mutation.reset();
     mutation.mutate({ ...payloadToSubmit, force_blacklisted: true });
     setPendingStagePayload(null);
@@ -303,6 +307,19 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           </span>
         </div>
       </div>
+
+      {/* ── Blacklist Warning Banner ─────────────────────────────────────── */}
+      {application.is_blacklisted && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Kandidat Dalam Blacklist</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Kandidat ini terdaftar dalam daftar blacklist. Setiap perubahan tahapan memerlukan konfirmasi eksplisit.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_1.95fr]">
         <aside className="space-y-6">
