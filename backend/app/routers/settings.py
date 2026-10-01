@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_role
@@ -28,10 +27,11 @@ def create_source_channel(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("admin")),
 ):
-    existing = db.query(SourceChannel).filter(SourceChannel.label == payload.label).first()
+    normalized = payload.label.strip().title()
+    existing = db.query(SourceChannel).filter(func.lower(SourceChannel.label) == normalized.lower()).first()
     if existing:
         raise HTTPException(status_code=409, detail="Channel sudah ada")
-    channel = SourceChannel(label=payload.label)
+    channel = SourceChannel(label=normalized)
     db.add(channel)
     db.commit()
     db.refresh(channel)
@@ -48,7 +48,21 @@ def update_source_channel(
     channel = db.query(SourceChannel).filter(SourceChannel.id == channel_id).first()
     if not channel:
         raise HTTPException(status_code=404, detail="Channel tidak ditemukan")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if "label" in updates:
+        normalized = updates["label"].strip().title()
+        duplicate = (
+            db.query(SourceChannel)
+            .filter(
+                func.lower(SourceChannel.label) == normalized.lower(),
+                SourceChannel.id != channel_id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Channel sudah ada")
+        updates["label"] = normalized
+    for key, value in updates.items():
         setattr(channel, key, value)
     db.commit()
     db.refresh(channel)
