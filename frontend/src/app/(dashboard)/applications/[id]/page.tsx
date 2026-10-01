@@ -283,7 +283,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           <div>
             <p className="text-sm font-semibold text-amber-800">Kandidat Dalam Blacklist</p>
             <p className="text-xs text-amber-700 mt-0.5">
-              Kandidat ini terdaftar dalam daftar blacklist. Setiap perubahan tahapan memerlukan konfirmasi eksplisit.
+              Kandidat ini terdaftar dalam daftar blacklist. Lamaran ini diproses dengan pengecualian yang sudah dikonfirmasi sebelumnya.
             </p>
           </div>
         </div>
