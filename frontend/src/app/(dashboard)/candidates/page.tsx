@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, FileText, Filter } from "lucide-react";
 import api from "@/lib/api";
+import { settingsApi } from "@/lib/api/settings";
 import type { Candidate } from "@/types";
 import { useExport } from "@/hooks/useExport";
 import ExportButton from "@/components/ExportButton";
@@ -29,6 +30,11 @@ export default function CandidatesPage() {
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const { exportCandidates } = useExport();
+
+  const { data: sourceChannels = [] } = useQuery({
+    queryKey: ["source-channels"],
+    queryFn: () => settingsApi.listSourceChannels({ is_active: true }),
+  });
 
   const { data: candidates = [], isLoading } = useQuery({
     queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate, cityFilter, experienceFilter, educationFilter, currentPage, itemsPerPage }],
@@ -279,10 +285,9 @@ export default function CandidatesPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             >
               <option value="">Semua</option>
-              <option value="LinkedIn">LinkedIn</option>
-              <option value="Glints">Glints</option>
-              <option value="Email">Email</option>
-              <option value="Referral">Referral</option>
+              {sourceChannels.map((sc) => (
+                <option key={sc.id} value={sc.label}>{sc.label}</option>
+              ))}
             </select>
           </div>
         </div>
