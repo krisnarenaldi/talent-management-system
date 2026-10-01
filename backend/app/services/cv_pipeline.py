@@ -33,7 +33,7 @@ from app.services.onedrive_service import onedrive_service
 logger = logging.getLogger("cv_pipeline")
 
 _MIN_CV_CHARS = 20
-_MAX_CV_CHARS = 8000  # ~2000 token — sesuai context window Claude Haiku
+_MAX_CV_CHARS = 12000  # ~3000 token — dinaikkan agar CV panjang (multi-halaman, multi-kolom) tidak terpotong sebelum section skills
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
 

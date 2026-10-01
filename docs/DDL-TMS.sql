@@ -318,13 +318,15 @@ COMMENT ON COLUMN public.stage_history.updated_by IS 'User (HR/Manager) yang mel
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.ai_screening_result (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    application_id  UUID NOT NULL UNIQUE REFERENCES public.application(id) ON DELETE CASCADE,
+    application_id  UUID REFERENCES public.application(id) ON DELETE CASCADE,
     match_score     NUMERIC(5, 2),
     ai_notes        TEXT,
     extracted_data  TEXT,
     model_used      VARCHAR(100),
     review_status   VARCHAR(50) DEFAULT 'pending',
-    scored_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    scored_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE  public.ai_screening_result IS 'Hasil AI screening: ekstraksi field CV + matching score terhadap requirement posisi';

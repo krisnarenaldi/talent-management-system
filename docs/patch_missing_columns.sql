@@ -54,10 +54,12 @@ ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS ai_score FLOAT;
 ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS ai_notes TEXT;
 ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES "user"(id) ON DELETE SET NULL;
 ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE ai_screening_result ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
--- Drop old unique constraint on application_id if exists (v2 removes it)
+-- Drop old unique constraint and NOT NULL constraint on application_id (v2 allows null application_id)
 ALTER TABLE ai_screening_result DROP CONSTRAINT IF EXISTS ai_screening_result_application_id_key;
+ALTER TABLE ai_screening_result ALTER COLUMN application_id DROP NOT NULL;
 
 -- Status enum for ai_screening_result
 DO $$ BEGIN
