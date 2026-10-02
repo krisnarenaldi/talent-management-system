@@ -484,14 +484,12 @@
         <td class="label-cell">Position</td>
         <td>{{ exp.job_title or "-" }}</td>
       </tr>
+      {% if approved_projects %}
       <tr>
         <td class="label-cell">Project</td>
-        <td>
-          {% if approved_projects %}
-            {{ approved_projects | map(attribute='project_name') | join(", ") }}
-          {% else %}-{% endif %}
-        </td>
+        <td>{{ approved_projects | map(attribute='project_name') | join(", ") }}</td>
       </tr>
+      {% endif %}
       <tr class="row-shade">
         <td class="label-cell">Tools</td>
         <td>{{ candidate.skills | join(", ") if candidate.skills else "-" }}</td>
@@ -546,10 +544,6 @@
     <tr class="row-shade">
       <td class="label-cell">Position</td>
       <td>{{ exp.job_title or "-" }}</td>
-    </tr>
-    <tr>
-      <td class="label-cell">Project</td>
-      <td>-</td>
     </tr>
     <tr class="row-shade">
       <td class="label-cell">Tools</td>
