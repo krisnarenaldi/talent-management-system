@@ -8,6 +8,9 @@ import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 import TokenRefreshProvider from "@/components/TokenRefreshProvider";
 import NotificationBell from "@/components/NotificationBell";
+import KeyboardShortcutModal from "@/components/ui/KeyboardShortcutModal";
+import QuickCreateMenu from "@/components/ui/QuickCreateMenu";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useAuthStore } from "@/stores/auth.store";
 import api from "@/lib/api";
 
@@ -47,9 +50,13 @@ export default function DashboardLayout({
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
+  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isAdmin = normalizeRole(user?.role) === "admin";
   const isPM = normalizeRole(user?.role) === "pm";
+
+  useKeyboardShortcuts(shortcutModalOpen, setShortcutModalOpen);
 
   useEffect(() => {
     if (!authLoading && user && isAdminOnlyRoute(pathname) && !isAdmin) {
@@ -111,12 +118,23 @@ export default function DashboardLayout({
             </h2>
             <div className="flex items-center gap-2 ml-auto">
               <NotificationBell />
-              <button className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container transition-colors" title="Help">
+              <button
+                onClick={() => setShortcutModalOpen((v) => !v)}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container transition-colors"
+                title="Keyboard shortcuts (?)"
+              >
                 <span className="material-symbols-outlined">help</span>
               </button>
-              <button className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container transition-colors" title="Apps">
-                <span className="material-symbols-outlined">apps</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setQuickMenuOpen((v) => !v)}
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container transition-colors"
+                  title="Akses cepat"
+                >
+                  <span className="material-symbols-outlined">apps</span>
+                </button>
+                <QuickCreateMenu isOpen={quickMenuOpen} onClose={() => setQuickMenuOpen(false)} />
+              </div>
 
               {/* User dropdown */}
               <div className="relative ml-2" ref={menuRef}>
@@ -180,6 +198,7 @@ export default function DashboardLayout({
         </div>
       </div>
     </AuthProvider>
+    <KeyboardShortcutModal isOpen={shortcutModalOpen} onClose={() => setShortcutModalOpen(false)} />
     </TokenRefreshProvider>
   );
 }
