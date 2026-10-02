@@ -40,6 +40,7 @@ def create_from_application(db: Session, application_id: str) -> Employee:
         birth_place=candidate.birth_place,
         gender=candidate.gender,
         blood_type=candidate.blood_type,
+        marital_status=candidate.marital_status,
         placement=application.position.client_name if application.position else None,
         role_level=application.position.title if application.position else None,
         employee_status="aktif",

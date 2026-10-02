@@ -214,6 +214,7 @@ export interface Employee {
   birth_place?: string;
   gender?: string;
   blood_type?: string;
+  marital_status?: string;
   personal_email?: string;
   office_email?: string;
   phone_number?: string;

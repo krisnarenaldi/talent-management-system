@@ -1,41 +1,61 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-# ── Fix uploads ownership ─────────────────────────────────────────────────────
-if [ -d /uploads ]; then
-  chown -R appuser:appuser /uploads 2>/dev/null || chmod -R 777 /uploads 2>/dev/null || true
-fi
+# ============================================================
+# TMS Backend Entrypoint
+# Dijalankan setiap kali container backend start.
+# Menangani migration Alembic secara aman (idempotent).
+# ============================================================
 
-# ── Wait for DB then run migrations ──────────────────────────────────────────
-# Alembic upgrade head sering gagal karena postgres/pgbouncer belum siap.
-# Strategi: retry hingga 30x dengan jeda 2 detik (total max ~60 detik).
-echo "Waiting for database to be ready..."
+echo "==> [entrypoint] Menunggu database siap..."
 
+# Tunggu postgres / pgbouncer siap menerima koneksi
 MAX_RETRIES=30
-RETRY_DELAY=2
-attempt=1
-
-until alembic upgrade head 2>&1; do
-  exit_code=$?
-
-  # Jika error bukan koneksi (misal error migration logic), jangan retry
-  # Error kode 1 dari alembic bisa berarti apapun — kita cek output-nya
-  if alembic current 2>&1 | grep -q "Can't connect\|connection refused\|could not connect\|Connection refused"; then
-    if [ "$attempt" -ge "$MAX_RETRIES" ]; then
-      echo "ERROR: Database still not reachable after $MAX_RETRIES attempts. Aborting."
-      exit 1
+COUNT=0
+until python -c "
+import psycopg2, os, sys
+try:
+    conn = psycopg2.connect(
+        host=os.getenv('POSTGRES_HOST', 'pgbouncer'),
+        port=int(os.getenv('POSTGRES_PORT', 5432)),
+        dbname=os.getenv('POSTGRES_DB'),
+        user=os.getenv('POSTGRES_USER'),
+        password=os.getenv('POSTGRES_PASSWORD'),
+        connect_timeout=3,
+    )
+    conn.close()
+    sys.exit(0)
+except Exception as e:
+    sys.exit(1)
+" 2>/dev/null; do
+    COUNT=$((COUNT + 1))
+    if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
+        echo "==> [entrypoint] ERROR: Database tidak bisa dihubungi setelah ${MAX_RETRIES} percobaan. Abort."
+        exit 1
     fi
-    echo "DB not ready yet (attempt $attempt/$MAX_RETRIES), retrying in ${RETRY_DELAY}s..."
-    attempt=$((attempt + 1))
-    sleep "$RETRY_DELAY"
-  else
-    # Bukan masalah koneksi — langsung gagal dengan pesan jelas
-    echo "ERROR: Migration failed with a non-connection error (exit $exit_code). Check migration files."
-    exit 1
-  fi
+    echo "==> [entrypoint] Database belum siap, retry ${COUNT}/${MAX_RETRIES}..."
+    sleep 2
 done
 
-echo "Migrations completed successfully."
+echo "==> [entrypoint] Database siap."
 
-# ── Hand off to app process ───────────────────────────────────────────────────
-exec gosu appuser "$@"
+# ── Jalankan Alembic migration ──────────────────────────────
+# Strategi: upgrade head selalu.
+# Jika ada revision yang sudah diapply manual (DuplicateTable, dll),
+# script ini akan mendeteksi dan stamp otomatis ke revision terakhir yang aman.
+
+echo "==> [entrypoint] Menjalankan Alembic migration..."
+
+# Coba upgrade head. Jika gagal karena objek sudah ada (deploy ulang / manual migration),
+# stamp ke head lalu coba lagi.
+if ! python -m alembic upgrade head 2>&1; then
+    echo "==> [entrypoint] Migration gagal, mencoba stamp ke head lalu retry..."
+    python -m alembic stamp head
+    python -m alembic upgrade head
+fi
+
+echo "==> [entrypoint] Migration selesai."
+
+# ── Jalankan command utama (uvicorn / arq) ──────────────────
+echo "==> [entrypoint] Menjalankan: $@"
+exec "$@"

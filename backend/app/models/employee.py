@@ -37,6 +37,7 @@ class Employee(Base):
     birth_place = Column(String(255))
     gender = Column(String(20))
     blood_type = Column(String(5))
+    marital_status = Column(String(50))
     personal_email = Column(String(255))
     office_email = Column(String(255))
     phone_number = Column(String(50))

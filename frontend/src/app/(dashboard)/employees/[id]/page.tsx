@@ -154,6 +154,24 @@ function PersonalDataTab({
             </select>
           </div>
 
+          {/* Status Perkawinan */}
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Status Perkawinan
+            </label>
+            <select
+              value={form.marital_status ?? ""}
+              onChange={(e) => handleChange("marital_status", e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            >
+              <option value="">Pilih</option>
+              <option value="Belum Menikah">Belum Menikah</option>
+              <option value="Menikah">Menikah</option>
+              <option value="Cerai Hidup">Cerai Hidup</option>
+              <option value="Cerai Mati">Cerai Mati</option>
+            </select>
+          </div>
+
           {/* Catatan */}
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">

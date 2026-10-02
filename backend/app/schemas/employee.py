@@ -17,6 +17,7 @@ class EmployeeBase(BaseModel):
     birth_place: Optional[str] = None
     gender: Optional[str] = None
     blood_type: Optional[str] = None
+    marital_status: Optional[str] = None
     personal_email: Optional[str] = None
     office_email: Optional[str] = None
     phone_number: Optional[str] = None
@@ -35,11 +36,13 @@ class EmployeeCreate(EmployeeBase):
 
 
 class EmployeeUpdate(BaseModel):
+    employee_nip: Optional[str] = None
     full_name: Optional[str] = None
     birth_date: Optional[date] = None
     birth_place: Optional[str] = None
     gender: Optional[str] = None
     blood_type: Optional[str] = None
+    marital_status: Optional[str] = None
     personal_email: Optional[str] = None
     office_email: Optional[str] = None
     phone_number: Optional[str] = None
