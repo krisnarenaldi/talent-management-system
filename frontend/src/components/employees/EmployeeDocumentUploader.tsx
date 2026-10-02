@@ -18,7 +18,8 @@ export default function EmployeeDocumentUploader({ employeeId }: { employeeId: s
   const inputRef = useRef<HTMLInputElement | null>(null);
   const queryClient = useQueryClient();
   const showToast = useToastStore((state) => state.showToast);
-  const [docType, setDocType] = useState("KTP");
+  // const [docType, setDocType] = useState("KTP");
+  const [docType, setDocType] = useState("Document_Onboarding");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
@@ -104,12 +105,13 @@ export default function EmployeeDocumentUploader({ employeeId }: { employeeId: s
   };
 
   const DOC_TYPES = [
-    "KTP",
+    /*"KTP",
     "Ijazah",
     "Transkrip",
     "CV_asli",
     "Foto",
     "Sertifikat",
+    */
     "Dokumen_Onboarding",
     "BPJS_TK",
     "BPJS_Kesehatan",
