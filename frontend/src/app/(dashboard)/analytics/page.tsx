@@ -50,7 +50,7 @@ function LineChart({ data, width, height }: { data: { period: string; count: num
   );
 
   const maxCount = Math.max(...data.map(d => d.count), 1);
-  const minCount = Math.min(...data.map(d => d.count));
+  const minCount = data.length === 1 ? 0 : Math.min(...data.map(d => d.count));
   const countRange = maxCount - minCount || 1;
 
   const points = data.map((d, i) => {

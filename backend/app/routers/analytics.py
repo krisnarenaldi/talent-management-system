@@ -148,12 +148,13 @@ async def analytics_pipeline_breakdown(
             Application.current_stage.label("stage"),
             Position.id.label("position_id"),
             Position.title.label("position_title"),
-            Position.client.name.label("client_name"),
+            Client.name.label("client_name"),
             func.to_char(Application.created_at, 'YYYY-MM').label("period"),
             func.count(Application.id).label("count"),
         )
         .join(Position, Application.position_id == Position.id)
         .outerjoin(Candidate, Application.candidate_id == Candidate.id)
+        .outerjoin(Client, Position.client_id == Client.id)
     )
     if position_id:
         query = query.where(Position.id == position_id)
@@ -165,7 +166,7 @@ async def analytics_pipeline_breakdown(
         Application.current_stage,
         Position.id,
         Position.title,
-        Position.client.name,
+        Client.name,
         func.to_char(Application.created_at, 'YYYY-MM'),
     )
     query = query.order_by(
@@ -205,13 +206,14 @@ async def analytics_success_rate_by_position(
         SELECT 
             p.id AS position_id,
             p.title AS position_title,
-            p.client_name AS client_name,
+            c.name AS client_name,
             COUNT(ri.application_id) AS total_applications,
             SUM(CASE WHEN ri.result IN ('Lanjut', 'Lolos', 'Ok') THEN 1 ELSE 0 END) AS passed_user_interview
         FROM application a
         JOIN position p ON a.position_id = p.id
+        LEFT JOIN client c ON p.client_id = c.id
         LEFT JOIN ranked_interviews ri ON a.id = ri.application_id AND ri.rn = 1
-        GROUP BY p.id, p.title, p.client_name
+        GROUP BY p.id, p.title, c.name
     """)
     rows = db.execute(sql).fetchall()
     result = []
