@@ -20,10 +20,7 @@ const clientCreateSchema = z.object({
   name: z.string().min(1, "Nama klien wajib diisi"),
   industry: z.string().optional(),
   pic_name: z.string().optional(),
-  pic_contact: z.string().optional().refine(
-    (val) => !val || /^\+?[\d\s\-()]{6,20}$/.test(val),
-    "Format nomor HP tidak valid"
-  ),
+  pic_contact: z.string().optional(),
 });
 
 const clientUpdateSchema = z
@@ -31,10 +28,7 @@ const clientUpdateSchema = z
     name: z.string().min(1, "Nama klien wajib diisi").optional(),
     industry: z.string().optional(),
     pic_name: z.string().optional(),
-    pic_contact: z.string().optional().refine(
-      (val) => !val || /^\+?[\d\s\-()]{6,20}$/.test(val),
-      "Format nomor HP tidak valid"
-    ),
+    pic_contact: z.string().optional(),
     is_active: z.boolean().optional(),
   })
   .partial();
@@ -108,13 +102,7 @@ export default function AdminClientsPage() {
       showToast("success", "Klien berhasil ditambahkan.");
     },
     onError: (err: unknown) => {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      if (detail === "Nomor HP PIC sudah digunakan oleh klien lain") {
-        showToast("error", "No HP PIC sudah digunakan oleh klien lain.");
-      } else {
-        showToast("error", getErrorMessage(err, "Gagal menambahkan klien."));
-      }
-      throw err;
+      showToast("error", getErrorMessage(err, "Gagal menambahkan klien."));
     },
   });
 
@@ -131,13 +119,7 @@ export default function AdminClientsPage() {
       showToast("success", "Klien berhasil diperbarui.");
     },
     onError: (err: unknown) => {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      if (detail === "Nomor HP PIC sudah digunakan oleh klien lain") {
-        showToast("error", "No HP PIC sudah digunakan oleh klien lain.");
-      } else {
-        showToast("error", getErrorMessage(err, "Gagal memperbarui klien."));
-      }
-      throw err;
+      showToast("error", getErrorMessage(err, "Gagal memperbarui klien."));
     },
   });
 
@@ -314,10 +296,14 @@ export default function AdminClientsPage() {
                         {client.industry ?? "-"}
                       </td>
                       <td className="py-3 px-4 text-on-surface-variant">
-                        {client.pic_name ?? "-"}
+                        {client.pic_name
+                          ? client.pic_name.split(";").map((n, i) => <div key={i}>{n.trim()}</div>)
+                          : "-"}
                       </td>
                       <td className="py-3 px-4 text-on-surface-variant">
-                        {client.pic_contact ?? "-"}
+                        {client.pic_contact
+                          ? client.pic_contact.split(";").map((c, i) => <div key={i}>{c.trim()}</div>)
+                          : "-"}
                       </td>
                       <td className="py-3 px-4">
                         {client.is_active ? (
@@ -455,44 +441,75 @@ function ClientFormModal({
 
   useModalEscape(onClose, !isSubmitting);
 
+  const [pics, setPics] = useState<{ name: string; contact: string }[]>(() => {
+    if (client) {
+      const names = (client.pic_name || "").split(";").map((s) => s.trim()).filter(Boolean);
+      const contacts = (client.pic_contact || "").split(";").map((s) => s.trim()).filter(Boolean);
+      const maxLen = Math.max(names.length, contacts.length, 1);
+      return Array.from({ length: maxLen }, (_, i) => ({
+        name: names[i] || "",
+        contact: contacts[i] || "",
+      }));
+    }
+    return [{ name: "", contact: "" }];
+  });
+
+  const [picErrors, setPicErrors] = useState<{ contact?: string }[]>([{}]);
+
+  const addPic = () => {
+    setPics((prev) => [...prev, { name: "", contact: "" }]);
+    setPicErrors((prev) => [...prev, {}]);
+  };
+
+  const removePic = (index: number) => {
+    setPics((prev) => prev.filter((_, i) => i !== index));
+    setPicErrors((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updatePic = (index: number, field: "name" | "contact", value: string) => {
+    setPics((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+    if (field === "contact") {
+      const isValid = !value || /^\+?[\d\s\-()]{6,20}$/.test(value);
+      setPicErrors((prev) =>
+        prev.map((e, i) =>
+          i === index ? { ...e, contact: isValid ? undefined : "Format nomor HP tidak valid" } : e
+        )
+      );
+    }
+  };
+
   const {
     register,
     handleSubmit,
-    setError,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: isCreating
-      ? { name: "", industry: undefined, pic_name: undefined, pic_contact: undefined }
+      ? { name: "", industry: undefined }
       : {
           name: client?.name ?? "",
           industry: client?.industry || undefined,
-          pic_name: client?.pic_name || undefined,
-          pic_contact: client?.pic_contact || undefined,
         },
   });
 
   const onSubmit = async (data: Record<string, unknown>) => {
-    try {
-      if (isCreating) {
-        await onCreate(data as unknown as ClientCreateForm);
-      } else if (client) {
-        await onUpdate({ id: client.id, payload: data as unknown as ClientUpdateForm });
-      }
-    } catch (err: unknown) {
-      const apiErr = err as { response?: { status?: number; data?: { detail?: string } } };
-      if (apiErr.response?.status === 400 && apiErr.response?.data?.detail === "Nomor HP PIC sudah digunakan oleh klien lain") {
-        setError("pic_contact", {
-          type: "manual",
-          message: "Nomor HP PIC sudah digunakan oleh klien lain",
-        });
-      }
+    // Validate per-row PIC errors
+    if (picErrors.some((e) => e.contact)) return;
+
+    const pic_name = pics.map((p) => p.name.trim()).filter(Boolean).join(";") || undefined;
+    const pic_contact = pics.map((p) => p.contact.trim()).filter(Boolean).join(";") || undefined;
+    const fullData = { ...data, pic_name, pic_contact };
+
+    if (isCreating) {
+      await onCreate(fullData as unknown as ClientCreateForm);
+    } else if (client) {
+      await onUpdate({ id: client.id, payload: fullData as unknown as ClientUpdateForm });
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4">
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <h2 className="text-headline-md font-semibold text-on-surface mb-4">
           {isCreating ? "Tambah Klien Baru" : `Edit Klien: ${client?.name}`}
         </h2>
@@ -528,34 +545,54 @@ function ClientFormModal({
             )}
           </div>
 
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Nama PIC
-            </label>
-            <input
-              type="text"
-              placeholder="John Smith"
-              {...register("pic_name")}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-            />
-            {errors.pic_name && (
-              <p className="text-error text-xs mt-1">{errors.pic_name.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Kontak PIC
-            </label>
-            <input
-              type="text"
-              placeholder="+62 812-3456-7890"
-              {...register("pic_contact")}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-            />
-            {errors.pic_contact && (
-              <p className="text-error text-xs mt-1">{errors.pic_contact.message}</p>
-            )}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-label-md text-on-surface">PIC</label>
+            </div>
+            {pics.map((pic, index) => (
+              <div key={index} className="flex gap-2 items-start">
+                <div className="flex-1 space-y-1">
+                  <input
+                    type="text"
+                    placeholder="Nama PIC"
+                    value={pic.name}
+                    onChange={(e) => updatePic(index, "name", e.target.value)}
+                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <input
+                    type="text"
+                    placeholder="Kontak PIC"
+                    value={pic.contact}
+                    onChange={(e) => updatePic(index, "contact", e.target.value)}
+                    className={`w-full px-3 py-2 bg-surface border rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all ${
+                      picErrors[index]?.contact ? "border-error" : "border-outline-variant"
+                    }`}
+                  />
+                  {picErrors[index]?.contact && (
+                    <p className="text-error text-xs">{picErrors[index].contact}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removePic(index)}
+                  disabled={pics.length === 1}
+                  className="mt-0.5 p-1.5 text-on-surface-variant hover:text-error transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Hapus PIC"
+                >
+                  <span className="material-symbols-outlined text-lg">delete</span>
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addPic}
+              className="flex items-center gap-1 text-primary text-body-sm hover:underline"
+            >
+              <span className="material-symbols-outlined text-base">add</span>
+              Tambah PIC
+            </button>
           </div>
 
           <div className="flex gap-3 pt-2">
