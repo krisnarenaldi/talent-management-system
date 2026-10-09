@@ -37,9 +37,9 @@ def create_client(
         if new_contacts:
             existing_clients = db.query(Client).filter(Client.pic_contact != None).all()
             for existing in existing_clients:
-                existing_contacts = [c.strip() for c in existing.pic_contact.split(";") if c.strip()]
+                existing_contacts = [c.strip().lower() for c in existing.pic_contact.split(";") if c.strip()]
                 for nc in new_contacts:
-                    if nc in existing_contacts:
+                    if nc.lower() in existing_contacts:
                         raise HTTPException(
                             status_code=400,
                             detail=f"Nomor kontak PIC sudah digunakan oleh klien lain: {nc}",
@@ -71,9 +71,9 @@ def update_client(
                 .all()
             )
             for existing in existing_clients:
-                existing_contacts = [c.strip() for c in existing.pic_contact.split(";") if c.strip()]
+                existing_contacts = [c.strip().lower() for c in existing.pic_contact.split(";") if c.strip()]
                 for nc in new_contacts:
-                    if nc in existing_contacts:
+                    if nc.lower() in existing_contacts:
                         raise HTTPException(
                             status_code=400,
                             detail=f"Nomor kontak PIC sudah digunakan oleh klien lain: {nc}",
