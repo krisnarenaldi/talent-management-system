@@ -539,6 +539,19 @@ function ClientFormModal({
       return;
     }
 
+    // Kalau nama PIC diisi, kontak wajib diisi
+    const newPicErrors = pics.map((p, i) => {
+      const err = { ...picErrors[i] };
+      if (p.name.trim() && !p.contact.trim()) {
+        err.contact = "Kontak PIC tidak boleh kosong";
+      }
+      return err;
+    });
+    if (newPicErrors.some((e) => e.contact)) {
+      setPicErrors(newPicErrors);
+      return;
+    }
+
     const pic_name = pics.map((p) => p.name.trim()).filter(Boolean).join(";") || undefined;
     const pic_contact = pics.map((p) => p.contact.trim()).filter(Boolean).join(";") || undefined;
     const fullData = { ...data, pic_name, pic_contact };
