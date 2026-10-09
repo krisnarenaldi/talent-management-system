@@ -469,12 +469,33 @@ function ClientFormModal({
   };
 
   const updatePic = (index: number, field: "name" | "contact", value: string) => {
-    setPics((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+    const updatedPics = pics.map((p, i) => (i === index ? { ...p, [field]: value } : p));
+    setPics(updatedPics);
     if (field === "contact") {
       const isValid = !value || /^\+?[\d\s\-()]{6,20}$/.test(value);
+      if (!isValid) {
+        setPicErrors((prev) =>
+          prev.map((e, i) =>
+            i === index ? { ...e, contact: "Format nomor HP tidak valid" } : e
+          )
+        );
+        return;
+      }
+      // Check for duplicates within this client
+      const trimmedLower = value.trim().toLowerCase();
+      const isDuplicate =
+        trimmedLower !== "" &&
+        updatedPics.some((p, i) => i !== index && p.contact.trim().toLowerCase() === trimmedLower);
       setPicErrors((prev) =>
         prev.map((e, i) =>
-          i === index ? { ...e, contact: isValid ? undefined : "Format nomor HP tidak valid" } : e
+          i === index
+            ? {
+                ...e,
+                contact: isDuplicate
+                  ? "Nomor kontak sudah digunakan oleh PIC lain di klien ini"
+                  : undefined,
+              }
+            : e
         )
       );
     }
@@ -497,6 +518,26 @@ function ClientFormModal({
   const onSubmit = async (data: Record<string, unknown>) => {
     // Validate per-row PIC errors
     if (picErrors.some((e) => e.contact)) return;
+
+    // Check for duplicate contacts within this client
+    const contacts = pics.map((p) => p.contact.trim().toLowerCase()).filter(Boolean);
+    const hasDuplicate = contacts.some((c, i) => contacts.indexOf(c) !== i);
+    if (hasDuplicate) {
+      const seen = new Map<string, number>();
+      const newPicErrors = picErrors.map((e) => ({ ...e }));
+      contacts.forEach((c, i) => {
+        if (!c) return;
+        if (seen.has(c)) {
+          newPicErrors[i].contact = "Nomor kontak sudah digunakan oleh PIC lain di klien ini";
+          const firstIdx = seen.get(c)!;
+          newPicErrors[firstIdx].contact = "Nomor kontak sudah digunakan oleh PIC lain di klien ini";
+        } else {
+          seen.set(c, i);
+        }
+      });
+      setPicErrors(newPicErrors);
+      return;
+    }
 
     const pic_name = pics.map((p) => p.name.trim()).filter(Boolean).join(";") || undefined;
     const pic_contact = pics.map((p) => p.contact.trim()).filter(Boolean).join(";") || undefined;

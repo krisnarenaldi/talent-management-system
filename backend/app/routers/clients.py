@@ -32,6 +32,18 @@ def create_client(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("admin")),  # create: admin only
 ):
+    if payload.pic_contact:
+        new_contacts = [c.strip() for c in payload.pic_contact.split(";") if c.strip()]
+        if new_contacts:
+            existing_clients = db.query(Client).filter(Client.pic_contact != None).all()
+            for existing in existing_clients:
+                existing_contacts = [c.strip() for c in existing.pic_contact.split(";") if c.strip()]
+                for nc in new_contacts:
+                    if nc in existing_contacts:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Nomor kontak PIC sudah digunakan oleh klien lain: {nc}",
+                        )
     client = Client(**payload.model_dump())
     db.add(client)
     db.commit()
@@ -49,7 +61,24 @@ def update_client(
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client tidak ditemukan")
-    
+
+    if payload.pic_contact:
+        new_contacts = [c.strip() for c in payload.pic_contact.split(";") if c.strip()]
+        if new_contacts:
+            existing_clients = (
+                db.query(Client)
+                .filter(Client.pic_contact != None, Client.id != client_id)
+                .all()
+            )
+            for existing in existing_clients:
+                existing_contacts = [c.strip() for c in existing.pic_contact.split(";") if c.strip()]
+                for nc in new_contacts:
+                    if nc in existing_contacts:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Nomor kontak PIC sudah digunakan oleh klien lain: {nc}",
+                        )
+
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(client, key, value)
     db.commit()
