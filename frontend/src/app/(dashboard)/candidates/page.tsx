@@ -9,6 +9,12 @@ import { settingsApi } from "@/lib/api/settings";
 import type { Candidate } from "@/types";
 import { useExport } from "@/hooks/useExport";
 import ExportButton from "@/components/ExportButton";
+import { useAuthStore } from "@/stores/auth.store";
+
+function normalizeRole(role: string | undefined): string {
+  if (!role) return "";
+  return role.split(".").pop()?.toLowerCase() || role;
+}
 
 async function fetchCandidates(params?: Record<string, string | undefined>) {
   const response = await api.get("/api/v1/candidates", { params });
@@ -28,6 +34,9 @@ export default function CandidatesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  const user = useAuthStore((state) => state.user);
+  const canExport = user ? ["admin", "manager"].includes(normalizeRole(user.role)) : false;
 
   const { exportCandidates } = useExport();
 
@@ -93,45 +102,47 @@ export default function CandidatesPage() {
             <Filter className="h-4 w-4" />
             Filter
           </button>
-          <ExportButton
-            onExport={handleExport}
-            className="hidden md:inline-flex"
-            filters={showFilters && (
-              <div className="space-y-3 border-t border-gray-200 pt-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Posisi</label>
-                    <input
-                      value={positionFilter}
-                      onChange={(e) => setPositionFilter(e.target.value)}
-                      placeholder="Judul posisi"
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
+          {canExport && (
+            <ExportButton
+              onExport={handleExport}
+              className="hidden md:inline-flex"
+              filters={showFilters && (
+                <div className="space-y-3 border-t border-gray-200 pt-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Posisi</label>
+                      <input
+                        value={positionFilter}
+                        onChange={(e) => setPositionFilter(e.target.value)}
+                        placeholder="Judul posisi"
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal mulai</label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal mulai</label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal akhir</label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal akhir</label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          />
+              )}
+            />
+          )}
         </div>
       </div>
 

@@ -49,7 +49,20 @@ const positionUpdateSchema = z
     ai_required_skills: z.string().optional(),
     ai_min_experience_years: z.number().min(0).optional(),
   })
-  .partial();
+  .partial()
+  .refine(
+    (data) => {
+      const fields = [data.ai_weight_education, data.ai_weight_experience, data.ai_weight_skill, data.ai_weight_domain];
+      if (fields.every((v) => v !== undefined)) {
+        return (fields as number[]).reduce((a, b) => a + b, 0) === 100;
+      }
+      return true;
+    },
+    {
+      message: "Total bobot penilaian harus tepat 100",
+      path: ["ai_weight_education"],
+    }
+  );
 
 type PositionCreateForm = z.infer<typeof positionCreateSchema>;
 type PositionUpdateForm = z.infer<typeof positionUpdateSchema>;
@@ -549,258 +562,349 @@ function PositionFormModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-headline-md font-semibold text-on-surface mb-4">
-          {isCreating ? "Tambah Posisi Baru" : `Edit Posisi: ${position?.title}`}
-        </h2>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Klien
-            </label>
-            <select
-              {...register("client_id")}
-              disabled={!isCreating}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all disabled:opacity-50"
-            >
-              {isCreating && (
-                <option value="">Pilih Klien</option>
-              )}
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
-            {errors.client_id && (
-              <p className="text-error text-xs mt-1">{errors.client_id.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Judul Posisi
-            </label>
-            <input
-              type="text"
-              placeholder="Senior Backend Engineer"
-              {...register("title")}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-            />
-            {errors.title && (
-              <p className="text-error text-xs mt-1">{errors.title.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Tipe Pekerjaan
-            </label>
-            <select
-              {...register("employment_type")}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-            >
-              <option value="">Pilih Tipe Pekerjaan</option>
-              {agreementTypes.map((agreementType) => (
-                <option key={agreementType.id} value={agreementType.label}>
-                  {agreementType.label}
-                </option>
-              ))}
-            </select>
-            {errors.employment_type && (
-              <p className="text-error text-xs mt-1">{errors.employment_type.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Durasi Kontrak (bulan)
-            </label>
-            <input
-              type="number"
-              placeholder="12"
-              {...register("contract_duration_months", { valueAsNumber: true })}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-            />
-            {errors.contract_duration_months && (
-              <p className="text-error text-xs mt-1">{errors.contract_duration_months.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Persyaratan
-            </label>
-            <textarea
-              placeholder="Minimal S1 Teknik, pengalaman 3+ tahun dengan Node.js..."
-              {...register("requirement")}
-              rows={3}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-y"
-            />
-            {errors.requirement && (
-              <p className="text-error text-xs mt-1">{errors.requirement.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Deskripsi Pekerjaan
-              <span className="text-on-surface-variant font-normal ml-1">(opsional)</span>
-            </label>
-            <textarea
-              placeholder={"• Bertanggung jawab atas pengembangan fitur baru\n• Berkolaborasi dengan tim lintas fungsi\n• Melakukan code review dan menjaga kualitas kode"}
-              {...register("job_description")}
-              rows={5}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-y"
-            />
-            {errors.job_description && (
-              <p className="text-error text-xs mt-1">{errors.job_description.message}</p>
-            )}
-          </div>
-
-          {!isCreating && (
-            <>
-              {/* ── AI Scoring Config ─────────────────────────────────── */}
-              <div className="border-t border-outline-variant pt-4 mt-2">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-primary text-lg">tune</span>
-                  <h3 className="text-label-lg font-semibold text-on-surface">Konfigurasi AI Screening</h3>
-                </div>
-
-                {/* Thresholds */}
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-label-sm text-on-surface mb-1">
-                      Threshold Otomatis (<span className="text-on-surface-variant">≥ skor ini = langsung terima</span>)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      {...register("ai_threshold_auto", { valueAsNumber: true })}
-                      className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-label-sm text-on-surface mb-1">
-                      Threshold Review (<span className="text-on-surface-variant">skor di antara = perlu review</span>)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      {...register("ai_threshold_manual", { valueAsNumber: true })}
-                      className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                    />
-                  </div>
-                </div>
-
-                {/* Weights */}
-                <div className="mb-4">
-                  <p className="text-label-sm text-on-surface mb-2">Bobot Penilaian (total harus 100)</p>
-                  <div className="space-y-3">
-                    {[
-                      { key: "ai_weight_education", label: "Pendidikan" },
-                      { key: "ai_weight_experience", label: "Pengalaman (tahun)" },
-                      { key: "ai_weight_skill", label: "Skill Match" },
-                      { key: "ai_weight_domain", label: "Relevansi Domain" },
-                    ].map(({ key, label }) => (
-                      <div key={key} className="flex items-center gap-3">
-                        <span className="text-body-sm text-on-surface w-40 shrink-0">{label}</span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          {...register(key as any, { valueAsNumber: true })}
-                          className="flex-1 accent-primary cursor-pointer"
-                        />
-                        <span className="text-body-sm font-mono text-on-surface w-8 text-center">
-                          {watch(key as any) ?? 0}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Required Skills */}
-                <div className="mb-4">
-                  <label className="block text-label-sm text-on-surface mb-1">
-                    Skill yang Dibutuhkan
-                    <span className="text-on-surface-variant font-normal ml-1">(pisahkan dengan koma)</span>
-                  </label>
-                  <input
-                    type="text"
-                    {...register("ai_required_skills")}
-                    placeholder="Python, SQL, React, AWS"
-                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                  />
-                </div>
-
-                {/* Min Experience */}
-                <div>
-                  <label className="block text-label-sm text-on-surface mb-1">
-                    Pengalaman Minimum (tahun)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    {...register("ai_min_experience_years", { valueAsNumber: true })}
-                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  {...register("is_active")}
-                  className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
-                />
-                <label
-                  htmlFor="is_active"
-                  className="text-body-sm text-on-surface cursor-pointer"
-                >
-                  Posisi aktif
-                </label>
-              </div>
-            </>
+  // ── Shared form fields ──────────────────────────────────────────────────
+  const formFields = (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Klien
+        </label>
+        <select
+          {...register("client_id")}
+          disabled={!isCreating}
+          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all disabled:opacity-50"
+        >
+          {isCreating && (
+            <option value="">Pilih Klien</option>
           )}
+          {clients.map((client) => (
+            <option key={client.id} value={client.id}>
+              {client.name}
+            </option>
+          ))}
+        </select>
+        {errors.client_id && (
+          <p className="text-error text-xs mt-1">{errors.client_id.message}</p>
+        )}
+      </div>
 
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-medium hover:bg-surface-container-highest transition-colors disabled:opacity-50"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-wait"
-            >
-              {isSubmitting ? (
-                <span className="material-symbols-outlined text-lg animate-spin">
-                  progress_activity
-                </span>
-              ) : (
-                <span className="material-symbols-outlined text-lg">
-                  {isCreating ? "add" : "save"}
-                </span>
-              )}
-              {isSubmitting
-                ? "Menyimpan..."
-                : isCreating
-                  ? "Tambah"
-                  : "Simpan"}
-            </button>
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Judul Posisi
+        </label>
+        <input
+          type="text"
+          placeholder="Senior Backend Engineer"
+          {...register("title")}
+          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+        />
+        {errors.title && (
+          <p className="text-error text-xs mt-1">{errors.title.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Tipe Pekerjaan
+        </label>
+        <select
+          {...register("employment_type")}
+          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+        >
+          <option value="">Pilih Tipe Pekerjaan</option>
+          {agreementTypes.map((agreementType) => (
+            <option key={agreementType.id} value={agreementType.label}>
+              {agreementType.label}
+            </option>
+          ))}
+        </select>
+        {errors.employment_type && (
+          <p className="text-error text-xs mt-1">{errors.employment_type.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Durasi Kontrak (bulan)
+        </label>
+        <input
+          type="number"
+          placeholder="12"
+          {...register("contract_duration_months", { valueAsNumber: true })}
+          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+        />
+        {errors.contract_duration_months && (
+          <p className="text-error text-xs mt-1">{errors.contract_duration_months.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Persyaratan
+        </label>
+        <textarea
+          placeholder="Minimal S1 Teknik, pengalaman 3+ tahun dengan Node.js..."
+          {...register("requirement")}
+          rows={3}
+          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-none"
+        />
+        {errors.requirement && (
+          <p className="text-error text-xs mt-1">{errors.requirement.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Deskripsi Pekerjaan
+          <span className="text-on-surface-variant font-normal ml-1">(opsional)</span>
+        </label>
+        <textarea
+          placeholder={"• Bertanggung jawab atas pengembangan fitur baru\n• Berkolaborasi dengan tim lintas fungsi\n• Melakukan code review dan menjaga kualitas kode"}
+          {...register("job_description")}
+          rows={5}
+          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-none"
+        />
+        {errors.job_description && (
+          <p className="text-error text-xs mt-1">{errors.job_description.message}</p>
+        )}
+      </div>
+
+      {!isCreating && (
+        <>
+          {/* ── AI Scoring Config ─────────────────────────────────── */}
+          <div className="border-t border-outline-variant pt-4 mt-2">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined text-primary text-lg">tune</span>
+              <h3 className="text-label-lg font-semibold text-on-surface">Konfigurasi AI Screening</h3>
+            </div>
+
+            {/* Thresholds */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-label-sm text-on-surface mb-1">
+                  Threshold Otomatis (<span className="text-on-surface-variant">≥ skor ini = langsung terima</span>)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  {...register("ai_threshold_auto", { valueAsNumber: true })}
+                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-label-sm text-on-surface mb-1">
+                  Threshold Review (<span className="text-on-surface-variant">skor di antara = perlu review</span>)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  {...register("ai_threshold_manual", { valueAsNumber: true })}
+                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Weights */}
+            <div className="mb-4">
+              {(() => {
+                const total =
+                  (watch("ai_weight_education") ?? 0) +
+                  (watch("ai_weight_experience") ?? 0) +
+                  (watch("ai_weight_skill") ?? 0) +
+                  (watch("ai_weight_domain") ?? 0);
+                const isExact = total === 100;
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-label-sm text-on-surface">Bobot Penilaian</p>
+                      <span className={`text-label-sm font-mono font-semibold ${isExact ? "text-[#137333]" : "text-error"}`}>
+                        Total: {total} / 100
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {[
+                        { key: "ai_weight_education", label: "Pendidikan" },
+                        { key: "ai_weight_experience", label: "Pengalaman (tahun)" },
+                        { key: "ai_weight_skill", label: "Skill Match" },
+                        { key: "ai_weight_domain", label: "Relevansi Domain" },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="flex items-center gap-3">
+                          <span className="text-body-sm text-on-surface w-40 shrink-0">{label}</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            {...register(key as any, { valueAsNumber: true })}
+                            className="flex-1 accent-primary cursor-pointer"
+                          />
+                          <span className="text-body-sm font-mono text-on-surface w-8 text-right">
+                            {watch(key as any) ?? 0}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {errors.ai_weight_education && (
+                      <p className="text-error text-xs mt-2">{errors.ai_weight_education.message}</p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Required Skills */}
+            <div className="mb-4">
+              <label className="block text-label-sm text-on-surface mb-1">
+                Skill yang Dibutuhkan
+                <span className="text-on-surface-variant font-normal ml-1">(pisahkan dengan koma)</span>
+              </label>
+              <input
+                type="text"
+                {...register("ai_required_skills")}
+                placeholder="Python, SQL, React, AWS"
+                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+              />
+            </div>
+
+            {/* Min Experience */}
+            <div>
+              <label className="block text-label-sm text-on-surface mb-1">
+                Pengalaman Minimum (tahun)
+              </label>
+              <input
+                type="number"
+                min={0}
+                {...register("ai_min_experience_years", { valueAsNumber: true })}
+                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+              />
+            </div>
           </div>
-        </form>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is_active"
+              {...register("is_active")}
+              className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+            />
+            <label
+              htmlFor="is_active"
+              className="text-body-sm text-on-surface cursor-pointer"
+            >
+              Posisi aktif
+            </label>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const formId = isCreating ? "position-create-form" : "position-edit-form";
+
+  // ── Action buttons (shared) — submit button linked via form= attribute ───
+  const actionButtons = (
+    <div className="flex gap-3">
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={isSubmitting}
+        className="flex-1 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-medium hover:bg-surface-container-highest transition-colors disabled:opacity-50"
+      >
+        Batal
+      </button>
+      <button
+        type="submit"
+        form={formId}
+        disabled={isSubmitting}
+        className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-wait"
+      >
+        {isSubmitting ? (
+          <span className="material-symbols-outlined text-lg animate-spin">
+            progress_activity
+          </span>
+        ) : (
+          <span className="material-symbols-outlined text-lg">
+            {isCreating ? "add" : "save"}
+          </span>
+        )}
+        {isSubmitting
+          ? "Menyimpan..."
+          : isCreating
+            ? "Tambah"
+            : "Simpan"}
+      </button>
+    </div>
+  );
+
+  // ── Create: centered modal (short form, no AI section) ───────────────────
+  if (isCreating) {
+    return (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-md mx-4 max-h-[90vh] flex flex-col shadow-xl">
+          {/* Header */}
+          <div className="px-6 pt-6 pb-4 shrink-0">
+            <h2 className="text-headline-md font-semibold text-on-surface">
+              Tambah Posisi Baru
+            </h2>
+          </div>
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 pb-2">
+            <form id={formId} onSubmit={handleSubmit(onSubmit)}>
+              {formFields}
+            </form>
+          </div>
+          {/* Sticky footer */}
+          <div className="px-6 py-4 border-t border-outline-variant shrink-0">
+            {actionButtons}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Edit: right slide-over drawer (long form with AI section) ────────────
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop — click to close */}
+      <div
+        className="flex-1 bg-black/40"
+        onClick={!isSubmitting ? onClose : undefined}
+      />
+      {/* Drawer panel */}
+      <div className="w-full max-w-lg bg-surface-container-lowest h-full flex flex-col shadow-2xl">
+        {/* Sticky header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant shrink-0 bg-surface-container-lowest">
+          <div className="min-w-0">
+            <p className="text-label-sm text-on-surface-variant uppercase tracking-wider mb-0.5">
+              Edit Posisi
+            </p>
+            <h2 className="text-headline-sm font-semibold text-on-surface truncate">
+              {position?.title}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="ml-4 p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors disabled:opacity-50 shrink-0"
+            title="Tutup"
+          >
+            <span className="material-symbols-outlined text-xl">close</span>
+          </button>
+        </div>
+
+        {/* Scrollable form body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <form id={formId} onSubmit={handleSubmit(onSubmit)}>
+            {formFields}
+          </form>
+        </div>
+
+        {/* Sticky footer */}
+        <div className="px-6 py-4 border-t border-outline-variant shrink-0 bg-surface-container-lowest">
+          {actionButtons}
+        </div>
       </div>
     </div>
   );

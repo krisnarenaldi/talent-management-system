@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { RecruiterWorkload } from "@/types";
+import { useAuthStore } from "@/stores/auth.store";
 import { 
   fetchPipelineBreakdown, 
   fetchSuccessRateByPosition, 
@@ -262,6 +263,21 @@ function HorizontalBarChart({ data }: { data: RecruiterWorkload[] }) {
 }
 
 export default function AnalyticsPage() {
+  const isManagerOrAdmin = useAuthStore((s) => s.isRole("manager", "admin"));
+
+  // ── Guard: tidak ada akses untuk non-manager/non-admin ─────────────────────
+  if (!isManagerOrAdmin) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+        <span className="text-4xl">🔒</span>
+        <h2 className="text-lg font-semibold text-gray-800">Akses Terbatas</h2>
+        <p className="text-sm text-gray-500 max-w-sm">
+          Halaman Reports &amp; Analytics hanya tersedia untuk role <strong>Manager</strong> dan <strong>Admin</strong>.
+        </p>
+      </div>
+    );
+  }
+
   const { data: pipelineData, isLoading: isLoadingPipeline } = useQuery({
     queryKey: ["analytics-pipeline"],
     queryFn: () => fetchPipelineBreakdown(),

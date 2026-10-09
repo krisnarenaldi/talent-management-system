@@ -12,6 +12,9 @@ const SIDEBAR_NAV_ITEMS = [
   { href: "/applications", icon: "work", label: "Applications" },
   { href: "/employees", icon: "people", label: "Employees" },
   { href: "/blacklist", icon: "box", label: "Blacklist" },
+] as const;
+
+const SIDEBAR_MANAGER_ADMIN_ITEMS = [
   { href: "/analytics", icon: "bar_chart", label: "Reports" },
 ] as const;
 
@@ -118,12 +121,29 @@ export default function Sidebar() {
         })}
 
         {/* #2: AI Search — Manager only */}
-        {isRole("manager") && (
+        {isRole("admin","manager") && (
           <div className="pt-2 mt-2 border-t border-outline-variant space-y-1">
             <p className="px-3 text-label-xs text-on-surface-variant/50 uppercase tracking-wider">
-              AI Tools
+              ADMIN &amp; MANAGER
             </p>
             {SIDEBAR_MANAGER_ITEMS.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
+                    active
+                      ? "bg-secondary-container text-on-secondary-container font-semibold"
+                      : "text-on-surface-variant hover:bg-surface-container-highest"
+                  }`}
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+            {SIDEBAR_MANAGER_ADMIN_ITEMS.map((item) => {
               const active = isActive(item.href);
               return (
                 <Link

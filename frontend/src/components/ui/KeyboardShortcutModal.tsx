@@ -1,12 +1,12 @@
 "use client";
 
-interface Shortcut {
+interface ShortcutRow {
   key: string;
   description: string;
 }
 
-const SHORTCUTS: Shortcut[] = [
-  { key: "?", description: "Tampilkan/sembunyikan shortcut ini" },
+const SHORTCUTS: ShortcutRow[] = [
+  { key: "?", description: "Tampilkan/sembunyikan shortcut" },
   { key: "Esc", description: "Tutup modal" },
   { key: "C", description: "Kandidat baru" },
   { key: "B", description: "Blacklist baru" },
@@ -27,33 +27,39 @@ export default function KeyboardShortcutModal({ isOpen, onClose }: Props) {
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       onClick={onClose}
     >
-      {/* Panel — stop propagation so clicks inside don't close the modal */}
+      {/* Panel */}
       <div
-        className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6 relative mx-4"
+        className="relative w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <h2 className="text-headline-md font-semibold text-on-surface mb-4">
-          Keyboard Shortcuts
-        </h2>
-
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface transition-colors text-xl leading-none"
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
           aria-label="Tutup"
         >
-          ×
+          <span className="material-symbols-outlined text-lg">close</span>
         </button>
 
-        {/* Shortcut grid — 2 columns */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+        {/* Title */}
+        <h2 className="text-headline-md font-semibold text-on-surface mb-1">
+          Keyboard Shortcuts
+        </h2>
+        <p className="text-body-sm text-on-surface-variant mb-5">
+          Navigasi cepat tanpa menyentuh mouse
+        </p>
+
+        {/* Shortcut grid */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {SHORTCUTS.map(({ key, description }) => (
-            <div key={key} className="flex items-center gap-2">
-              <kbd className="inline-flex items-center justify-center min-w-[2rem] px-1.5 py-0.5 rounded bg-surface-container-high border border-outline-variant text-body-sm font-mono text-on-surface shrink-0">
+            <div
+              key={key}
+              className="flex items-center gap-3 rounded-xl bg-surface-container px-3 py-2.5"
+            >
+              <kbd className="inline-flex min-w-[2rem] items-center justify-center rounded border border-outline-variant bg-surface px-1.5 py-0.5 font-mono text-body-sm text-on-surface shadow-sm">
                 {key}
               </kbd>
               <span className="text-body-sm text-on-surface-variant">
@@ -62,6 +68,10 @@ export default function KeyboardShortcutModal({ isOpen, onClose }: Props) {
             </div>
           ))}
         </div>
+
+        <p className="mt-4 text-center text-label-sm text-on-surface-variant">
+          Shortcut tidak aktif saat mengetik di form
+        </p>
       </div>
     </div>
   );

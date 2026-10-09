@@ -3,13 +3,24 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-/**
- * Global keyboard shortcut handler.
- * - Ignores events when the target is an editable element or when a modifier key is held.
- * - `?` toggles the shortcut-help modal.
- * - `Escape` closes the modal.
- * - Single-letter keys navigate to common routes.
- */
+const NAVIGATION_SHORTCUTS: Record<string, string> = {
+  c: "/candidates/new",
+  b: "/blacklist/new",
+  a: "/applications/new",
+  e: "/employees",
+  d: "/dashboard",
+  l: "/blacklist",
+};
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!target) return false;
+  const el = target as HTMLElement;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
 export function useKeyboardShortcuts(
   isModalOpen: boolean,
   setIsModalOpen: (v: boolean) => void
@@ -18,46 +29,34 @@ export function useKeyboardShortcuts(
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore when typing in form fields
+      if (isTypingTarget(e.target)) return;
       // Ignore when modifier keys are held
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      // Ignore when focus is inside an editable element
-      const target = e.target as HTMLElement;
-      const tag = target.tagName;
-      if (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        target.isContentEditable
-      ) {
+      const key = e.key;
+
+      if (key === "?") {
+        e.preventDefault();
+        setIsModalOpen(!isModalOpen);
         return;
       }
 
-      switch (e.key) {
-        case "?":
-          setIsModalOpen(!isModalOpen);
-          break;
-        case "Escape":
+      if (key === "Escape") {
+        if (isModalOpen) {
+          e.preventDefault();
           setIsModalOpen(false);
-          break;
-        case "c":
-          router.push("/candidates/new");
-          break;
-        case "b":
-          router.push("/blacklist/new");
-          break;
-        case "a":
-          router.push("/applications/new");
-          break;
-        case "e":
-          router.push("/employees");
-          break;
-        case "d":
-          router.push("/dashboard");
-          break;
-        case "l":
-          router.push("/blacklist");
-          break;
+        }
+        return;
+      }
+
+      // Navigation shortcuts — only when modal is closed
+      if (!isModalOpen) {
+        const path = NAVIGATION_SHORTCUTS[key.toLowerCase()];
+        if (path) {
+          e.preventDefault();
+          router.push(path);
+        }
       }
     };
 

@@ -454,7 +454,9 @@ function ClientFormModal({
     return [{ name: "", contact: "" }];
   });
 
-  const [picErrors, setPicErrors] = useState<{ contact?: string }[]>([{}]);
+  const [picErrors, setPicErrors] = useState<{ contact?: string }[]>(() =>
+    Array.from({ length: pics.length }, () => ({}))
+  );
 
   const addPic = () => {
     setPics((prev) => [...prev, { name: "", contact: "" }]);

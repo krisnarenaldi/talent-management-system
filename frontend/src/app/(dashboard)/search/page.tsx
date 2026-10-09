@@ -258,7 +258,7 @@ const SUGGESTIONS = [
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SearchPage() {
-  const isManager = useAuthStore((s) => s.isRole("manager"));
+  const isManagerOrAdmin = useAuthStore((s) => s.isRole("manager", "admin"));
 
   // #13: initialise from localStorage
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
@@ -276,8 +276,8 @@ export default function SearchPage() {
     saveHistory(messages);
   }, [messages]);
 
-  // ── Guard: tidak ada akses untuk non-manager ─────────────────────────────
-  if (!isManager) {
+  // ── Guard: tidak ada akses untuk non-manager/non-admin ─────────────────────
+  if (!isManagerOrAdmin) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <span className="text-4xl">🔒</span>

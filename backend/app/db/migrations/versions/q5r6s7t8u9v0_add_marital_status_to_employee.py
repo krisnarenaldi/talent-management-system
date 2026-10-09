@@ -16,7 +16,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column('employee', sa.Column('marital_status', sa.String(length=50), nullable=True))
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'employee' AND column_name = 'marital_status'
+            ) THEN
+                ALTER TABLE employee ADD COLUMN marital_status VARCHAR(50);
+            END IF;
+        END $$;
+    """)
 
 
 def downgrade() -> None:

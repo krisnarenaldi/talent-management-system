@@ -120,6 +120,7 @@ export default function ApplicationsPage() {
   const itemsPerPage = 20;
   const user = useAuthStore((state) => state.user);
   const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
+  const canExport = user ? ["admin", "manager"].includes(normalizeRole(user.role)) : false;
 
   const { exportPipeline } = useExport();
 
@@ -177,64 +178,66 @@ export default function ApplicationsPage() {
               + Tambah Lamaran
             </Link>
           )}
-          <ExportButton
-            onExport={handleExport}
-            filters={
-              <div className="space-y-3 border-t border-gray-200 pt-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
-                    <select
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    >
-                      <option value="">Semua</option>
-                      <option value="active">Aktif</option>
-                      <option value="rejected">Ditolak</option>
-                      <option value="hired">Diterima</option>
-                      <option value="withdrawn">Ditarik</option>
-                    </select>
+          {canExport && (
+            <ExportButton
+              onExport={handleExport}
+              filters={
+                <div className="space-y-3 border-t border-gray-200 pt-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      >
+                        <option value="">Semua</option>
+                        <option value="active">Aktif</option>
+                        <option value="rejected">Ditolak</option>
+                        <option value="hired">Diterima</option>
+                        <option value="withdrawn">Ditarik</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Tahap</label>
+                      <select
+                        value={stageFilter}
+                        onChange={(e) => setStageFilter(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      >
+                        <option value="">Semua</option>
+                        {stageOptions.map((stage) => (
+                          <option key={stage} value={stage}>
+                            {formatStageLabel(stage)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Tahap</label>
-                    <select
-                      value={stageFilter}
-                      onChange={(e) => setStageFilter(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    >
-                      <option value="">Semua</option>
-                      {stageOptions.map((stage) => (
-                        <option key={stage} value={stage}>
-                          {formatStageLabel(stage)}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal mulai</label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal akhir</label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal mulai</label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal akhir</label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            }
-          />
+              }
+            />
+          )}
         </div>
       </div>
 

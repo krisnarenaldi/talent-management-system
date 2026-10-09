@@ -1,0 +1,8 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    "picErrors initialization mismatch on edit — picErrors is always initialized as [{}] (length 1) but pics may have 2+ rows when editing an existing client. Rows beyond the first have no corresponding picErrors entry until touched, so phone validation silently fails to fire for those rows and the pre-submit guard cannot catch invalid entries in untouched rows. Fix: initialize picErrors with Array.from({ length: pics.length }, () => ({})).",
+    "Migration down_revision skips the add-constraint migration — i1j2k3l4m5n6 sets down_revision = 's7t8u9v0w1x2' (make_blacklist_candidate_id_nullable) instead of 'h5i6j7k8l9m0' (add_unique_constraint_client_pic_contact). alembic downgrade -1 from the new migration lands at the blacklist migration, not at the state where the unique constraint existed, so the constraint is never restored on rollback. Fix: change down_revision to 'h5i6j7k8l9m0'."
+  ],
+  "reviewDoc": "/Users/krisnarenaldi/Documents/Projects/freelance/Talent Management System/.agents/tasks/multi-pic-review.md"
+}
