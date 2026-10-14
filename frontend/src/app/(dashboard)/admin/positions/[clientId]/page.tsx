@@ -12,7 +12,7 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import Link from "next/link";
 import api from "@/lib/api";
-import type { AgreementType, Position, Client } from "@/types";
+import type { AgreementType, Position, PositionByClient } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
@@ -84,11 +84,6 @@ async function fetchPositions(params?: Record<string, unknown>): Promise<Positio
   return data;
 }
 
-async function fetchClients(): Promise<Client[]> {
-  const response = await api.get("/api/v1/clients?is_active=true");
-  return response.data;
-}
-
 async function fetchAgreementTypes(): Promise<AgreementType[]> {
   const response = await api.get("/api/v1/admin/agreement-types", {
     params: { is_active: true },
@@ -134,22 +129,19 @@ export default function AdminClientPositionsPage() {
     enabled: authorized && !!clientId,
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ["clients"],
-    queryFn: fetchClients,
-    enabled: authorized,
-  });
-
   const { data: agreementTypes = [] } = useQuery({
     queryKey: ["agreement-types", "active"],
     queryFn: fetchAgreementTypes,
     enabled: authorized,
   });
 
-  // Derive client name from loaded positions, or fall back to clients list
+  // Derive client name from loaded positions; fall back to the already-fetched
+  // positions-by-client cache so the heading stays correct even when the
+  // status filter produces an empty result set.
+  const cachedByClient = queryClient.getQueryData<PositionByClient[]>(["positions-by-client"]);
   const clientName =
     positionsData?.data[0]?.client_name ??
-    clients.find((c) => c.id === clientId)?.name ??
+    cachedByClient?.find((r) => r.client_id === clientId)?.client_name ??
     "...";
 
   const positions = positionsData?.data ?? [];
@@ -406,7 +398,6 @@ export default function AdminClientPositionsPage() {
           <PositionFormModal
             key={editingPosition?.id ?? "new"}
             position={editingPosition}
-            clients={clients}
             agreementTypes={agreementTypes}
             defaultClientId={clientId}
             onClose={() => {
@@ -426,7 +417,6 @@ export default function AdminClientPositionsPage() {
 
 function PositionFormModal({
   position,
-  clients,
   agreementTypes,
   defaultClientId,
   onClose,
@@ -436,7 +426,6 @@ function PositionFormModal({
   isUpdatingPending,
 }: {
   position: Position | null;
-  clients: Client[];
   agreementTypes: AgreementType[];
   defaultClientId?: string;
   onClose: () => void;
@@ -489,7 +478,6 @@ function PositionFormModal({
 
   void register;
   void errors;
-  void clients;
 
   const onSubmit = async (data: Record<string, unknown>) => {
     try {
@@ -534,16 +522,13 @@ function PositionFormModal({
     <div className="space-y-4">
       <div>
         <label className="block text-label-md text-on-surface mb-1.5">Klien</label>
+        {/* Client cannot be changed after creation */}
         <select
           {...register("client_id")}
-          disabled={isCreating ? true : true}
+          disabled
           className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all disabled:opacity-50"
         >
-          {clients.map((client) => (
-            <option key={client.id} value={client.id}>
-              {client.name}
-            </option>
-          ))}
+          <option value={defaultClientId ?? position?.client_id ?? ""}>{position?.client_name ?? defaultClientId}</option>
         </select>
         {errors.client_id && (
           <p className="text-error text-xs mt-1">{errors.client_id.message}</p>
