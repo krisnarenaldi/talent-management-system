@@ -1,0 +1,8 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    "Inactive client contacts block reuse — create_client and update_client query all clients with a non-null pic_contact and apply no is_active filter. A deactivated client's phone numbers permanently block those numbers from being assigned to a new or existing client. If the intended policy is 'contacts must be unique across active clients only', add .filter(Client.is_active == True) to both queries.",
+    "onSubmit unhandled rejection — onSubmit calls await onCreate / await onUpdate via mutateAsync with no surrounding try/catch. React Hook Form's handleSubmit suppresses async errors from the submit handler so the UI won't crash, but the reliance is implicit and version-dependent. Adding an empty catch makes the intent explicit."
+  ],
+  "reviewDoc": "/Users/krisnarenaldi/Documents/Projects/freelance/Talent Management System/.agents/tasks/duplicate-pic-validation-review.md"
+}

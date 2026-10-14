@@ -68,6 +68,28 @@ class EmployeeResponse(EmployeeBase):
         from_attributes = True
 
 
+class EmployeeSearchResponse(BaseModel):
+    """Slim response untuk AI search — tanpa data payroll sensitif."""
+    id: AutoStrUUID
+    candidate_id: AutoStrUUID
+    full_name: str
+    gender: Optional[str] = None
+    personal_email: Optional[str] = None
+    office_email: Optional[str] = None
+    phone_number: Optional[str] = None
+    placement: Optional[str] = None
+    role_level: Optional[str] = None
+    employee_status: Optional[str] = None
+    notes: Optional[str] = None
+    # Skills diambil dari linked candidate
+    skills: Optional[list[str]] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class EmployeeContractBase(BaseModel):
     agreement_type_id: Optional[AutoStrUUID] = None
     contract_number: Optional[str] = None

@@ -10,3 +10,4 @@ from app.models.blacklist import Blacklist, BlacklistStatusType
 from app.models.employee import Employee, EmployeeContract, AgreementType, EmployeePayroll, EmployeeDocument
 from app.models.generated_cv import GeneratedCV
 from app.models.refresh_token import RefreshToken
+from app.models.openai_usage_log import OpenAIUsageLog

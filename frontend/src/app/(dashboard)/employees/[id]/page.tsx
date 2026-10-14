@@ -20,6 +20,8 @@ import {
   updatePayroll,
 } from "@/lib/api/employees";
 import EmployeeDocumentUploader from "@/components/employees/EmployeeDocumentUploader";
+import CandidateDocumentUploader from "@/components/candidates/DocumentUploader";
+import CandidateCVPanel from "@/components/candidates/CandidateCVPanel";
 import type { Employee, EmployeeContract, EmployeePayroll } from "@/types";
 
 /* ── Helpers ─────────────────────────────────────────────────────────────────── */
@@ -624,54 +626,29 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
 }
 
 function DocumentsTab({ employeeId, candidateId }: { employeeId: string; candidateId: string }) {
-  const { data: candidateDocs = [] } = useQuery({
-    queryKey: ["candidate-documents", candidateId],
-    queryFn: () => api.get(`/api/v1/candidates/${candidateId}/documents/`).then((r) => r.data),
-    enabled: !!candidateId,
-  });
-
   return (
     <div className="space-y-5">
-      {/* Candidate documents (uploaded during recruitment) */}
-      {candidateDocs.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-gray-900">Dokumen Kandidat</h2>
-            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
-              Diupload saat rekrutmen
-            </span>
-          </div>
-          <div className="space-y-3">
-            {(candidateDocs as { id: string; doc_type: string; file_url?: string; is_verified: boolean; uploaded_at?: string }[]).map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{doc.doc_type}</p>
-                  {doc.uploaded_at && (
-                    <p className="text-xs text-gray-500">
-                      {format(new Date(doc.uploaded_at), "dd MMM yyyy", { locale: idLocale })}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${doc.is_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-600"}`}>
-                    {doc.is_verified ? "✓ Verified" : "Belum diverifikasi"}
-                  </span>
-                  {doc.file_url && (
-                    <a
-                      href={doc.file_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Download
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Candidate documents — selalu tampil agar user bisa upload Ijazah, Sertifikat, dll */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">Dokumen Kandidat</h2>
+          <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+            CV, KTP, Ijazah, Sertifikat, dll
+          </span>
         </div>
-      )}
+        <CandidateDocumentUploader candidateId={candidateId} />
+      </div>
+
+      {/* Generate CV Standar */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">CV Standar Altek</h2>
+          <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">
+            Generate via AI
+          </span>
+        </div>
+        <CandidateCVPanel candidateId={candidateId} />
+      </div>
 
       {/* Employee-specific documents */}
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

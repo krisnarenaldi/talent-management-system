@@ -365,7 +365,7 @@ export default function ApplicationsPage() {
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(application.status)}`}>
                           {application.status}
                         </span>
-                        {application.status === "rejected" && application.is_blacklisted && (
+                        {application.is_blacklisted && (
                           <span className="inline-flex items-center rounded-full bg-red-200 px-2 py-0.5 text-xs font-medium text-red-800">
                             <span className="material-symbols-outlined text-xs mr-0.5">block</span>
                             Blacklist

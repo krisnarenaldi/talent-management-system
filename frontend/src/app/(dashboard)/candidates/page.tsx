@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, FileText, Filter } from "lucide-react";
+import { Download, FileText, Filter, Pencil } from "lucide-react";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
 import type { Candidate } from "@/types";
@@ -14,6 +14,21 @@ import { useAuthStore } from "@/stores/auth.store";
 function normalizeRole(role: string | undefined): string {
   if (!role) return "";
   return role.split(".").pop()?.toLowerCase() || role;
+}
+
+type SalaryRange = { min: number | null; max: number | null };
+
+const SALARY_RANGES: { value: string; label: string; range: SalaryRange }[] = [
+  { value: "", label: "Semua", range: { min: null, max: null } },
+  { value: "lt_5m", label: "< 5 juta", range: { min: null, max: 5000000 } },
+  { value: "5_10m", label: "5 - 10 juta", range: { min: 5000000, max: 10000000 } },
+  { value: "10_15m", label: "10 - 15 juta", range: { min: 10000000, max: 15000000 } },
+  { value: "15_20m", label: "15 - 20 juta", range: { min: 15000000, max: 20000000 } },
+  { value: "gt_20m", label: "> 20 juta", range: { min: 20000000, max: null } },
+];
+
+function getSalaryRange(value: string): SalaryRange {
+  return SALARY_RANGES.find((r) => r.value === value)?.range ?? { min: null, max: null };
 }
 
 async function fetchCandidates(params?: Record<string, string | undefined>) {
@@ -31,6 +46,8 @@ export default function CandidatesPage() {
   const [cityFilter, setCityFilter] = useState("");
   const [experienceFilter, setExperienceFilter] = useState("");
   const [educationFilter, setEducationFilter] = useState("");
+  const [currentSalaryFilter, setCurrentSalaryFilter] = useState("");
+  const [expectedSalaryFilter, setExpectedSalaryFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -45,8 +62,16 @@ export default function CandidatesPage() {
     queryFn: () => settingsApi.listSourceChannels({ is_active: true }),
   });
 
+  const { data: cities = [] } = useQuery({
+    queryKey: ["candidate-cities"],
+    queryFn: async () => {
+      const response = await api.get("/api/v1/candidates/cities");
+      return response.data as string[];
+    },
+  });
+
   const { data: candidates = [], isLoading } = useQuery({
-    queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate, cityFilter, experienceFilter, educationFilter, currentPage, itemsPerPage }],
+    queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate, cityFilter, experienceFilter, educationFilter, currentSalaryFilter, expectedSalaryFilter, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchCandidates({
         search: searchTerm || undefined,
@@ -58,6 +83,10 @@ export default function CandidatesPage() {
         city: cityFilter || undefined,
         experience_level: experienceFilter || undefined,
         education: educationFilter || undefined,
+        min_current_salary: getSalaryRange(currentSalaryFilter).min?.toString() || undefined,
+        max_current_salary: getSalaryRange(currentSalaryFilter).max?.toString() || undefined,
+        min_expected_salary: getSalaryRange(expectedSalaryFilter).min?.toString() || undefined,
+        max_expected_salary: getSalaryRange(expectedSalaryFilter).max?.toString() || undefined,
         skip: ((currentPage - 1) * itemsPerPage).toString(),
         limit: itemsPerPage.toString(),
       }),
@@ -75,6 +104,10 @@ export default function CandidatesPage() {
         city: cityFilter || undefined,
         experience_level: experienceFilter || undefined,
         education: educationFilter || undefined,
+        min_current_salary: getSalaryRange(currentSalaryFilter).min?.toString() || undefined,
+        max_current_salary: getSalaryRange(currentSalaryFilter).max?.toString() || undefined,
+        min_expected_salary: getSalaryRange(expectedSalaryFilter).min?.toString() || undefined,
+        max_expected_salary: getSalaryRange(expectedSalaryFilter).max?.toString() || undefined,
       });
     } catch (error) {
       console.error("Export gagal:", error);
@@ -138,6 +171,32 @@ export default function CandidatesPage() {
                         className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                       />
                     </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Gaji saat ini</label>
+                      <select
+                        value={currentSalaryFilter}
+                        onChange={(e) => setCurrentSalaryFilter(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      >
+                        {SALARY_RANGES.map((r) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Gaji ekspektasi</label>
+                      <select
+                        value={expectedSalaryFilter}
+                        onChange={(e) => setExpectedSalaryFilter(e.target.value)}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      >
+                        {SALARY_RANGES.map((r) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
@@ -199,6 +258,11 @@ export default function CandidatesPage() {
                 <option value="">Semua</option>
                 <option value="jabotabek">Jabotabek</option>
                 <option value="non_jabotabek">Non Jabotabek</option>
+                {cities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -216,6 +280,32 @@ export default function CandidatesPage() {
               </select>
             </div>
 
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Gaji Saat Ini</label>
+              <select
+                value={currentSalaryFilter}
+                onChange={(e) => setCurrentSalaryFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                {SALARY_RANGES.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Gaji Ekspektasi</label>
+              <select
+                value={expectedSalaryFilter}
+                onChange={(e) => setExpectedSalaryFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                {SALARY_RANGES.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-end">
               <button
                 onClick={() => {
@@ -225,6 +315,8 @@ export default function CandidatesPage() {
                   setCityFilter("");
                   setExperienceFilter("");
                   setEducationFilter("");
+                  setCurrentSalaryFilter("");
+                  setExpectedSalaryFilter("");
                 }}
                 className="w-full rounded-lg bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
               >
@@ -270,9 +362,12 @@ export default function CandidatesPage() {
               onChange={(e) => setCityFilter(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             >
-              <option value="">Semua</option>
-              <option value="jabotabek">Jabotabek</option>
-              <option value="non_jabotabek">Non Jabotabek</option>
+              <option value="">Semua</option>              
+              {cities.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -324,6 +419,36 @@ export default function CandidatesPage() {
               <option value="belum_lengkap">Belum lengkap</option>
             </select>
           </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Gaji Saat Ini
+            </label>
+            <select
+              value={currentSalaryFilter}
+              onChange={(e) => setCurrentSalaryFilter(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            >
+              {SALARY_RANGES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Gaji Ekspektasi
+            </label>
+            <select
+              value={expectedSalaryFilter}
+              onChange={(e) => setExpectedSalaryFilter(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            >
+              {SALARY_RANGES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -359,20 +484,27 @@ export default function CandidatesPage() {
                   <tr key={candidate.id} className="border-t border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        {candidate.photo_url ? (
-                          <img
-                            src={candidate.photo_url}
-                            alt={candidate.full_name}
-                            className="h-8 w-8 rounded-full object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 text-sm font-medium">
-                            ?
-                          </div>
-                        )}
+                        <Link href={`/candidates/${candidate.id}`} className="flex-shrink-0">
+                          {candidate.photo_url ? (
+                            <img
+                              src={candidate.photo_url}
+                              alt={candidate.full_name}
+                              className="h-8 w-8 rounded-full object-cover transition-opacity hover:opacity-80"
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-medium transition-colors hover:bg-gray-300">
+                              ?
+                            </div>
+                          )}
+                        </Link>
                         <div>
                           <div className="flex items-center gap-2">
-                            <p className="font-semibold text-gray-900">{candidate.full_name}</p>
+                            <Link
+                              href={`/candidates/${candidate.id}`}
+                              className="font-semibold text-gray-900 transition-colors hover:text-blue-600 hover:underline"
+                            >
+                              {candidate.full_name}
+                            </Link>
                             {candidate.is_blacklisted && (
                               <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 border border-red-200">
                                 Blacklist
@@ -437,17 +569,19 @@ export default function CandidatesPage() {
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           href={`/candidates/${candidate.id}/cv`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition-all hover:bg-violet-100"
+                          className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition-all hover:bg-violet-100"
                           title="Generate CV Standar Altek"
                         >
                           <FileText className="h-3.5 w-3.5" />
                           CV
                         </Link>
                         <Link
-                          href={`/candidates/${candidate.id}`}
-                          className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
+                          href={`/candidates/${candidate.id}/edit`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50"
+                          title="Edit Data Kandidat"
                         >
-                          Lihat detail
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
                         </Link>
                       </div>
                     </td>

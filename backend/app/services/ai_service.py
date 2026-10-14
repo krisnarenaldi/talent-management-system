@@ -6,6 +6,8 @@ Alur:
      return structured filter JSON  (TIDAK mengandung raw SQL).
   2. execute_structured_filters(filters, db) → terjemahkan filter JSON
      ke SQLAlchemy query yang aman, return (list[Candidate], total_count).
+  3. execute_employee_filters(filters, db) → jalankan filter yang sama
+     terhadap tabel employee (via relasi candidate), return (list[Employee], total_count).
 
 Boundary:
   - Sistem prompt di-harden: hanya menjawab pertanyaan yang relevan
@@ -28,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience
 from app.models.blacklist import Blacklist
+from app.models.employee import Employee
 
 logger = logging.getLogger(__name__)
 
@@ -217,13 +220,16 @@ ALLOWED_FILTER_KEYS: frozenset[str] = frozenset({
     "min_gpa",
     "experience_job_title",
     "experience_company",
+    "experience_years",
+    "employee_status",
+    "placement",
     "keyword",
 })
 
 # ── Schema yang diperkenalkan ke LLM ────────────────────────────────────────
 
 CANDIDATE_FIELD_SCHEMA = """
-Tabel: candidate
+Tabel: candidate (talent pool — pelamar yang belum atau sedang dalam proses rekrutmen)
 Kolom yang tersedia untuk filter:
   - gender           : string  — nilai: "laki-laki" | "perempuan"
   - domicile         : string  — kota / wilayah tempat tinggal
@@ -241,20 +247,28 @@ CATATAN PENTING untuk field nama/email/telepon:
   Jika user ingin cari berdasarkan nama atau kontak, gunakan field "keyword".
   Contoh: user ketik "cari Budi" → set keyword = "Budi"
 
-Tabel relasi (boleh digunakan):
+Tabel relasi candidate (boleh digunakan):
   - candidate_education : institution (string), major (string), graduation_year (int), gpa (float)
   - candidate_experience: company_name (string), job_title (string), description (text)
+
+Tabel: employee (karyawan aktif yang sudah onboard)
+  Filter employee menggunakan field yang sama dari tabel candidate di atas (skills, gender,
+  education, experience, keyword, dll.) karena setiap employee terhubung ke satu candidate.
+  Tambahan filter khusus employee:
+  - employee_status  : string  — "aktif" | "cuti" | "resign"
+  - placement        : string  — site/divisi/lokasi penempatan karyawan
+  - experience_years : number  — lama pengalaman kerja minimum (tahun), dihitung dari candidate_experience
 """
 
 # ── System prompt — boundary ketat ──────────────────────────────────────────
 
 SYSTEM_PROMPT = f"""
-Kamu adalah asisten pencarian kandidat untuk sistem Talent Management.
-Tugasmu HANYA membantu mencari kandidat berdasarkan pertanyaan HR/Manager.
+Kamu adalah asisten pencarian talent untuk sistem Talent Management.
+Tugasmu HANYA membantu mencari kandidat DAN karyawan (employee) berdasarkan pertanyaan HR/Manager.
 
 ATURAN WAJIB:
-1. Kamu HANYA boleh menjawab pertanyaan yang berkaitan dengan pencarian kandidat,
-   skill, pengalaman kerja, pendidikan, domisili, gaji, atau status kandidat.
+1. Kamu HANYA boleh menjawab pertanyaan yang berkaitan dengan pencarian kandidat/karyawan,
+   skill, pengalaman kerja, pendidikan, domisili, gaji, status, atau penempatan.
 2. Jika pertanyaan TIDAK berkaitan dengan talent management, TOLAK dengan format:
    {{"error": "out_of_scope"}}
 3. Jangan pernah menghasilkan SQL mentah. Hanya keluarkan JSON filter terstruktur.
@@ -283,12 +297,16 @@ Output HARUS berupa JSON persis dengan format berikut (hanya isi key yang releva
     "min_gpa":               3.0,
     "experience_job_title":  "Backend Developer",
     "experience_company":    "Gojek",
-    "keyword":               "nama atau teks bebas untuk pencarian kandidat"
+    "experience_years":      2,
+    "employee_status":       "aktif",
+    "placement":             "Jakarta",
+    "keyword":               "nama atau teks bebas untuk pencarian"
   }},
   "description": "Penjelasan singkat filter yang diterapkan dalam Bahasa Indonesia"
 }}
 
-Jika query tidak bisa dipetakan ke kandidat manapun, kembalikan filters kosong {{}} dan jelaskan di description.
+Filter ini akan dijalankan SERENTAK pada tabel candidate DAN tabel employee.
+Jika query tidak bisa dipetakan, kembalikan filters kosong {{}} dan jelaskan di description.
 """
 
 
@@ -327,9 +345,16 @@ def translate_nl_to_filters(query: str) -> dict[str, Any]:
         raw = response.choices[0].message.content or "{}"
         parsed = json.loads(raw)
 
+        # Simpan token usage agar caller bisa log ke DB
+        token_usage = {
+            "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+            "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+            "model": response.model or settings.OPENAI_MODEL,
+        }
+
         # Tangani out_of_scope yang dikembalikan oleh LLM
         if parsed.get("error") == "out_of_scope":
-            return {"error": "out_of_scope"}
+            return {"error": "out_of_scope", "token_usage": token_usage}
 
         # Normalise: pastikan ada key "filters"
         if "filters" not in parsed:
@@ -346,6 +371,7 @@ def translate_nl_to_filters(query: str) -> dict[str, Any]:
             )
             parsed["filters"] = {k: v for k, v in raw_filters.items() if k in ALLOWED_FILTER_KEYS}
 
+        parsed["token_usage"] = token_usage
         return parsed
 
     except json.JSONDecodeError as exc:
@@ -395,6 +421,15 @@ def execute_structured_filters(
         )
     )
     q = q.filter(Candidate.id.not_in(blacklisted_select))
+
+    # ── Kecualikan kandidat yang sudah menjadi employee ───────────────────────
+    # Jika seseorang ada di tabel employee, tampilkan di seksi Karyawan saja —
+    # bukan di Kandidat — agar tidak muncul duplikat dan informasi lebih relevan.
+    from sqlalchemy import select as _sa_emp_select
+    employee_candidate_ids = _sa_emp_select(Employee.candidate_id).where(
+        Employee.candidate_id != None
+    )
+    q = q.filter(Candidate.id.not_in(employee_candidate_ids))
 
     # ── #5: Skill — per-element case-insensitive menggunakan jsonb_array_elements_text
     skills: list[str] | None = filters.get("skills")
@@ -498,17 +533,198 @@ def execute_structured_filters(
             q = q.filter(CandidateEducation.gpa >= filters["min_gpa"])
 
     # ── Pengalaman ───────────────────────────────────────────────────────────
-    needs_exp_join = filters.get("experience_job_title") or filters.get("experience_company")
-    if needs_exp_join:
-        q = q.join(CandidateExperience, CandidateExperience.candidate_id == Candidate.id)
-        if filters.get("experience_job_title"):
-            q = q.filter(CandidateExperience.job_title.ilike(f"%{filters['experience_job_title']}%"))
-        if filters.get("experience_company"):
-            q = q.filter(CandidateExperience.company_name.ilike(f"%{filters['experience_company']}%"))
+    # Gunakan subquery EXISTS (bukan JOIN) agar candidate tanpa data experience
+    # tetap muncul. experience_years tidak difilter di DB karena start_date sering
+    # tidak terisi — skills sudah cukup sebagai proxy pengalaman.
+    if filters.get("experience_job_title"):
+        title_kw = f"%{filters['experience_job_title']}%"
+        q = q.filter(
+            db.query(CandidateExperience)
+            .filter(
+                CandidateExperience.candidate_id == Candidate.id,
+                CandidateExperience.job_title.ilike(title_kw),
+            )
+            .correlate(Candidate)
+            .exists()
+        )
+    if filters.get("experience_company"):
+        co_kw = f"%{filters['experience_company']}%"
+        q = q.filter(
+            db.query(CandidateExperience)
+            .filter(
+                CandidateExperience.candidate_id == Candidate.id,
+                CandidateExperience.company_name.ilike(co_kw),
+            )
+            .correlate(Candidate)
+            .exists()
+        )
+    # experience_years: tidak difilter di DB — data start_date sering NULL sehingga
+    # filter ini akan mengeluarkan kandidat valid. User diarahkan melihat profil lengkap.
 
     # ── #6: total_count sebelum LIMIT untuk has_more ─────────────────────────
     base_q = q.distinct()
     total_count: int = base_q.count()
     results = base_q.order_by(Candidate.created_at.desc()).limit(100).all()
+
+    return results, total_count
+
+
+# ── execute_employee_filters ──────────────────────────────────────────────────
+
+def execute_employee_filters(
+    filters: dict[str, Any], db: Session
+) -> tuple[list[Employee], int]:
+    """
+    Terjemahkan dict filter (dari LLM) ke SQLAlchemy query untuk tabel employee.
+    Employee terhubung ke candidate via candidate_id — filter skills, education,
+    dan experience dijalankan melalui relasi tersebut.
+
+    Filter tambahan khusus employee: employee_status, placement, experience_years.
+
+    Return (results, total_count) dibatasi LIMIT 100.
+    """
+    from sqlalchemy import select as sa_select
+
+    # Sanitasi key
+    unknown = set(filters.keys()) - ALLOWED_FILTER_KEYS
+    if unknown:
+        logger.warning("execute_employee_filters: stripping unknown keys %s", unknown)
+        filters = {k: v for k, v in filters.items() if k in ALLOWED_FILTER_KEYS}
+
+    from sqlalchemy.orm import joinedload
+
+    q = (
+        db.query(Employee)
+        .join(Candidate, Candidate.id == Employee.candidate_id)
+        .options(joinedload(Employee.candidate))
+        .filter(Candidate.is_deleted == False)  # noqa: E712
+    )
+
+    # ── Kecualikan employee dengan blacklist aktif & disetujui ───────────────
+    blacklisted_select = (
+        sa_select(Blacklist.candidate_id)
+        .where(
+            Blacklist.candidate_id != None,
+            Blacklist.is_active == True,
+            Blacklist.is_approved == True,
+        )
+    )
+    q = q.filter(Candidate.id.not_in(blacklisted_select))
+
+    # ── Employee-specific filters ─────────────────────────────────────────────
+    if filters.get("employee_status"):
+        q = q.filter(Employee.employee_status == filters["employee_status"])
+
+    if filters.get("placement"):
+        q = q.filter(Employee.placement.ilike(f"%{filters['placement']}%"))
+
+    # ── Skills (dari tabel candidate yang sudah di-join ke employee) ──────────
+    # Candidate sudah di-join di awal query, jadi Candidate.skills bisa langsung
+    # digunakan dengan pola yang sama seperti execute_structured_filters.
+    skills: list[str] | None = filters.get("skills")
+    if skills:
+        for skill in skills:
+            skill_lower = skill.lower()
+            exists_clause = (
+                db.query(func.count(text("1")))
+                .select_from(
+                    func.jsonb_array_elements_text(Candidate.skills).alias("s")
+                )
+                .filter(func.lower(text("s")) == skill_lower)
+                .correlate(Candidate)
+                .exists()
+            )
+            q = q.filter(exists_clause)
+
+    # ── Gender ───────────────────────────────────────────────────────────────
+    if filters.get("gender"):
+        q = q.filter(Candidate.gender.ilike(filters["gender"]))
+
+    # ── Keyword — nama, email, catatan ───────────────────────────────────────
+    if filters.get("keyword"):
+        kw = f"%{filters['keyword']}%"
+        exp_match = (
+            db.query(CandidateExperience.candidate_id)
+            .filter(
+                or_(
+                    CandidateExperience.description.ilike(kw),
+                    CandidateExperience.company_name.ilike(kw),
+                    CandidateExperience.job_title.ilike(kw),
+                )
+            )
+            .subquery()
+        )
+        edu_match = (
+            db.query(CandidateEducation.candidate_id)
+            .filter(
+                or_(
+                    CandidateEducation.major.ilike(kw),
+                    CandidateEducation.institution.ilike(kw),
+                )
+            )
+            .subquery()
+        )
+        q = q.filter(
+            or_(
+                Employee.full_name.ilike(kw),
+                Candidate.email.ilike(kw),
+                Employee.notes.ilike(kw),
+                Candidate.id.in_(exp_match),
+                Candidate.id.in_(edu_match),
+            )
+        )
+
+    # ── Pendidikan ───────────────────────────────────────────────────────────
+    needs_edu_join = (
+        filters.get("education_major")
+        or filters.get("education_institution")
+        or filters.get("min_gpa")
+    )
+    if needs_edu_join:
+        q = q.join(CandidateEducation, CandidateEducation.candidate_id == Candidate.id)
+        if filters.get("education_major"):
+            q = q.filter(CandidateEducation.major.ilike(f"%{filters['education_major']}%"))
+        if filters.get("education_institution"):
+            q = q.filter(CandidateEducation.institution.ilike(f"%{filters['education_institution']}%"))
+        if filters.get("min_gpa"):
+            q = q.filter(CandidateEducation.gpa >= filters["min_gpa"])
+
+    # ── Pengalaman (job title / perusahaan / lama tahun) ─────────────────────
+    # Gunakan subquery EXISTS (bukan JOIN). experience_years tidak difilter di DB
+    # karena start_date sering NULL — akan membuang employee valid.
+    if filters.get("experience_job_title"):
+        title_kw = f"%{filters['experience_job_title']}%"
+        q = q.filter(
+            db.query(CandidateExperience)
+            .filter(
+                CandidateExperience.candidate_id == Candidate.id,
+                CandidateExperience.job_title.ilike(title_kw),
+            )
+            .correlate(Candidate)
+            .exists()
+        )
+    if filters.get("experience_company"):
+        co_kw = f"%{filters['experience_company']}%"
+        q = q.filter(
+            db.query(CandidateExperience)
+            .filter(
+                CandidateExperience.candidate_id == Candidate.id,
+                CandidateExperience.company_name.ilike(co_kw),
+            )
+            .correlate(Candidate)
+            .exists()
+        )
+    # experience_years: tidak difilter di DB — data start_date sering NULL.
+
+    # ── total_count sebelum LIMIT ─────────────────────────────────────────────
+    # Hitung distinct employee IDs tanpa joinedload (menghindari LEFT JOIN inflation)
+    id_subq = q.with_entities(Employee.id).distinct().subquery()
+    total_count: int = db.query(func.count()).select_from(id_subq).scalar() or 0
+    results = (
+        q.distinct(Employee.id)
+        .order_by(Employee.id, Employee.created_at.desc())
+        .limit(100)
+        .all()
+    )
 
     return results, total_count

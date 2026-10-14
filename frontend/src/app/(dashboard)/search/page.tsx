@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/stores/auth.store";
-import { naturalLanguageSearch } from "@/lib/api/ai_search";
+import { getAIUsage, naturalLanguageSearch } from "@/lib/api/ai_search";
 import { FileText } from "lucide-react";
-import type { Candidate, NLSearchFilters, NLSearchResponse } from "@/types";
+import type { AIUsageStats, Candidate, EmployeeSearchResult, NLSearchFilters, NLSearchResponse } from "@/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ interface ChatMessage {
 
 // ── LocalStorage persistence (#13) ───────────────────────────────────────────
 
-const LS_KEY = "ai_search_chat_history";
+const LS_KEY = "ai_search_chat_history_v2";
 
 function loadHistory(): ChatMessage[] {
   if (typeof window === "undefined") return [];
@@ -94,10 +94,28 @@ function FiltersDisplay({ filters }: { filters: NLSearchFilters }) {
   );
 }
 
-function ResultsTable({ candidates }: { candidates: Candidate[] }) {
-  if (candidates.length === 0) {
+function SkillBadges({ skills }: { skills?: string[] | null }) {
+  if (!skills || skills.length === 0) return <span className="text-gray-400">-</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {skills.slice(0, 4).map((s) => (
+        <span key={s} className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+          {s}
+        </span>
+      ))}
+      {skills.length > 4 && (
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+          +{skills.length - 4}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CandidatesTable({ candidates }: { candidates: Candidate[] | undefined }) {
+  if (!candidates || candidates.length === 0) {
     return (
-      <p className="mt-3 text-sm text-gray-500 italic">
+      <p className="mt-2 text-sm text-gray-500 italic">
         Tidak ada kandidat yang sesuai dengan kriteria pencarian.
       </p>
     );
@@ -126,27 +144,7 @@ function ResultsTable({ candidates }: { candidates: Candidate[] }) {
                 <div className="text-gray-400">{c.phone || "-"}</div>
               </td>
               <td className="px-3 py-2 whitespace-nowrap">{c.domicile || "-"}</td>
-              <td className="px-3 py-2">
-                {c.skills && c.skills.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {c.skills.slice(0, 4).map((s) => (
-                      <span
-                        key={s}
-                        className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700"
-                      >
-                        {s}
-                      </span>
-                    ))}
-                    {c.skills.length > 4 && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                        +{c.skills.length - 4}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <span className="text-gray-400">-</span>
-                )}
-              </td>
+              <td className="px-3 py-2"><SkillBadges skills={c.skills} /></td>
               <td className="px-3 py-2 whitespace-nowrap">{c.source_channel || "-"}</td>
               <td className="px-3 py-2">
                 <span
@@ -185,6 +183,74 @@ function ResultsTable({ candidates }: { candidates: Candidate[] }) {
   );
 }
 
+function EmployeesTable({ employees }: { employees: EmployeeSearchResult[] | undefined }) {
+  if (!employees || employees.length === 0) {
+    return (
+      <p className="mt-2 text-sm text-gray-500 italic">
+        Tidak ada karyawan yang sesuai dengan kriteria pencarian.
+      </p>
+    );
+  }
+
+  const statusLabel: Record<string, string> = {
+    aktif: "Aktif",
+    cuti: "Cuti",
+    resign: "Resign",
+  };
+  const statusColor: Record<string, string> = {
+    aktif: "bg-emerald-100 text-emerald-700",
+    cuti: "bg-amber-100 text-amber-700",
+    resign: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200">
+      <table className="min-w-full text-left text-xs text-gray-700">
+        <thead className="bg-teal-50 text-xs uppercase tracking-wide text-teal-600">
+          <tr>
+            <th className="px-3 py-2">Nama</th>
+            <th className="px-3 py-2">Kontak</th>
+            <th className="px-3 py-2">Penempatan</th>
+            <th className="px-3 py-2">Level</th>
+            <th className="px-3 py-2">Skill</th>
+            <th className="px-3 py-2">Status</th>
+            <th className="px-3 py-2 text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {employees.map((e) => (
+            <tr key={e.id} className="border-t border-gray-100 hover:bg-gray-50">
+              <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{e.full_name}</td>
+              <td className="px-3 py-2 text-gray-600">
+                <div>{e.office_email || e.personal_email || "-"}</div>
+                <div className="text-gray-400">{e.phone_number || "-"}</div>
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">{e.placement || "-"}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{e.role_level || "-"}</td>
+              <td className="px-3 py-2"><SkillBadges skills={e.skills} /></td>
+              <td className="px-3 py-2">
+                {e.employee_status ? (
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${statusColor[e.employee_status] ?? "bg-gray-100 text-gray-600"}`}>
+                    {statusLabel[e.employee_status] ?? e.employee_status}
+                  </span>
+                ) : "-"}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <Link
+                  href={`/employees/${e.id}`}
+                  className="rounded-md bg-teal-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-teal-700"
+                >
+                  Lihat
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Bubble renderers ──────────────────────────────────────────────────────────
 
 function UserBubble({ text }: { text: string }) {
@@ -213,22 +279,41 @@ function AssistantBubble({ message }: { message: ChatMessage }) {
           </div>
         )}
 
-        {/* Result count */}
+        {/* Candidates section */}
         {res && (
-          <p className="mt-3 text-xs text-gray-400">
-            Ditemukan{" "}
-            <span className="font-semibold text-gray-600">{res.results_count}</span>{" "}
-            kandidat
-            {res.has_more && (
-              <span className="ml-1 text-amber-600 font-medium">
-                · lebih dari 100 hasil, tampilkan yang terbaru — perjelas query untuk mempersempit
+          <div className="mt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-blue-600">Kandidat</span>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
+                {res.results_count}
               </span>
-            )}
-          </p>
+              {res.has_more && (
+                <span className="text-xs text-amber-600 font-medium">
+                  · &gt;100 hasil — perjelas query untuk mempersempit
+                </span>
+              )}
+            </div>
+            <CandidatesTable candidates={res.results} />
+          </div>
         )}
 
-        {/* Table */}
-        {res && <ResultsTable candidates={res.results} />}
+        {/* Employees section */}
+        {res && (
+          <div className="mt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-teal-600">Karyawan</span>
+              <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-bold text-teal-700">
+                {res.employee_results_count}
+              </span>
+              {res.employee_has_more && (
+                <span className="text-xs text-amber-600 font-medium">
+                  · &gt;100 hasil — perjelas query untuk mempersempit
+                </span>
+              )}
+            </div>
+            <EmployeesTable employees={res.employee_results} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -248,12 +333,52 @@ function ErrorBubble({ text }: { text: string }) {
 // ── Placeholder suggestions ───────────────────────────────────────────────────
 
 const SUGGESTIONS = [
-  "Cari kandidat yang bisa PHP dan Python",
-  "Kandidat dari Jakarta dengan skill React.js",
+  "Cari orang yang bisa Python dan PostgreSQL dengan pengalaman lebih dari 2 tahun",
+  "Kandidat atau karyawan dari Jakarta dengan skill React.js",
   "Kandidat perempuan lulusan Teknik Informatika dengan GPA minimal 3.2",
-  "Kandidat yang pernah bekerja sebagai Backend Developer",
+  "Karyawan aktif dengan penempatan Jakarta dan skill project management",
   "Talent pool dengan notice period maksimal 14 hari",
 ];
+
+// ── Usage pill component (kompak, inline di header) ──────────────────────────
+
+function UsageBox({ usage }: { usage: AIUsageStats | null }) {
+  if (!usage) return null;
+
+  const pct = usage.budget_used_pct;
+  const isWarning = pct >= 75 && pct < 90;
+  const isDanger  = pct >= 90;
+
+  const dot   = isDanger ? "bg-red-500" : isWarning ? "bg-amber-400" : "bg-emerald-500";
+  const pill  = isDanger
+    ? "border-red-200 bg-red-50 text-red-700"
+    : isWarning
+    ? "border-amber-200 bg-amber-50 text-amber-700"
+    : "border-gray-200 bg-white text-gray-600";
+
+  const barFill = isDanger ? "bg-red-500" : isWarning ? "bg-amber-400" : "bg-emerald-400";
+
+  const tooltip = `Bulan ini: $${usage.month_cost_usd.toFixed(4)} · All-time: $${usage.total_cost_usd.toFixed(4)} dari $${usage.budget_usd.toFixed(0)}`;
+
+  return (
+    <div
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${pill}`}
+      title={tooltip}
+    >
+      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dot}`} />
+      <span>OpenAI</span>
+      {/* mini progress bar */}
+      <div className="h-1 w-16 rounded-full bg-gray-200 overflow-hidden">
+        <div className={`h-1 rounded-full ${barFill}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+      </div>
+      <span className="tabular-nums">
+        ${usage.total_cost_usd.toFixed(2)}
+        <span className="opacity-60"> / ${usage.budget_usd.toFixed(0)}</span>
+      </span>
+      {isDanger && <span title="Kredit hampir habis!">⚠️</span>}
+    </div>
+  );
+}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -264,6 +389,7 @@ export default function SearchPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [usage, setUsage] = useState<AIUsageStats | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const msgIdRef = useRef(
@@ -275,6 +401,12 @@ export default function SearchPage() {
   useEffect(() => {
     saveHistory(messages);
   }, [messages]);
+
+  // Ambil usage stats saat halaman load + setelah setiap search selesai
+  useEffect(() => {
+    if (!isManagerOrAdmin) return;
+    getAIUsage().then(setUsage).catch(() => {/* silent — non-critical */});
+  }, [isManagerOrAdmin]);
 
   // ── Guard: tidak ada akses untuk non-manager/non-admin ─────────────────────
   if (!isManagerOrAdmin) {
@@ -321,9 +453,11 @@ export default function SearchPage() {
       const res = await naturalLanguageSearch(query);
       addMessage({
         role: "assistant",
-        text: res.description || `Menampilkan ${res.results_count} kandidat yang cocok.`,
+        text: res.description || `Ditemukan ${res.results_count} kandidat dan ${res.employee_results_count} karyawan yang cocok.`,
         response: res,
       });
+      // Refresh usage stats setelah search berhasil
+      getAIUsage().then(setUsage).catch(() => {});
     } catch (err: unknown) {
       let detail = "Terjadi kesalahan. Silakan coba lagi.";
       if (
@@ -364,30 +498,30 @@ export default function SearchPage() {
     <div className="flex h-[calc(100vh-5rem)] flex-col">
       {/* Header */}
       <div className="flex-none border-b border-gray-200 bg-white px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-gray-900">AI Talent Search</h1>
             <p className="text-sm text-gray-500">
-              Cari kandidat menggunakan bahasa alami — hanya untuk Manager
+              Cari kandidat menggunakan bahasa alami — Manager &amp; Admin
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* #10: Clear chat button */}
+          <div className="flex items-center gap-2">
+            {/* Usage pill */}
+            <UsageBox usage={usage} />
+
+            {/* Hapus chat — hanya muncul saat ada riwayat */}
             {messages.length > 0 && (
               <button
                 onClick={handleClearChat}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
+                title="Hapus semua percakapan di halaman ini"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-gray-400">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
                   <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
                 </svg>
-                Hapus riwayat
+                Hapus chat
               </button>
             )}
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              OpenAI GPT
-            </span>
           </div>
         </div>
       </div>

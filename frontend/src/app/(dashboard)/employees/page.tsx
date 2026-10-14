@@ -107,7 +107,7 @@ export default function EmployeesPage() {
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Kontrak Berjalan</th>
                 <th className="px-4 py-3">Umur</th>
-                <th className="px-4 py-3 text-right">Aksi</th>
+                <th className="px-4 py-3">Email</th>
               </tr>
             </thead>
             <tbody>
@@ -134,7 +134,12 @@ export default function EmployeesPage() {
                     <tr key={emp.id} className="border-t border-gray-200 hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <p className="font-semibold text-gray-900">{emp.full_name}</p>
+                          <Link
+                            href={`/employees/${emp.id}`}
+                            className="font-semibold text-gray-900 transition-colors hover:text-blue-600 hover:underline"
+                          >
+                            {emp.full_name}
+                          </Link>
                           {emp.is_blacklisted && (
                             <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 border border-red-200">
                               Blacklist
@@ -180,13 +185,17 @@ export default function EmployeesPage() {
                       <td className="px-4 py-3">
                         {emp.age != null ? <span className="text-gray-900">{emp.age} thn</span> : <span className="text-gray-400">-</span>}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/employees/${emp.id}`}
-                          className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
-                        >
-                          Lihat detail
-                        </Link>
+                      <td className="px-4 py-3">
+                        {emp.office_email || emp.personal_email ? (
+                          <div className="space-y-0.5">
+                            <p className="text-gray-900">{emp.office_email || emp.personal_email}</p>
+                            {emp.office_email && emp.personal_email && emp.office_email !== emp.personal_email && (
+                              <p className="text-xs text-gray-500">{emp.personal_email}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                     </tr>
                   );

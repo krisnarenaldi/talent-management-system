@@ -402,7 +402,27 @@ export interface NLSearchFilters {
   min_gpa?: number;
   experience_job_title?: string;
   experience_company?: string;
+  experience_years?: number;
+  employee_status?: string;
+  placement?: string;
   keyword?: string;
+}
+
+export interface EmployeeSearchResult {
+  id: string;
+  candidate_id: string;
+  full_name: string;
+  gender?: string | null;
+  personal_email?: string | null;
+  office_email?: string | null;
+  phone_number?: string | null;
+  placement?: string | null;
+  role_level?: string | null;
+  employee_status?: string | null;
+  notes?: string | null;
+  skills?: string[] | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface NLSearchResponse {
@@ -412,6 +432,22 @@ export interface NLSearchResponse {
   results: Candidate[];
   results_count: number;
   has_more: boolean;
+  employee_results: EmployeeSearchResult[];
+  employee_results_count: number;
+  employee_has_more: boolean;
+}
+
+export interface AIUsageStats {
+  month_prompt_tokens: number;
+  month_completion_tokens: number;
+  month_total_tokens: number;
+  month_cost_usd: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_total_tokens: number;
+  total_cost_usd: number;
+  budget_usd: number;
+  budget_used_pct: number;
 }
 
 // --- AI Screening ---

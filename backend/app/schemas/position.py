@@ -12,7 +12,7 @@ class PositionCreate(BaseModel):
     requirement: str | None = None
     job_description: str | None = None
     employment_type: str | None = None
-    contract_duration_months: int | None = None
+    contract_duration_months: int = 0
     is_active: bool = True
     ai_scoring_config: dict[str, Any] | None = None
 
@@ -22,7 +22,7 @@ class PositionUpdate(BaseModel):
     requirement: str | None = None
     job_description: str | None = None
     employment_type: str | None = None
-    contract_duration_months: int | None = None
+    contract_duration_months: int | None = 0
     is_active: bool | None = None
     ai_scoring_config: dict[str, Any] | None = None
 

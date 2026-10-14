@@ -72,6 +72,23 @@ async def serve_uploaded_file(path: str):
 
 # ── List ─────────────────────────────────────────────────────────────────────
 
+@router.get("/cities", response_model=list[str])
+def list_candidate_cities(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Ambil daftar kota unik dari kolom domicile kandidat."""
+    from sqlalchemy import distinct
+
+    rows = (
+        db.query(distinct(Candidate.domicile))
+        .filter(Candidate.domicile.isnot(None), Candidate.domicile != "")
+        .all()
+    )
+    cities = sorted({r[0].strip() for r in rows if r[0]})
+    return cities
+
+
 @router.get("", response_model=list[CandidateResponse])
 def list_candidates(
     skip: int = Query(0, ge=0),
@@ -82,6 +99,10 @@ def list_candidates(
     city: str | None = Query(None),
     experience_level: str | None = Query(None),
     education: str | None = Query(None),
+    min_current_salary: Decimal | None = Query(None),
+    max_current_salary: Decimal | None = Query(None),
+    min_expected_salary: Decimal | None = Query(None),
+    max_expected_salary: Decimal | None = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -122,12 +143,15 @@ def list_candidates(
         query = query.filter(Candidate.completeness_status == completeness_status)
         
     if city:
+        city_lower = city.lower()
         jabotabek = ["jakarta", "bogor", "depok", "tangerang", "bekasi"]
         conditions = [Candidate.domicile.ilike(f"%{c}%") for c in jabotabek]
-        if city.lower() == "jabotabek":
+        if city_lower == "jabotabek":
             query = query.filter(or_(*conditions))
-        elif city.lower() == "non_jabotabek":
+        elif city_lower == "non_jabotabek":
             query = query.filter(~or_(*conditions))
+        else:
+            query = query.filter(Candidate.domicile.ilike(f"%{city}%"))
             
     if experience_level:
         exp_stmt = select(
@@ -155,6 +179,15 @@ def list_candidates(
                 )
             )
         )
+
+    if min_current_salary is not None:
+        query = query.filter(Candidate.current_salary >= min_current_salary)
+    if max_current_salary is not None:
+        query = query.filter(Candidate.current_salary <= max_current_salary)
+    if min_expected_salary is not None:
+        query = query.filter(Candidate.expected_salary >= min_expected_salary)
+    if max_expected_salary is not None:
+        query = query.filter(Candidate.expected_salary <= max_expected_salary)
 
     # Exclude candidates who are already active employees
     query = query.filter(

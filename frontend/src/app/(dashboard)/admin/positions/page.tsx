@@ -25,7 +25,8 @@ const positionCreateSchema = z.object({
   contract_duration_months: z
     .number()
     .min(1, "Durasi minimal 1 bulan")
-    .optional(),
+    .optional()
+    .default(0),
   is_active: z.boolean().default(true),
 });
 
@@ -38,7 +39,8 @@ const positionUpdateSchema = z
     contract_duration_months: z
       .number()
       .min(1, "Durasi minimal 1 bulan")
-      .optional(),
+      .optional()
+      .default(0),
     is_active: z.boolean().optional(),
     ai_threshold_auto: z.number().min(0).max(100).optional(),
     ai_threshold_manual: z.number().min(0).max(100).optional(),
@@ -498,7 +500,7 @@ function PositionFormModal({
           requirement: "",
           job_description: "",
           employment_type: "",
-          contract_duration_months: undefined,
+          contract_duration_months: 0,
           is_active: true,
         }
       : {
