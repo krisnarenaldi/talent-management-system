@@ -22,7 +22,7 @@ def list_positions_by_client(
             func.count(Position.id).label("total_positions"),
             func.max(Position.created_at).label("last_created_at"),
         )
-        .outerjoin(Position, Position.client_id == Client.id)
+        .join(Position, Position.client_id == Client.id)
         .group_by(Client.id, Client.name)
         .order_by(Client.name)
         .all()

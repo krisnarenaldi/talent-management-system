@@ -26,6 +26,18 @@ def list_clients(
     return query.all()
 
 
+@router.get("/{client_id}", response_model=ClientResponse)
+def get_client(
+    client_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client tidak ditemukan")
+    return client
+
+
 @router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
 def create_client(
     payload: ClientCreate,

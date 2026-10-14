@@ -12,7 +12,7 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import Link from "next/link";
 import api from "@/lib/api";
-import type { AgreementType, Position, PositionByClient } from "@/types";
+import type { AgreementType, Client, Position, PositionByClient } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
@@ -139,9 +139,18 @@ export default function AdminClientPositionsPage() {
   // positions-by-client cache so the heading stays correct even when the
   // status filter produces an empty result set.
   const cachedByClient = queryClient.getQueryData<PositionByClient[]>(["positions-by-client"]);
+
+  // Third fallback: dedicated GET /api/v1/clients/{clientId} for direct URL navigation
+  const { data: clientDetail } = useQuery<Client>({
+    queryKey: ["client", clientId],
+    queryFn: () => api.get(`/api/v1/clients/${clientId}`).then((r) => r.data),
+    enabled: authorized && !!clientId,
+  });
+
   const clientName =
     positionsData?.data[0]?.client_name ??
     cachedByClient?.find((r) => r.client_id === clientId)?.client_name ??
+    clientDetail?.name ??
     "...";
 
   const positions = positionsData?.data ?? [];
@@ -400,6 +409,7 @@ export default function AdminClientPositionsPage() {
             position={editingPosition}
             agreementTypes={agreementTypes}
             defaultClientId={clientId}
+            defaultClientName={clientName}
             onClose={() => {
               setShowAddModal(false);
               setEditingPosition(null);
@@ -419,6 +429,7 @@ function PositionFormModal({
   position,
   agreementTypes,
   defaultClientId,
+  defaultClientName,
   onClose,
   onCreate,
   onUpdate,
@@ -428,6 +439,7 @@ function PositionFormModal({
   position: Position | null;
   agreementTypes: AgreementType[];
   defaultClientId?: string;
+  defaultClientName?: string;
   onClose: () => void;
   onCreate: (payload: PositionCreateForm) => Promise<unknown>;
   onUpdate: ({ id, payload }: { id: string; payload: PositionUpdateForm }) => Promise<unknown>;
@@ -528,7 +540,7 @@ function PositionFormModal({
           disabled
           className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all disabled:opacity-50"
         >
-          <option value={defaultClientId ?? position?.client_id ?? ""}>{position?.client_name ?? defaultClientId}</option>
+          <option value={defaultClientId ?? position?.client_id ?? ""}>{position?.client_name ?? defaultClientName ?? defaultClientId}</option>
         </select>
         {errors.client_id && (
           <p className="text-error text-xs mt-1">{errors.client_id.message}</p>
