@@ -43,3 +43,13 @@ class PositionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PositionsByClientResponse(BaseModel):
+    client_id: AutoStrUUID
+    client_name: str
+    total_positions: int
+    last_created_at: datetime | None
+
+    class Config:
+        from_attributes = True

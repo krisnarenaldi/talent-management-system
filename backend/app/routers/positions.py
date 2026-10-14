@@ -1,12 +1,41 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_db, require_role
 from app.models.client import Client
 from app.models.position import Position
-from app.schemas.position import PositionCreate, PositionResponse, PositionUpdate
+from app.schemas.position import PositionCreate, PositionResponse, PositionUpdate, PositionsByClientResponse
 
 router = APIRouter()
+
+
+@router.get("/by-client", response_model=list[PositionsByClientResponse])
+def list_positions_by_client(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    rows = (
+        db.query(
+            Client.id.label("client_id"),
+            Client.name.label("client_name"),
+            func.count(Position.id).label("total_positions"),
+            func.max(Position.created_at).label("last_created_at"),
+        )
+        .join(Position, Position.client_id == Client.id)
+        .group_by(Client.id, Client.name)
+        .order_by(Client.name)
+        .all()
+    )
+    return [
+        {
+            "client_id": row.client_id,
+            "client_name": row.client_name,
+            "total_positions": row.total_positions,
+            "last_created_at": row.last_created_at,
+        }
+        for row in rows
+    ]
 
 
 @router.get("", response_model=list[PositionResponse])

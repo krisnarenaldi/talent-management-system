@@ -2,183 +2,36 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useModalEscape } from "@/hooks/useModalEscape";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import Link from "next/link";
 import api from "@/lib/api";
-import type { AgreementType, Position, Client } from "@/types";
+import type { PositionByClient } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
-import { useToastStore } from "@/stores/toast.store";
-import { getErrorMessage } from "@/lib/errors";
 
-const positionCreateSchema = z.object({
-  client_id: z.string().min(1, "Klien wajib dipilih"),
-  title: z.string().min(1, "Judul posisi wajib diisi"),
-  requirement: z.string().optional(),
-  job_description: z.string().optional(),
-  employment_type: z.string().optional(),
-  contract_duration_months: z
-    .preprocess(
-      (val) => (val === "" || val === null || (typeof val === "number" && Number.isNaN(val)) ? undefined : val),
-      z.number().optional().default(0),
-    ),
-  is_active: z.boolean().default(true),
-});
-
-const positionUpdateSchema = z
-  .object({
-    title: z.string().min(1, "Judul posisi wajib diisi").optional(),
-    requirement: z.string().optional(),
-    job_description: z.string().optional(),
-    employment_type: z.string().optional(),
-    contract_duration_months: z
-      .preprocess(
-        (val) => (val === "" || val === null || (typeof val === "number" && Number.isNaN(val)) ? undefined : val),
-        z.number().optional().default(0),
-      ),
-    is_active: z.boolean().optional(),
-    ai_threshold_auto: z.number().min(0).max(100).optional(),
-    ai_threshold_manual: z.number().min(0).max(100).optional(),
-    ai_weight_education: z.number().min(0).max(100).optional(),
-    ai_weight_experience: z.number().min(0).max(100).optional(),
-    ai_weight_skill: z.number().min(0).max(100).optional(),
-    ai_weight_domain: z.number().min(0).max(100).optional(),
-    ai_required_skills: z.string().optional(),
-    ai_min_experience_years: z.number().min(0).optional(),
-  })
-  .partial()
-  .refine(
-    (data) => {
-      const fields = [data.ai_weight_education, data.ai_weight_experience, data.ai_weight_skill, data.ai_weight_domain];
-      if (fields.every((v) => v !== undefined)) {
-        return (fields as number[]).reduce((a, b) => a + b, 0) === 100;
-      }
-      return true;
-    },
-    {
-      message: "Total bobot penilaian harus tepat 100",
-      path: ["ai_weight_education"],
-    }
-  );
-
-type PositionCreateForm = z.infer<typeof positionCreateSchema>;
-type PositionUpdateForm = z.infer<typeof positionUpdateSchema>;
-
-interface PositionsResponse {
-  data: Position[];
-  total: number;
-}
-
-async function fetchPositions(params?: Record<string, unknown>): Promise<PositionsResponse> {
-  const response = await api.get("/api/v1/positions", { params });
-  const data = response.data;
-  if (Array.isArray(data)) {
-    return { data, total: data.length };
-  }
-  return data;
-}
-
-async function fetchClients(): Promise<Client[]> {
-  const response = await api.get("/api/v1/clients?is_active=true");
-  return response.data;
-}
-
-async function fetchAgreementTypes(): Promise<AgreementType[]> {
-  const response = await api.get("/api/v1/admin/agreement-types", {
-    params: { is_active: true },
-  });
+async function fetchPositionsByClient(): Promise<PositionByClient[]> {
+  const response = await api.get("/api/v1/positions/by-client");
   return response.data;
 }
 
 export default function AdminPositionsPage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const isRole = useAuthStore((state) => state.isRole);
   const { user } = useAuthStore();
-  const showToast = useToastStore((state) => state.showToast);
-
-  // — semua hooks wajib di atas early return —
-  const [searchTerm, setSearchTerm] = useState("");
-  const [clientFilter, setClientFilter] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingPosition, setEditingPosition] = useState<Position | null>(null);
 
   const authorized = !!user && isRole("admin", "hr", "manager");
 
   const {
-    data: positionsData,
+    data: rows = [],
     isLoading,
     isError,
     error,
-  } = useQuery<PositionsResponse>({
-    queryKey: ["positions", { search: searchTerm, client: clientFilter, status: statusFilter }],
-    queryFn: () =>
-      fetchPositions({
-        search: searchTerm || undefined,
-        client_id: clientFilter || undefined,
-        is_active:
-          statusFilter === "active"
-            ? true
-            : statusFilter === "inactive"
-              ? false
-              : undefined,
-      }),
+  } = useQuery<PositionByClient[]>({
+    queryKey: ["positions-by-client"],
+    queryFn: fetchPositionsByClient,
     enabled: authorized,
   });
-
-  const { data: clients = [] } = useQuery({
-    queryKey: ["clients"],
-    queryFn: fetchClients,
-    enabled: authorized,
-  });
-
-  const { data: agreementTypes = [] } = useQuery({
-    queryKey: ["agreement-types", "active"],
-    queryFn: fetchAgreementTypes,
-    enabled: authorized,
-  });
-
-  const positions = positionsData?.data ?? [];
-  const totalPositions = positionsData?.total ?? 0;
-
-  const createMutation = useMutation({
-    mutationFn: (payload: PositionCreateForm) =>
-      api.post("/api/v1/positions", payload).then((res) => res.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["positions"] });
-      setShowAddModal(false);
-      showToast("success", "Posisi berhasil ditambahkan.");
-    },
-    onError: (err: unknown) => {
-      showToast("error", getErrorMessage(err, "Gagal menambahkan posisi."));
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: PositionUpdateForm }) =>
-      api.put(`/api/v1/positions/${id}`, payload).then((res) => res.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["positions"] });
-      setEditingPosition(null);
-      showToast("success", "Posisi berhasil diperbarui.");
-    },
-    onError: (err: unknown) => {
-      showToast("error", getErrorMessage(err, "Gagal memperbarui posisi."));
-    },
-  });
-
-  const handleToggleActive = (position: Position) => {
-    updateMutation.mutate({
-      id: position.id,
-      payload: { is_active: !position.is_active },
-    });
-  };
 
   useEffect(() => {
     if (user && !isRole("admin", "hr", "manager")) {
@@ -192,9 +45,7 @@ export default function AdminPositionsPage() {
         <div className="max-w-2xl mx-auto">
           <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-on-error-container">
-                lock
-              </span>
+              <span className="material-symbols-outlined text-on-error-container">lock</span>
               <p className="text-body-sm text-on-error-container">
                 Akses ditolak. Hanya Admin yang dapat mengelola posisi.
               </p>
@@ -213,9 +64,7 @@ export default function AdminPositionsPage() {
           <div className="max-w-2xl mx-auto">
             <div className="bg-error-container border border-error/20 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-on-error-container">
-                  lock
-                </span>
+                <span className="material-symbols-outlined text-on-error-container">lock</span>
                 <p className="text-body-sm text-on-error-container">
                   Akses ditolak. Hanya Admin yang dapat mengelola posisi.
                 </p>
@@ -232,69 +81,11 @@ export default function AdminPositionsPage() {
       <div className="max-w-[1400px] mx-auto space-y-stack-md">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-headline-lg font-bold text-on-surface">
-            Kelola Posisi
-          </h1>
-          {isRole("admin", "manager") && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-lg">add</span>
-              Tambah Posisi
-            </button>
-          )}
-        </div>
-
-        {/* Search & Filter */}
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
-            <label className="block text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">
-              Cari
-            </label>
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
-                search
-              </span>
-              <input
-                type="text"
-                placeholder="Judul posisi..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-              />
-            </div>
-          </div>
           <div>
-            <label className="block text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">
-              Klien
-            </label>
-            <select
-              value={clientFilter}
-              onChange={(e) => setClientFilter(e.target.value)}
-              className="px-3 py-1.5 bg-surface border border-outline-variant rounded-md text-body-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none min-w-[140px]"
-            >
-              <option value="">Semua Klien</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 bg-surface border border-outline-variant rounded-md text-body-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-            >
-              <option value="">Semua</option>
-              <option value="active">Aktif</option>
-              <option value="inactive">Nonaktif</option>
-            </select>
+            <h1 className="text-headline-lg font-bold text-on-surface">Kelola Posisi</h1>
+            <p className="text-body-sm text-on-surface-variant mt-0.5">
+              Daftar klien dan jumlah posisi
+            </p>
           </div>
         </div>
 
@@ -302,131 +93,52 @@ export default function AdminPositionsPage() {
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden">
           {isLoading ? (
             <div className="p-8 text-center text-on-surface-variant">
-              <span className="material-symbols-outlined animate-spin text-2xl mb-2">
+              <span className="material-symbols-outlined animate-spin text-2xl mb-2 block">
                 progress_activity
               </span>
-              <p>Memuat posisi...</p>
+              <p>Memuat data...</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-surface-container-low text-label-md text-on-surface-variant">
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Judul Posisi
-                    </th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Klien
-                    </th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Tipe Pekerjaan
-                    </th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Durasi (bulan)
-                    </th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Dibuat
-                    </th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Diubah
-                    </th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider text-right">
-                      Aksi
-                    </th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Klien</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Jumlah Posisi</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Terakhir Dibuat</th>
                   </tr>
                 </thead>
                 <tbody className="text-body-sm divide-y divide-outline-variant">
-                  {positions.map((position) => (
+                  {rows.map((row) => (
                     <tr
-                      key={position.id}
+                      key={row.client_id}
                       className="hover:bg-surface-container-low/50 transition-colors"
                     >
-                      <td className="py-3 px-4 font-medium text-on-surface">
-                        {position.title}
-                      </td>
-                      <td className="py-3 px-4 text-on-surface-variant">
-                        {position.client_name}
-                      </td>
-                      <td className="py-3 px-4 text-on-surface-variant">
-                        {position.employment_type ?? "-"}
-                      </td>
-                      <td className="py-3 px-4 text-on-surface-variant">
-                        {position.contract_duration_months ?? "-"}
-                      </td>
                       <td className="py-3 px-4">
-                        {position.is_active ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#E6F4EA] text-[#137333]">
-                            Aktif
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#FCE8E6] text-[#C5221F]">
-                            Nonaktif
-                          </span>
-                        )}
+                        <Link
+                          href={`/admin/positions/${row.client_id}`}
+                          className="text-primary font-semibold hover:underline"
+                        >
+                          {row.client_name}
+                        </Link>
                       </td>
                       <td className="py-3 px-4 text-on-surface-variant">
-                        {format(new Date(position.created_at), "dd MMM yyyy", {
-                          locale: idLocale,
-                        })}
+                        {row.total_positions} Posisi
                       </td>
                       <td className="py-3 px-4 text-on-surface-variant">
-                        {format(new Date(position.updated_at), "dd MMM yyyy", {
-                          locale: idLocale,
-                        })}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-1">
-                          {isRole("admin", "manager") && (
-                            <>
-                              <button
-                                onClick={() => setEditingPosition(position)}
-                                className="p-1 text-on-surface-variant hover:text-primary transition-colors"
-                                title="Edit"
-                              >
-                                <span className="material-symbols-outlined text-lg">
-                                  edit
-                                </span>
-                              </button>
-                              {position.is_active ? (
-                                <button
-                                  onClick={() => handleToggleActive(position)}
-                                  className="p-1 text-on-surface-variant hover:text-warning transition-colors"
-                                  title="Nonaktifkan"
-                                >
-                                  <span className="material-symbols-outlined text-lg">
-                                    toggle_off
-                                  </span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleToggleActive(position)}
-                                  className="p-1 text-on-surface-variant hover:text-primary transition-colors"
-                                  title="Aktifkan kembali"
-                                >
-                                  <span className="material-symbols-outlined text-lg">
-                                    toggle_on
-                                  </span>
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
+                        {row.last_created_at
+                          ? format(new Date(row.last_created_at), "dd MMM yyyy", { locale: idLocale })
+                          : "-"}
                       </td>
                     </tr>
                   ))}
-                  {positions.length === 0 && !isLoading && (
+                  {rows.length === 0 && !isLoading && (
                     <tr>
-                      <td
-                        colSpan={8}
-                        className="py-8 text-center text-on-surface-variant"
-                      >
-                        <span className="material-symbols-outlined text-3xl mb-2">
+                      <td colSpan={3} className="py-8 text-center text-on-surface-variant">
+                        <span className="material-symbols-outlined text-3xl mb-2 block">
                           search_off
                         </span>
-                        <p>Tidak ada posisi ditemukan.</p>
+                        <p>Tidak ada data klien ditemukan.</p>
                       </td>
                     </tr>
                   )}
@@ -435,477 +147,8 @@ export default function AdminPositionsPage() {
             </div>
           )}
           <div className="p-4 border-t border-outline-variant text-body-sm text-on-surface-variant flex justify-between items-center bg-surface-bright">
-            <span>Total: {totalPositions} posisi</span>
+            <span>Total: {rows.length} klien</span>
           </div>
-        </div>
-
-        {/* Add/Edit Modal */}
-        {(showAddModal || editingPosition) && (
-          <PositionFormModal
-            key={editingPosition?.id ?? "new"}
-            position={editingPosition}
-            clients={clients}
-            agreementTypes={agreementTypes}
-            onClose={() => {
-              setShowAddModal(false);
-              setEditingPosition(null);
-            }}
-            onCreate={createMutation.mutateAsync}
-            onUpdate={updateMutation.mutateAsync}
-            isCreatingPending={createMutation.isPending}
-            isUpdatingPending={updateMutation.isPending}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PositionFormModal({
-  position,
-  clients,
-  agreementTypes,
-  onClose,
-  onCreate,
-  onUpdate,
-  isCreatingPending,
-  isUpdatingPending,
-}: {
-  position: Position | null;
-  clients: Client[];
-  agreementTypes: AgreementType[];
-  onClose: () => void;
-  onCreate: (payload: PositionCreateForm) => Promise<unknown>;
-  onUpdate: ({ id, payload }: { id: string; payload: PositionUpdateForm }) => Promise<unknown>;
-  isCreatingPending: boolean;
-  isUpdatingPending: boolean;
-}) {
-  const isCreating = !position;
-  const schema = isCreating ? positionCreateSchema : positionUpdateSchema;
-  const isSubmitting = isCreating ? isCreatingPending : isUpdatingPending;
-
-  useModalEscape(onClose, !isSubmitting);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    watch,
-  } = useForm({
-    resolver: zodResolver(schema),
-    defaultValues: isCreating
-      ? {
-          client_id: "",
-          title: "",
-          requirement: "",
-          job_description: "",
-          employment_type: "",
-          contract_duration_months: 0,
-          is_active: true,
-        }
-      : {
-          client_id: position?.client_id ?? "",
-          title: position?.title ?? "",
-          requirement: position?.requirement ?? "",
-          job_description: position?.job_description ?? "",
-          employment_type: position?.employment_type ?? "",
-          contract_duration_months: position?.contract_duration_months ?? undefined,
-          is_active: position?.is_active ?? true,
-          ai_threshold_auto: position?.ai_scoring_config?.threshold_auto_recommend ?? 80,
-          ai_threshold_manual: position?.ai_scoring_config?.threshold_manual_review ?? 60,
-          ai_weight_education: position?.ai_scoring_config?.weights?.education ?? 25,
-          ai_weight_experience: position?.ai_scoring_config?.weights?.experience_years ?? 25,
-          ai_weight_skill: position?.ai_scoring_config?.weights?.skill_match ?? 25,
-          ai_weight_domain: position?.ai_scoring_config?.weights?.domain_relevance ?? 25,
-          ai_required_skills: position?.ai_scoring_config?.required_skills?.join(", ") ?? "",
-          ai_min_experience_years: position?.ai_scoring_config?.min_experience_years ?? 0,
-        },
-  });
-
-  void register;
-  void errors;
-  void clients;
-
-  const onSubmit = async (data: Record<string, unknown>) => {
-    try {
-      if (isCreating) {
-        await onCreate(data as unknown as PositionCreateForm);
-      } else if (position) {
-        const payload: Record<string, unknown> = { ...data };
-        // Build ai_scoring_config from flat form fields
-        const configFields = [
-          "ai_threshold_auto", "ai_threshold_manual",
-          "ai_weight_education", "ai_weight_experience",
-          "ai_weight_skill", "ai_weight_domain",
-          "ai_required_skills", "ai_min_experience_years",
-        ];
-        const hasConfig = configFields.some((f) => data[f] !== undefined && data[f] !== "");
-        if (hasConfig) {
-          const weightsStr = data.ai_required_skills as string;
-          payload.ai_scoring_config = {
-            threshold_auto_recommend: data.ai_threshold_auto as number | undefined,
-            threshold_manual_review: data.ai_threshold_manual as number | undefined,
-            weights: {
-              education: data.ai_weight_education as number | undefined,
-              experience_years: data.ai_weight_experience as number | undefined,
-              skill_match: data.ai_weight_skill as number | undefined,
-              domain_relevance: data.ai_weight_domain as number | undefined,
-            },
-            required_skills: weightsStr
-              ? weightsStr.split(",").map((s: string) => s.trim()).filter(Boolean)
-              : [],
-            min_experience_years: data.ai_min_experience_years as number | undefined,
-          };
-        }
-        await onUpdate({ id: position.id, payload: payload as PositionUpdateForm });
-      }
-    } catch {
-      // Errors handled by mutation's onError callback
-    }
-  };
-
-  // ── Shared form fields ──────────────────────────────────────────────────
-  const formFields = (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-label-md text-on-surface mb-1.5">
-          Klien
-        </label>
-        <select
-          {...register("client_id")}
-          disabled={!isCreating}
-          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all disabled:opacity-50"
-        >
-          {isCreating && (
-            <option value="">Pilih Klien</option>
-          )}
-          {clients.map((client) => (
-            <option key={client.id} value={client.id}>
-              {client.name}
-            </option>
-          ))}
-        </select>
-        {errors.client_id && (
-          <p className="text-error text-xs mt-1">{errors.client_id.message}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="block text-label-md text-on-surface mb-1.5">
-          Judul Posisi
-        </label>
-        <input
-          type="text"
-          placeholder="Senior Backend Engineer"
-          {...register("title")}
-          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-        />
-        {errors.title && (
-          <p className="text-error text-xs mt-1">{errors.title.message}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="block text-label-md text-on-surface mb-1.5">
-          Tipe Pekerjaan
-        </label>
-        <select
-          {...register("employment_type")}
-          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-        >
-          <option value="">Pilih Tipe Pekerjaan</option>
-          {agreementTypes.map((agreementType) => (
-            <option key={agreementType.id} value={agreementType.label}>
-              {agreementType.label}
-            </option>
-          ))}
-        </select>
-        {errors.employment_type && (
-          <p className="text-error text-xs mt-1">{errors.employment_type.message}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="block text-label-md text-on-surface mb-1.5">
-          Durasi Kontrak (bulan)
-        </label>
-        <input
-          type="number"
-          placeholder="12"
-          {...register("contract_duration_months", { valueAsNumber: true })}
-          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-        />
-        {errors.contract_duration_months && (
-          <p className="text-error text-xs mt-1">{errors.contract_duration_months.message}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="block text-label-md text-on-surface mb-1.5">
-          Persyaratan
-        </label>
-        <textarea
-          placeholder="Minimal S1 Teknik, pengalaman 3+ tahun dengan Node.js..."
-          {...register("requirement")}
-          rows={3}
-          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-none"
-        />
-        {errors.requirement && (
-          <p className="text-error text-xs mt-1">{errors.requirement.message}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="block text-label-md text-on-surface mb-1.5">
-          Deskripsi Pekerjaan
-          <span className="text-on-surface-variant font-normal ml-1">(opsional)</span>
-        </label>
-        <textarea
-          placeholder={"• Bertanggung jawab atas pengembangan fitur baru\n• Berkolaborasi dengan tim lintas fungsi\n• Melakukan code review dan menjaga kualitas kode"}
-          {...register("job_description")}
-          rows={5}
-          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-none"
-        />
-        {errors.job_description && (
-          <p className="text-error text-xs mt-1">{errors.job_description.message}</p>
-        )}
-      </div>
-
-      {!isCreating && (
-        <>
-          {/* ── AI Scoring Config ─────────────────────────────────── */}
-          <div className="border-t border-outline-variant pt-4 mt-2">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-symbols-outlined text-primary text-lg">tune</span>
-              <h3 className="text-label-lg font-semibold text-on-surface">Konfigurasi AI Screening</h3>
-            </div>
-
-            {/* Thresholds */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-label-sm text-on-surface mb-1">
-                  Threshold Otomatis (<span className="text-on-surface-variant">≥ skor ini = langsung terima</span>)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  {...register("ai_threshold_auto", { valueAsNumber: true })}
-                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-label-sm text-on-surface mb-1">
-                  Threshold Review (<span className="text-on-surface-variant">skor di antara = perlu review</span>)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  {...register("ai_threshold_manual", { valueAsNumber: true })}
-                  className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Weights */}
-            <div className="mb-4">
-              {(() => {
-                const total =
-                  (watch("ai_weight_education") ?? 0) +
-                  (watch("ai_weight_experience") ?? 0) +
-                  (watch("ai_weight_skill") ?? 0) +
-                  (watch("ai_weight_domain") ?? 0);
-                const isExact = total === 100;
-                return (
-                  <>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-label-sm text-on-surface">Bobot Penilaian</p>
-                      <span className={`text-label-sm font-mono font-semibold ${isExact ? "text-[#137333]" : "text-error"}`}>
-                        Total: {total} / 100
-                      </span>
-                    </div>
-                    <div className="space-y-3">
-                      {[
-                        { key: "ai_weight_education", label: "Pendidikan" },
-                        { key: "ai_weight_experience", label: "Pengalaman (tahun)" },
-                        { key: "ai_weight_skill", label: "Skill Match" },
-                        { key: "ai_weight_domain", label: "Relevansi Domain" },
-                      ].map(({ key, label }) => (
-                        <div key={key} className="flex items-center gap-3">
-                          <span className="text-body-sm text-on-surface w-40 shrink-0">{label}</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            {...register(key as any, { valueAsNumber: true })}
-                            className="flex-1 accent-primary cursor-pointer"
-                          />
-                          <span className="text-body-sm font-mono text-on-surface w-8 text-right">
-                            {watch(key as any) ?? 0}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    {errors.ai_weight_education && (
-                      <p className="text-error text-xs mt-2">{errors.ai_weight_education.message}</p>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* Required Skills */}
-            <div className="mb-4">
-              <label className="block text-label-sm text-on-surface mb-1">
-                Skill yang Dibutuhkan
-                <span className="text-on-surface-variant font-normal ml-1">(pisahkan dengan koma)</span>
-              </label>
-              <input
-                type="text"
-                {...register("ai_required_skills")}
-                placeholder="Python, SQL, React, AWS"
-                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-              />
-            </div>
-
-            {/* Min Experience */}
-            <div>
-              <label className="block text-label-sm text-on-surface mb-1">
-                Pengalaman Minimum (tahun)
-              </label>
-              <input
-                type="number"
-                min={0}
-                {...register("ai_min_experience_years", { valueAsNumber: true })}
-                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_active"
-              {...register("is_active")}
-              className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
-            />
-            <label
-              htmlFor="is_active"
-              className="text-body-sm text-on-surface cursor-pointer"
-            >
-              Posisi aktif
-            </label>
-          </div>
-        </>
-      )}
-    </div>
-  );
-
-  const formId = isCreating ? "position-create-form" : "position-edit-form";
-
-  // ── Action buttons (shared) — submit button linked via form= attribute ───
-  const actionButtons = (
-    <div className="flex gap-3">
-      <button
-        type="button"
-        onClick={onClose}
-        disabled={isSubmitting}
-        className="flex-1 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-medium hover:bg-surface-container-highest transition-colors disabled:opacity-50"
-      >
-        Batal
-      </button>
-      <button
-        type="submit"
-        form={formId}
-        disabled={isSubmitting}
-        className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-wait"
-      >
-        {isSubmitting ? (
-          <span className="material-symbols-outlined text-lg animate-spin">
-            progress_activity
-          </span>
-        ) : (
-          <span className="material-symbols-outlined text-lg">
-            {isCreating ? "add" : "save"}
-          </span>
-        )}
-        {isSubmitting
-          ? "Menyimpan..."
-          : isCreating
-            ? "Tambah"
-            : "Simpan"}
-      </button>
-    </div>
-  );
-
-  // ── Create: centered modal (short form, no AI section) ───────────────────
-  if (isCreating) {
-    return (
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-md mx-4 max-h-[90vh] flex flex-col shadow-xl">
-          {/* Header */}
-          <div className="px-6 pt-6 pb-4 shrink-0">
-            <h2 className="text-headline-md font-semibold text-on-surface">
-              Tambah Posisi Baru
-            </h2>
-          </div>
-          {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto px-6 pb-2">
-            <form id={formId} onSubmit={handleSubmit(onSubmit)}>
-              {formFields}
-            </form>
-          </div>
-          {/* Sticky footer */}
-          <div className="px-6 py-4 border-t border-outline-variant shrink-0">
-            {actionButtons}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Edit: right slide-over drawer (long form with AI section) ────────────
-  return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop — click to close */}
-      <div
-        className="flex-1 bg-black/40"
-        onClick={!isSubmitting ? onClose : undefined}
-      />
-      {/* Drawer panel */}
-      <div className="w-full max-w-lg bg-surface-container-lowest h-full flex flex-col shadow-2xl">
-        {/* Sticky header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant shrink-0 bg-surface-container-lowest">
-          <div className="min-w-0">
-            <p className="text-label-sm text-on-surface-variant uppercase tracking-wider mb-0.5">
-              Edit Posisi
-            </p>
-            <h2 className="text-headline-sm font-semibold text-on-surface truncate">
-              {position?.title}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="ml-4 p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors disabled:opacity-50 shrink-0"
-            title="Tutup"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-
-        {/* Scrollable form body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <form id={formId} onSubmit={handleSubmit(onSubmit)}>
-            {formFields}
-          </form>
-        </div>
-
-        {/* Sticky footer */}
-        <div className="px-6 py-4 border-t border-outline-variant shrink-0 bg-surface-container-lowest">
-          {actionButtons}
         </div>
       </div>
     </div>

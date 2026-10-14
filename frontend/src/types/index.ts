@@ -60,6 +60,13 @@ export interface Position {
   updated_at: string;
 }
 
+export interface PositionByClient {
+  client_id: string;
+  client_name: string;
+  total_positions: number;
+  last_created_at: string | null;
+}
+
 // --- Master data ---
 export interface BlacklistStatusType {
   id: string;
