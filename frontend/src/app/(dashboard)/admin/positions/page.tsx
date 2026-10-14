@@ -23,10 +23,10 @@ const positionCreateSchema = z.object({
   job_description: z.string().optional(),
   employment_type: z.string().optional(),
   contract_duration_months: z
-    .number()
-    .min(1, "Durasi minimal 1 bulan")
-    .optional()
-    .default(0),
+    .preprocess(
+      (val) => (val === "" || val === null || (typeof val === "number" && Number.isNaN(val)) ? undefined : val),
+      z.number().optional().default(0),
+    ),
   is_active: z.boolean().default(true),
 });
 
@@ -37,10 +37,10 @@ const positionUpdateSchema = z
     job_description: z.string().optional(),
     employment_type: z.string().optional(),
     contract_duration_months: z
-      .number()
-      .min(1, "Durasi minimal 1 bulan")
-      .optional()
-      .default(0),
+      .preprocess(
+        (val) => (val === "" || val === null || (typeof val === "number" && Number.isNaN(val)) ? undefined : val),
+        z.number().optional().default(0),
+      ),
     is_active: z.boolean().optional(),
     ai_threshold_auto: z.number().min(0).max(100).optional(),
     ai_threshold_manual: z.number().min(0).max(100).optional(),
