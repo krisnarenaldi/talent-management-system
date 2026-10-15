@@ -1,4 +1,4 @@
-import { formatPeriodLabel } from './page';
+import { formatPeriodLabel } from './utils';
 
 describe('formatPeriodLabel', () => {
   it('converts YYYY-MM period into Indonesian month names', () => {

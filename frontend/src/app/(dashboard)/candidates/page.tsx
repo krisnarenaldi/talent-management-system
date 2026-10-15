@@ -62,13 +62,7 @@ export default function CandidatesPage() {
     queryFn: () => settingsApi.listSourceChannels({ is_active: true }),
   });
 
-  const { data: cities = [] } = useQuery({
-    queryKey: ["candidate-cities"],
-    queryFn: async () => {
-      const response = await api.get("/api/v1/candidates/cities");
-      return response.data as string[];
-    },
-  });
+
 
   const { data: candidates = [], isLoading } = useQuery({
     queryKey: ["candidates", { searchTerm, sourceFilter, statusFilter, positionFilter, startDate, endDate, cityFilter, experienceFilter, educationFilter, currentSalaryFilter, expectedSalaryFilter, currentPage, itemsPerPage }],
@@ -139,67 +133,6 @@ export default function CandidatesPage() {
             <ExportButton
               onExport={handleExport}
               className="hidden md:inline-flex"
-              filters={showFilters && (
-                <div className="space-y-3 border-t border-gray-200 pt-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-500">Posisi</label>
-                      <input
-                        value={positionFilter}
-                        onChange={(e) => setPositionFilter(e.target.value)}
-                        placeholder="Judul posisi"
-                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal mulai</label>
-                      <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-500">Tanggal akhir</label>
-                      <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-500">Gaji saat ini</label>
-                      <select
-                        value={currentSalaryFilter}
-                        onChange={(e) => setCurrentSalaryFilter(e.target.value)}
-                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                      >
-                        {SALARY_RANGES.map((r) => (
-                          <option key={r.value} value={r.value}>{r.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-500">Gaji ekspektasi</label>
-                      <select
-                        value={expectedSalaryFilter}
-                        onChange={(e) => setExpectedSalaryFilter(e.target.value)}
-                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                      >
-                        {SALARY_RANGES.map((r) => (
-                          <option key={r.value} value={r.value}>{r.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
             />
           )}
         </div>
@@ -256,13 +189,8 @@ export default function CandidatesPage() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               >
                 <option value="">Semua</option>
-                <option value="jabotabek">Jabotabek</option>
-                <option value="non_jabotabek">Non Jabotabek</option>
-                {cities.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
+                <option value="jabotabek">Jabodetabek</option>
+                <option value="non_jabotabek">Non-Jabodetabek</option>
               </select>
             </div>
 
@@ -362,12 +290,9 @@ export default function CandidatesPage() {
               onChange={(e) => setCityFilter(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             >
-              <option value="">Semua</option>              
-              {cities.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
+              <option value="">Semua</option>
+              <option value="jabotabek">Jabodetabek</option>
+              <option value="non_jabotabek">Non-Jabodetabek</option>
             </select>
           </div>
 

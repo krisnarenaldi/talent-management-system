@@ -30,10 +30,18 @@ export default function ExportButton({
     }
   };
 
+  const handleClick = () => {
+    if (filters) {
+      setIsOpen(!isOpen);
+    } else {
+      handleExport();
+    }
+  };
+
   return (
     <div className="relative inline-block">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleClick}
         disabled={isExporting}
         className={`inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-green-700 hover:shadow-md disabled:opacity-50 ${className}`}
       >
@@ -41,7 +49,7 @@ export default function ExportButton({
         {isExporting ? "Exporting..." : "Export"}
       </button>
 
-      {isOpen && (
+      {isOpen && Boolean(filters) && (
         <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-gray-200 bg-white shadow-lg">
           <div className="p-3">
             {filters}
