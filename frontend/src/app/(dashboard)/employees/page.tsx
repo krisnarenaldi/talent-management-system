@@ -11,8 +11,7 @@ import type { Employee } from "@/types";
 const STATUS_OPTIONS = [
   { value: "", label: "Semua" },
   { value: "aktif", label: "Aktif" },
-  { value: "cuti", label: "Cuti" },
-  { value: "resign", label: "Resign" },
+  { value: "nonaktif", label: "Non Aktif" },
 ];
 
 export default function EmployeesPage() {
@@ -159,12 +158,10 @@ export default function EmployeesPage() {
                           className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
                             emp.employee_status === "aktif"
                               ? "border-emerald-200 bg-emerald-100 text-emerald-800"
-                              : emp.employee_status === "cuti"
-                              ? "border-amber-200 bg-amber-100 text-amber-800"
                               : "border-red-200 bg-red-100 text-red-800"
                           }`}
                         >
-                          {emp.employee_status === "aktif" ? "Aktif" : emp.employee_status === "cuti" ? "Cuti" : "Resign"}
+                          {emp.employee_status === "aktif" ? "Aktif" : "Non Aktif"}
                         </span>
                       </td>
                       <td className="px-4 py-3">

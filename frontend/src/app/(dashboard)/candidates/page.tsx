@@ -485,14 +485,14 @@ export default function CandidatesPage() {
                             href={waLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 transition-colors hover:bg-[#25D366]/25"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 transition-colors hover:bg-[#25D366]/25"
                             title={`Chat WhatsApp ke ${candidate.full_name}`}
                           >
-                            <WhatsAppIcon className="h-8 w-8" />
+                            <WhatsAppIcon className="h-5 w-5" />
                           </a>
                         ) : (
-                          <span className="flex items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
-                            <WhatsAppIcon className="h-8 w-8" disabled />
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
+                            <WhatsAppIcon className="h-5 w-5" disabled />
                           </span>
                         );
                       })()}

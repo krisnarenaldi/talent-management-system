@@ -51,7 +51,10 @@ def list_employees(
         .options(joinedload(Employee.contracts))
     )
     if status:
-        query = query.filter(Employee.employee_status == status)
+        if status == "nonaktif":
+            query = query.filter(Employee.employee_status.in_(("cuti", "resign", "nonaktif")))
+        else:
+            query = query.filter(Employee.employee_status == status)
     if placement:
         query = query.filter(Employee.placement.ilike(f"%{placement}%"))
     if contract_expiry_within_days is not None:
