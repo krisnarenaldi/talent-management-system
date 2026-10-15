@@ -18,11 +18,14 @@ import {
   fetchPayroll,
   createPayroll,
   updatePayroll,
+  fetchLeaves,
+  addLeave,
+  deleteLeave,
 } from "@/lib/api/employees";
 import EmployeeDocumentUploader from "@/components/employees/EmployeeDocumentUploader";
 import CandidateDocumentUploader from "@/components/candidates/DocumentUploader";
 import CandidateCVPanel from "@/components/candidates/CandidateCVPanel";
-import type { Employee, EmployeeContract, EmployeePayroll } from "@/types";
+import type { Employee, EmployeeContract, EmployeePayroll, EmployeeLeave } from "@/types";
 
 /* ── Helpers ─────────────────────────────────────────────────────────────────── */
 function safeDate(v?: string | null) {
@@ -79,8 +82,9 @@ function PersonalDataTab({
 
   const statusOptions: { value: string; label: string }[] = [
     { value: "aktif", label: "Aktif" },
-    { value: "cuti", label: "Cuti" },
-    { value: "resign", label: "Resign" },
+    { value: "nonaktif", label: "Non Aktif" },
+    /*{ value: "cuti", label: "Cuti" },
+    { value: "resign", label: "Resign" },*/
   ];
 
   return (
@@ -97,7 +101,15 @@ function PersonalDataTab({
             <p className="text-xs uppercase tracking-wide text-gray-500">{card.label}</p>
             <p className="mt-1 text-lg font-semibold text-gray-900">
               {card.label === "Status"
-                ? card.value === "aktif" ? "Aktif" : card.value === "cuti" ? "Cuti" : "Resign"
+                ? card.value === "aktif"
+                  ? "Aktif"
+                  : card.value === "cuti"
+                  ? "Cuti"
+                  : card.value === "resign"
+                  ? "Resign"
+                  : card.value === "nonaktif"
+                  ? "Nonaktif"
+                  : card.value
                 : card.value}
             </p>
           </div>
@@ -625,6 +637,153 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
   );
 }
 
+const EMPTY_LEAVE = {
+  start_date: "",
+  end_date: "",
+  reason: "",
+};
+
+function LeavesTab({ employeeId }: { employeeId: string }) {
+  const queryClient = useQueryClient();
+  const showToast = useToastStore((s) => s.showToast);
+  const [leaveForm, setLeaveForm] = useState(EMPTY_LEAVE);
+
+  const { data: leaves = [], isLoading } = useQuery({
+    queryKey: ["leaves", employeeId],
+    queryFn: () => fetchLeaves(employeeId),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (payload: typeof EMPTY_LEAVE) => addLeave(employeeId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves", employeeId] });
+      showToast("success", "Cuti berhasil ditambahkan.");
+      setLeaveForm(EMPTY_LEAVE);
+    },
+    onError: (err: unknown) => {
+      showToast("error", getErrorMessage(err, "Gagal menambah cuti."));
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteLeave(employeeId, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves", employeeId] });
+      showToast("success", "Cuti berhasil dihapus.");
+    },
+    onError: (err: unknown) => {
+      showToast("error", getErrorMessage(err, "Gagal menghapus cuti."));
+    },
+  });
+
+  const handleAddLeave = () => {
+    if (!leaveForm.start_date || !leaveForm.end_date || !leaveForm.reason.trim()) {
+      showToast("error", "Tanggal mulai, tanggal selesai, dan alasan cuti wajib diisi.");
+      return;
+    }
+    addMutation.mutate(leaveForm);
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Add leave form */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Tambah Cuti</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Tanggal Mulai
+            </label>
+            <input
+              type="date"
+              value={leaveForm.start_date}
+              onChange={(e) => setLeaveForm((f) => ({ ...f, start_date: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Tanggal Selesai
+            </label>
+            <input
+              type="date"
+              value={leaveForm.end_date}
+              onChange={(e) => setLeaveForm((f) => ({ ...f, end_date: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Alasan Cuti
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Tulis alasan cuti…"
+              value={leaveForm.reason}
+              onChange={(e) => setLeaveForm((f) => ({ ...f, reason: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+            />
+          </div>
+          <div className="sm:col-span-2 flex justify-end">
+            <button
+              type="button"
+              disabled={addMutation.isPending}
+              onClick={handleAddLeave}
+              className="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-secondary/90 disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {addMutation.isPending ? "Menyimpan\u2026" : "Tambah Cuti"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Leaves list */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Riwayat Cuti</h2>
+        {isLoading ? (
+          <p className="text-sm text-gray-500">Memuat riwayat cuti\u2026</p>
+        ) : leaves.length === 0 ? (
+          <p className="text-sm text-gray-500">Belum ada riwayat cuti.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left">
+                  <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-gray-500">Tanggal Mulai</th>
+                  <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-gray-500">Tanggal Selesai</th>
+                  <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-gray-500">Alasan</th>
+                  <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-gray-500">Tanggal Dibuat</th>
+                  <th className="pb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {leaves.map((leave: EmployeeLeave) => (
+                  <tr key={leave.id} className="hover:bg-gray-50">
+                    <td className="py-3 pr-4 text-gray-700">{safeDate(leave.start_date)}</td>
+                    <td className="py-3 pr-4 text-gray-700">{safeDate(leave.end_date)}</td>
+                    <td className="py-3 pr-4 text-gray-700 max-w-xs whitespace-pre-wrap break-words">{leave.reason}</td>
+                    <td className="py-3 pr-4 text-gray-500">{safeDate(leave.created_at)}</td>
+                    <td className="py-3">
+                      <button
+                        type="button"
+                        onClick={() => deleteMutation.mutate(leave.id)}
+                        disabled={deleteMutation.isPending}
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed"
+                      >
+                        Hapus
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DocumentsTab({ employeeId, candidateId }: { employeeId: string; candidateId: string }) {
   return (
     <div className="space-y-5">
@@ -675,6 +834,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
     { key: "contracts", label: "Kontrak" },
     ...(canViewPayroll ? [{ key: "payroll", label: "Payroll" }] : []),
     { key: "documents", label: "Dokumen" },
+    { key: "leaves", label: "Riwayat Cuti" },
   ];
 
   if (isLoading || !employee) {
@@ -739,6 +899,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
         {activeTab === "contracts" && <ContractsTab employeeId={id} />}
         {activeTab === "payroll" && canViewPayroll && <PayrollTab employeeId={id} />}
         {activeTab === "documents" && <DocumentsTab employeeId={id} candidateId={employee.candidate_id} />}
+        {activeTab === "leaves" && <LeavesTab employeeId={id} />}
       </div>
     </div>
   );

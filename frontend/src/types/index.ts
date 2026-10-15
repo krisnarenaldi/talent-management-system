@@ -128,6 +128,13 @@ export interface Candidate {
   is_deleted?: boolean;
   created_at: string;
   updated_at: string;
+  last_education?: {
+    institution?: string | null;
+    major?: string | null;
+    graduation_year?: number | null;
+  } | null;
+  applied_positions?: string[];
+  experience_level?: string | null;
 }
 
 export interface CandidateEducation {
@@ -209,7 +216,7 @@ export interface StageHistory {
 }
 
 // --- Employee ---
-export type EmployeeStatus = "aktif" | "cuti" | "resign";
+export type EmployeeStatus = "aktif" | "cuti" | "resign" | "nonaktif";
 
 export interface Employee {
   id: string;
@@ -281,6 +288,15 @@ export interface EmployeeDocument {
   uploaded_at?: string;
 }
 
+export interface EmployeeLeave {
+  id: string;
+  employee_id: string;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  created_at?: string;
+}
+
 // --- Analytics / Dashboard ---
 export interface PipelineBreakdown {
   stage: string;
@@ -320,6 +336,13 @@ export interface PipelineAnalyticsItem {
   client_name?: string;
   period: string;
   count: number;
+}
+
+export interface ActivePositionSummary {
+  position_id: string;
+  position_title: string;
+  client_name: string;
+  total_applications: number;
 }
 
 export interface PositionSuccessRate {

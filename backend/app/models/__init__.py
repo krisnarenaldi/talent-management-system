@@ -8,6 +8,7 @@ from app.models.application import Application, StageHistory, AIScreeningResult
 from app.models.notification import Notification
 from app.models.blacklist import Blacklist, BlacklistStatusType
 from app.models.employee import Employee, EmployeeContract, AgreementType, EmployeePayroll, EmployeeDocument
+from app.models.employee_leave import EmployeeLeave
 from app.models.generated_cv import GeneratedCV
 from app.models.refresh_token import RefreshToken
 from app.models.openai_usage_log import OpenAIUsageLog

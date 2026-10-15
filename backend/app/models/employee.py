@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
-EMPLOYEE_STATUSES = ("aktif", "cuti", "resign")
+EMPLOYEE_STATUSES = ("aktif", "cuti", "resign", "nonaktif")
 LEAVE_STATUSES = ("sudah_bisa_cuti", "belum")
 CONTRACT_STATUSES = ("aktif", "berakhir", "diperpanjang")
 
@@ -62,6 +62,7 @@ class Employee(Base):
     contracts = relationship("EmployeeContract", back_populates="employee", cascade="all, delete-orphan")
     payroll = relationship("EmployeePayroll", back_populates="employee", uselist=False, cascade="all, delete-orphan")
     documents = relationship("EmployeeDocument", back_populates="employee", cascade="all, delete-orphan")
+    leaves = relationship("EmployeeLeave", back_populates="employee", cascade="all, delete-orphan")
 
 
 class EmployeeContract(Base):

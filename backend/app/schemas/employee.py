@@ -185,3 +185,21 @@ class EmployeeDocumentResponse(EmployeeDocumentBase):
 
     class Config:
         from_attributes = True
+
+
+class EmployeeLeaveCreate(BaseModel):
+    start_date: date
+    end_date: date
+    reason: str
+
+
+class EmployeeLeaveResponse(BaseModel):
+    id: AutoStrUUID
+    employee_id: AutoStrUUID
+    start_date: date
+    end_date: date
+    reason: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

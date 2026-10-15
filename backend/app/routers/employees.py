@@ -18,7 +18,10 @@ from app.schemas.employee import (
     EmployeePayrollCreate,
     EmployeePayrollResponse,
     EmployeeDocumentResponse,
+    EmployeeLeaveCreate,
+    EmployeeLeaveResponse,
 )
+from app.models.employee_leave import EmployeeLeave
 from app.services import employee_service
 from app.services.storage_service import get_storage_service
 
@@ -389,4 +392,53 @@ async def delete_document(
             await storage.delete_file(doc.drive_item_id)
         except Exception:
             pass
+    db.commit()
+
+
+# ── Leaves CRUD ───────────────────────────────────────────────────────────────────
+@router.get("/{employee_id}/leaves", response_model=list[EmployeeLeaveResponse])
+@router.get("/{employee_id}/leaves/", response_model=list[EmployeeLeaveResponse])
+def list_leaves(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    db.query(Employee).filter(Employee.id == employee_id).first() or _raise_404("Karyawan tidak ditemukan")
+    return (
+        db.query(EmployeeLeave)
+        .filter(EmployeeLeave.employee_id == employee_id)
+        .order_by(EmployeeLeave.start_date.desc())
+        .all()
+    )
+
+
+@router.post("/{employee_id}/leaves", response_model=EmployeeLeaveResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{employee_id}/leaves/", response_model=EmployeeLeaveResponse, status_code=status.HTTP_201_CREATED)
+def add_leave(
+    employee_id: str,
+    payload: EmployeeLeaveCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    db.query(Employee).filter(Employee.id == employee_id).first() or _raise_404("Karyawan tidak ditemukan")
+    leave = EmployeeLeave(employee_id=employee_id, **payload.model_dump())
+    db.add(leave)
+    db.commit()
+    db.refresh(leave)
+    return leave
+
+
+@router.delete("/{employee_id}/leaves/{leave_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_leave(
+    employee_id: str,
+    leave_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    leave = (
+        db.query(EmployeeLeave)
+        .filter(EmployeeLeave.id == leave_id, EmployeeLeave.employee_id == employee_id)
+        .first()
+    ) or _raise_404("Cuti tidak ditemukan")
+    db.delete(leave)
     db.commit()

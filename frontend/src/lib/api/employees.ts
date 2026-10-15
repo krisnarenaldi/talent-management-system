@@ -7,6 +7,7 @@ import type {
   EmployeeContract,
   EmployeePayroll,
   EmployeeDocument,
+  EmployeeLeave,
 } from "@/types";
 
 // ── List / Detail / Update ───────────────────────────────────────────────────────
@@ -132,4 +133,22 @@ export async function deleteDocument(
   documentId: string,
 ): Promise<void> {
   await api.delete(`/api/v1/employees/${employeeId}/documents/${documentId}`);
+}
+
+// ── Leaves ────────────────────────────────────────────────────────────────────────
+export async function fetchLeaves(employeeId: string): Promise<EmployeeLeave[]> {
+  const response = await api.get(`/api/v1/employees/${employeeId}/leaves`);
+  return response.data as EmployeeLeave[];
+}
+
+export async function addLeave(
+  employeeId: string,
+  payload: { start_date: string; end_date: string; reason: string },
+): Promise<EmployeeLeave> {
+  const response = await api.post(`/api/v1/employees/${employeeId}/leaves`, payload);
+  return response.data as EmployeeLeave;
+}
+
+export async function deleteLeave(employeeId: string, leaveId: string): Promise<void> {
+  await api.delete(`/api/v1/employees/${employeeId}/leaves/${leaveId}`);
 }
