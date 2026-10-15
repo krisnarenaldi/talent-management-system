@@ -1,7 +1,9 @@
 """Business logic untuk export data."""
 from datetime import datetime, timedelta
+from decimal import Decimal
 from io import BytesIO
 from typing import Optional
+import uuid
 
 from fastapi import HTTPException
 from openpyxl import Workbook
@@ -11,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.application import Application, STAGE_NAMES
 from app.models.candidate import Candidate, CandidateDocument, CandidateEducation, CandidateExperience
+from app.models.employee import Employee
 from app.models.position import Position
 
 
@@ -29,6 +32,10 @@ def _get_excel_response_for_candidates(
     city: Optional[str] = None,
     experience_level: Optional[str] = None,
     education: Optional[str] = None,
+    min_current_salary: Optional[Decimal] = None,
+    max_current_salary: Optional[Decimal] = None,
+    min_expected_salary: Optional[Decimal] = None,
+    max_expected_salary: Optional[Decimal] = None,
 ) -> bytes:
     """
     Generate Excel file with candidates data.
@@ -47,12 +54,27 @@ def _get_excel_response_for_candidates(
         .filter(Candidate.is_deleted == False)
     )
 
+    # Exclude candidates who are already active employees
+    query = query.filter(
+        ~Candidate.id.in_(
+            db.query(Employee.candidate_id).filter(Employee.employee_status == "aktif")
+        )
+    )
+
     # Apply filters
     if position_id:
         # Candidates yang punya application ke posisi tertentu
-        query = query.join(Application, Candidate.id == Application.candidate_id).filter(
-            Application.position_id == position_id
-        )
+        try:
+            val_uuid = uuid.UUID(position_id)
+            query = query.join(Application, Candidate.id == Application.candidate_id).filter(
+                Application.position_id == str(val_uuid)
+            )
+        except (ValueError, AttributeError):
+            query = (
+                query.join(Application, Candidate.id == Application.candidate_id)
+                .join(Position, Application.position_id == Position.id)
+                .filter(Position.title.ilike(f"%{position_id}%"))
+            )
 
     if completeness_status:
         query = query.filter(Candidate.completeness_status == completeness_status)
@@ -60,7 +82,7 @@ def _get_excel_response_for_candidates(
     if start_date:
         query = query.filter(Candidate.created_at >= start_date)
     if end_date:
-        query = query.filter(Candidate.created_at <= end_date)
+        query = query.filter(Candidate.created_at <= end_date + timedelta(days=1))
 
     if search:
         from sqlalchemy import String
@@ -83,6 +105,7 @@ def _get_excel_response_for_candidates(
                     or_(
                         CandidateExperience.company_name.ilike(pattern),
                         CandidateExperience.job_title.ilike(pattern),
+                        CandidateExperience.description.ilike(pattern),
                     )
                 ),
             )
@@ -92,12 +115,15 @@ def _get_excel_response_for_candidates(
         query = query.filter(Candidate.source_channel == source_channel)
 
     if city:
+        city_lower = city.lower()
         jabotabek = ["jakarta", "bogor", "depok", "tangerang", "bekasi"]
         conditions = [Candidate.domicile.ilike(f"%{c}%") for c in jabotabek]
-        if city.lower() == "jabotabek":
+        if city_lower == "jabotabek":
             query = query.filter(or_(*conditions))
-        elif city.lower() == "non_jabotabek":
+        elif city_lower == "non_jabotabek":
             query = query.filter(~or_(*conditions))
+        else:
+            query = query.filter(Candidate.domicile.ilike(f"%{city}%"))
 
     if experience_level:
         exp_stmt = select(
@@ -123,6 +149,15 @@ def _get_excel_response_for_candidates(
                 )
             )
         )
+
+    if min_current_salary is not None:
+        query = query.filter(Candidate.current_salary >= min_current_salary)
+    if max_current_salary is not None:
+        query = query.filter(Candidate.current_salary <= max_current_salary)
+    if min_expected_salary is not None:
+        query = query.filter(Candidate.expected_salary >= min_expected_salary)
+    if max_expected_salary is not None:
+        query = query.filter(Candidate.expected_salary <= max_expected_salary)
 
     candidates = query.all()
 

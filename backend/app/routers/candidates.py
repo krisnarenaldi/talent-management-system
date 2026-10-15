@@ -82,7 +82,7 @@ def list_candidate_cities(
 
     rows = (
         db.query(distinct(Candidate.domicile))
-        .filter(Candidate.domicile.isnot(None), Candidate.domicile != "")
+        .filter(Candidate.domicile.isnot(None), Candidate.domicile != "", Candidate.is_deleted == False)
         .all()
     )
     cities = sorted({r[0].strip() for r in rows if r[0]})
@@ -108,7 +108,7 @@ def list_candidates(
 ):
     from sqlalchemy import or_, String, func, select
 
-    query = db.query(Candidate)
+    query = db.query(Candidate).filter(Candidate.is_deleted == False)
     
     if search:
         pattern = f"%{search}%"

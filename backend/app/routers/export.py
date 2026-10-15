@@ -1,5 +1,6 @@
-import uuid
 from datetime import datetime
+from decimal import Decimal
+import uuid
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -44,6 +45,10 @@ def export_candidates(
     city: str | None = Query(None),
     experience_level: str | None = Query(None),
     education: str | None = Query(None),
+    min_current_salary: Decimal | None = Query(None),
+    max_current_salary: Decimal | None = Query(None),
+    min_expected_salary: Decimal | None = Query(None),
+    max_expected_salary: Decimal | None = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
@@ -51,7 +56,7 @@ def export_candidates(
     try:
         excel_bytes = _get_excel_response_for_candidates(
             db,
-            position_id=_parse_uuid(position_id),
+            position_id=position_id,
             completeness_status=completeness_status,
             start_date=_parse_date(start_date),
             end_date=_parse_date(end_date),
@@ -60,6 +65,10 @@ def export_candidates(
             city=city,
             experience_level=experience_level,
             education=education,
+            min_current_salary=min_current_salary,
+            max_current_salary=max_current_salary,
+            min_expected_salary=min_expected_salary,
+            max_expected_salary=max_expected_salary,
         )
         filename = f"candidates_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         return StreamingResponse(
