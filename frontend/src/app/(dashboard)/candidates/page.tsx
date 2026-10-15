@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, FileText, Filter, Pencil } from "lucide-react";
+import { FileText, Filter, Pencil } from "lucide-react";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
 import type { Candidate } from "@/types";
@@ -14,6 +14,36 @@ import { useAuthStore } from "@/stores/auth.store";
 function normalizeRole(role: string | undefined): string {
   if (!role) return "";
   return role.split(".").pop()?.toLowerCase() || role;
+}
+
+function buildWhatsAppLink(phone?: string): string | null {
+  if (!phone) return null;
+  // Hanya ambil digit
+  let digits = phone.replace(/\D/g, "");
+  // Jika diawali "0", ganti dengan kode negara Indonesia (62)
+  if (digits.startsWith("0")) {
+    digits = "62" + digits.slice(1);
+  }
+  // Jika ada "+" di awal (sudah diformat), digit-nya sudah benar
+  if (!digits) return null;
+  return `https://wa.me/${digits}`;
+}
+
+function WhatsAppIcon({
+  className = "h-4 w-4",
+  disabled = false,
+}: {
+  className?: string;
+  disabled?: boolean;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/whatsapp.png"
+      alt="WhatsApp"
+      className={`${className} ${disabled ? "opacity-40 grayscale" : ""}`}
+    />
+  );
 }
 
 type SalaryRange = { min: number | null; max: number | null };
@@ -384,23 +414,24 @@ export default function CandidatesPage() {
               <tr>
                 <th className="px-4 py-3">Nama</th>
                 <th className="px-4 py-3">Kontak</th>
-                <th className="px-4 py-3">Sumber</th>
-                <th className="px-4 py-3">Skill</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Kelengkapan</th>
+                <th className="px-4 py-3">WA</th>
+                <th className="px-4 py-3">Pendidikan</th>
+                <th className="px-4 py-3">Posisi yang Dilamar</th>
+                <th className="px-4 py-3">Level</th>
+                <th className="px-4 py-3">Gaji Ekspektasi</th>
                 <th className="px-4 py-3 text-right">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                     Memuat data kandidat...
                   </td>
                 </tr>
               ) : candidates.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                     Belum ada kandidat.
                   </td>
                 </tr>
@@ -446,49 +477,93 @@ export default function CandidatesPage() {
                         <p>{candidate.phone || "-"}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3">{candidate.source_channel || "-"}</td>
                     <td className="px-4 py-3">
-                      {candidate.skills && candidate.skills.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {candidate.skills.slice(0, 3).map((skill) => (
+                      {(() => {
+                        const waLink = buildWhatsAppLink(candidate.phone);
+                        return waLink ? (
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 transition-colors hover:bg-[#25D366]/25"
+                            title={`Chat WhatsApp ke ${candidate.full_name}`}
+                          >
+                            <WhatsAppIcon className="h-8 w-8" />
+                          </a>
+                        ) : (
+                          <span className="flex items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
+                            <WhatsAppIcon className="h-8 w-8" disabled />
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3">
+                      {candidate.last_education ? (
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium text-gray-900">
+                            {candidate.last_education.major || "-"}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {[
+                              candidate.last_education.institution,
+                              candidate.last_education.graduation_year,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "-"}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {candidate.applied_positions && candidate.applied_positions.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-sm text-gray-900">
+                            {candidate.applied_positions[0]}
+                          </span>
+                          {candidate.applied_positions.length > 1 && (
                             <span
-                              key={skill}
-                              className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
+                              className="inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700"
+                              title={candidate.applied_positions.slice(1).join(", ")}
                             >
-                              {skill}
-                            </span>
-                          ))}
-                          {candidate.skills.length > 3 && (
-                            <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                              +{candidate.skills.length - 3}
+                              +{candidate.applied_positions.length - 1}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-400">-</span>
+                        <span className="text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                          candidate.contact_status === "aktif"
-                            ? "border-emerald-200 bg-emerald-100 text-emerald-800"
-                            : "border-amber-200 bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {candidate.contact_status === "aktif" ? "Aktif" : "Tidak bisa dihubungi"}
-                      </span>
+                      {candidate.experience_level ? (
+                        <span
+                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                            candidate.experience_level === "senior"
+                              ? "border-purple-200 bg-purple-100 text-purple-800"
+                              : candidate.experience_level === "intermediate"
+                              ? "border-sky-200 bg-sky-100 text-sky-800"
+                              : "border-emerald-200 bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {candidate.experience_level === "senior"
+                            ? "Senior"
+                            : candidate.experience_level === "intermediate"
+                            ? "Intermediate"
+                            : "Junior"}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                          candidate.completeness_status === "lengkap"
-                            ? "border-sky-200 bg-sky-100 text-sky-800"
-                            : "border-orange-200 bg-orange-100 text-orange-800"
-                        }`}
-                      >
-                        {candidate.completeness_status === "lengkap" ? "Lengkap" : "Belum lengkap"}
-                      </span>
+                      {candidate.expected_salary ? (
+                        <span className="text-sm font-medium text-gray-900">
+                          Rp {Number(candidate.expected_salary).toLocaleString("id-ID")}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">

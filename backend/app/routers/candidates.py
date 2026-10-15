@@ -5,12 +5,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.blacklist import Blacklist
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience, CandidateDocument
 from app.models.candidate_project import CandidateProject
+from app.models.application import Application
 from app.models.employee import Employee
 from app.schemas.candidate import (
     CandidateCreate,
@@ -108,7 +109,15 @@ def list_candidates(
 ):
     from sqlalchemy import or_, String, func, select
 
-    query = db.query(Candidate).filter(Candidate.is_deleted == False)
+    query = (
+        db.query(Candidate)
+        .options(
+            selectinload(Candidate.educations),
+            selectinload(Candidate.experiences),
+            selectinload(Candidate.applications).joinedload(Application.position),
+        )
+        .filter(Candidate.is_deleted == False)
+    )
     
     if search:
         pattern = f"%{search}%"
@@ -197,8 +206,12 @@ def list_candidates(
     )
 
     candidates = query.offset(skip).limit(limit).all()
-    # Re-compute & persist freshness, and collect blacklist status before commit
+    # Re-compute & persist freshness, and collect blacklist status before commit.
+    # Also pre-compute derived display fields (last_education, applied_positions,
+    # experience_level) from eagerly-loaded relationships before db.commit()
+    # expires the ORM attributes.
     blacklisted_ids: set[str] = set()
+    derived: dict[str, dict] = {}
     for c in candidates:
         new_status = _recalc_completeness(str(c.id), db)
         if c.completeness_status != new_status:
@@ -211,10 +224,65 @@ def list_candidates(
         ).first()
         if bl_exists:
             blacklisted_ids.add(str(c.id))
+
+        # ── Last education (paling terakhir berdasarkan graduation_year) ──
+        last_edu = None
+        if c.educations:
+            # Pilih pendidikan dengan graduation_year terbesar; jika tidak ada
+            # tahun, fallback ke urutan pertama.
+            with_year = [e for e in c.educations if e.graduation_year is not None]
+            if with_year:
+                last_edu_obj = max(with_year, key=lambda e: e.graduation_year)
+            else:
+                last_edu_obj = c.educations[0]
+            last_edu = {
+                "institution": last_edu_obj.institution,
+                "major": last_edu_obj.major,
+                "graduation_year": last_edu_obj.graduation_year,
+            }
+
+        # ── Posisi yang dilamar (dari relasi applications) ──
+        applied_positions = [
+            app.position.title
+            for app in c.applications
+            if app.position and app.position.title
+        ]
+
+        # ── Level pengalaman (Junior / Intermediate / Senior) ──
+        total_days = 0
+        has_experience = False
+        for exp in c.experiences:
+            if exp.start_date is None:
+                continue
+            has_experience = True
+            end = exp.end_date or date.today()
+            delta = end - exp.start_date
+            if delta.days > 0:
+                total_days += delta.days
+
+        if not has_experience:
+            experience_level = "junior"
+        elif total_days <= 1095:          # <= 3 tahun
+            experience_level = "junior"
+        elif total_days <= 1825:          # 3 - 5 tahun
+            experience_level = "intermediate"
+        else:                             # > 5 tahun
+            experience_level = "senior"
+
+        derived[str(c.id)] = {
+            "last_education": last_edu,
+            "applied_positions": applied_positions,
+            "experience_level": experience_level,
+        }
+
     db.commit()
     # Re-apply is_blacklisted after commit (db.commit() expires all ORM attributes)
     for c in candidates:
         c.is_blacklisted = str(c.id) in blacklisted_ids
+        info = derived.get(str(c.id), {})
+        c.last_education = info.get("last_education")
+        c.applied_positions = info.get("applied_positions", [])
+        c.experience_level = info.get("experience_level")
     return candidates
 
 

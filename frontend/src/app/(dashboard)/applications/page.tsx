@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -110,9 +111,15 @@ function normalizeRole(role: string | undefined): string {
   return role.split(".").pop()?.toLowerCase() || role;
 }
 
-export default function ApplicationsPage() {
-  const [statusFilter, setStatusFilter] = useState("");
-  const [stageFilter, setStageFilter] = useState("");
+function ApplicationsContent() {
+  const searchParams = useSearchParams();
+  const initialStage = searchParams.get("stage") || searchParams.get("current_stage") || "";
+  const initialStatus = searchParams.get("status") || searchParams.get("status_filter") || "";
+  const initialPositionId = searchParams.get("position_id") || "";
+
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [stageFilter, setStageFilter] = useState(initialStage);
+  const [positionIdFilter, setPositionIdFilter] = useState(initialPositionId);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -121,6 +128,16 @@ export default function ApplicationsPage() {
   const user = useAuthStore((state) => state.user);
   const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
   const canExport = user ? ["admin", "manager"].includes(normalizeRole(user.role)) : false;
+
+  useEffect(() => {
+    const s = searchParams.get("stage") || searchParams.get("current_stage");
+    if (s !== null) setStageFilter(s);
+    const st = searchParams.get("status") || searchParams.get("status_filter");
+    if (st !== null) setStatusFilter(st);
+    const pid = searchParams.get("position_id");
+    if (pid !== null) setPositionIdFilter(pid);
+    setCurrentPage(1);
+  }, [searchParams]);
 
   const { exportPipeline } = useExport();
 
@@ -131,11 +148,12 @@ export default function ApplicationsPage() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["applications", { statusFilter, stageFilter, startDate, endDate, currentPage, itemsPerPage }],
+    queryKey: ["applications", { statusFilter, stageFilter, positionIdFilter, startDate, endDate, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchApplications({
         status_filter: statusFilter || undefined,
         current_stage: stageFilter || undefined,
+        position_id: positionIdFilter || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
         skip: ((currentPage - 1) * itemsPerPage).toString(),
@@ -240,6 +258,24 @@ export default function ApplicationsPage() {
           )}
         </div>
       </div>
+
+      {positionIdFilter && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 text-blue-800 text-sm px-4 py-2.5 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-base text-blue-600">filter_alt</span>
+            <span>Memfilter kandidat untuk lowongan terpilih</span>
+          </div>
+          <button
+            onClick={() => {
+              setPositionIdFilter("");
+              setCurrentPage(1);
+            }}
+            className="text-xs font-semibold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 px-2.5 py-1 rounded-md shadow-sm transition-colors"
+          >
+            Hapus Filter Posisi ✕
+          </button>
+        </div>
+      )}
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -419,5 +455,13 @@ export default function ApplicationsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ApplicationsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Memuat data lamaran...</div>}>
+      <ApplicationsContent />
+    </Suspense>
   );
 }

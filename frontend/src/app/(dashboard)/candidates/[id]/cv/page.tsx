@@ -20,12 +20,17 @@ import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
-import type { Candidate, CVGenerateRequest, CVGenerateResponse, GeneratedCV } from "@/types";
+import type { Candidate, CandidateDocument, CVGenerateRequest, CVGenerateResponse, GeneratedCV } from "@/types";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 async function fetchCandidate(id: string): Promise<Candidate> {
   const res = await api.get(`/api/v1/candidates/${id}`);
+  return res.data;
+}
+
+async function fetchCandidateDocuments(candidateId: string): Promise<CandidateDocument[]> {
+  const res = await api.get(`/api/v1/candidates/${candidateId}/documents/`);
   return res.data;
 }
 
@@ -43,6 +48,19 @@ async function generateCV(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getOriginalFileName(doc: CandidateDocument): string {
+  if (doc.label && doc.label.trim()) return doc.label.trim();
+  if (doc.file_url) {
+    const raw = doc.file_url.split("/").pop() || "CV_asli.pdf";
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return "CV Asli";
+}
 
 function formatSafeDate(value: string | null | undefined) {
   if (!value) return "-";
@@ -97,6 +115,19 @@ export default function CandidateCVPage({
     queryFn: () => fetchCVList(trimmedId),
   });
 
+  const {
+    data: documents = [],
+    isLoading: documentsLoading,
+  } = useQuery({
+    queryKey: ["candidate-documents", trimmedId],
+    queryFn: () => fetchCandidateDocuments(trimmedId),
+  });
+
+  const originalCV =
+    documents
+      .filter((doc) => doc.doc_type === "CV_asli")
+      .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0] ?? null;
+
   const canEdit =
     currentUser?.role === "hr" ||
     currentUser?.role === "manager" ||
@@ -112,6 +143,19 @@ export default function CandidateCVPage({
         showToast("success", "CV berhasil digenerate!");
       }
       setForceRegenerate(false);
+    },
+    onError: (err) => {
+      showToast("error", getErrorMessage(err));
+    },
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      await api.patch(`/api/v1/candidates/${trimmedId}/documents/${docId}/verify`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["candidate-documents", trimmedId] });
+      showToast("success", "Status verifikasi dokumen berhasil diperbarui.");
     },
     onError: (err) => {
       showToast("error", getErrorMessage(err));
@@ -166,7 +210,7 @@ export default function CandidateCVPage({
       </div>
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-800">CV Standar Altek</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -177,13 +221,38 @@ export default function CandidateCVPage({
               : ""}
           </p>
         </div>
-        <Link
-          href={`/candidates/${trimmedId}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Kembali
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {originalCV?.file_url && (
+            <>
+              <a
+                href={originalCV.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+                title="Buka CV Asli di tab baru"
+              >
+                <ExternalLink className="h-4 w-4 text-slate-500" />
+                Buka CV Asli
+              </a>
+              <a
+                href={originalCV.file_url}
+                download
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+                title="Download file CV Asli"
+              >
+                <Download className="h-4 w-4 text-slate-500" />
+                Download CV Asli
+              </a>
+            </>
+          )}
+          <Link
+            href={`/candidates/${trimmedId}`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Kembali
+          </Link>
+        </div>
       </div>
 
       {/* Stale warning */}
@@ -352,6 +421,122 @@ export default function CandidateCVPage({
               )}
             </div>
           )}
+
+          {/* Original CV card */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                <FileText className="h-4 w-4 text-slate-500" />
+                CV Asli Kandidat
+              </h3>
+              {originalCV ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                  Original
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Belum ada
+                </span>
+              )}
+            </div>
+
+            {documentsLoading ? (
+              <div className="flex items-center justify-center py-4 text-xs text-slate-400">
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Memuat CV asli…
+              </div>
+            ) : originalCV ? (
+              <>
+                <div className="space-y-2 text-xs text-slate-600">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="shrink-0 text-slate-400">File</span>
+                    <span
+                      className="max-w-[180px] truncate font-medium text-right text-slate-700"
+                      title={getOriginalFileName(originalCV)}
+                    >
+                      {getOriginalFileName(originalCV)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Diupload</span>
+                    <span>{formatSafeDate(originalCV.uploaded_at)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Status</span>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => verifyMutation.mutate(originalCV.id)}
+                        disabled={verifyMutation.isPending}
+                        title={
+                          originalCV.is_verified
+                            ? "Klik untuk membatalkan verifikasi"
+                            : "Klik untuk memverifikasi dokumen ini"
+                        }
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium cursor-pointer transition-all hover:opacity-85 disabled:cursor-not-allowed ${
+                          originalCV.is_verified
+                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {verifyMutation.isPending ? (
+                          <>
+                            <RefreshCw className="h-3 w-3 animate-spin" /> Mengubah…
+                          </>
+                        ) : originalCV.is_verified ? (
+                          <>
+                            <CheckCircle className="h-3 w-3" /> Terverifikasi
+                          </>
+                        ) : (
+                          "Belum diverifikasi"
+                        )}
+                      </button>
+                    ) : originalCV.is_verified ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        <CheckCircle className="h-3 w-3" /> Terverifikasi
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                        Belum diverifikasi
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {originalCV.file_url && (
+                  <div className="flex gap-2 pt-1">
+                    <a
+                      href={originalCV.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Buka
+                    </a>
+                    <a
+                      href={originalCV.file_url}
+                      download
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-600 hover:bg-blue-100 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-2 py-2 text-xs text-slate-500">
+                <p>Belum ada file CV asli yang diunggah untuk kandidat ini.</p>
+                <Link
+                  href={`/candidates/${trimmedId}`}
+                  className="inline-flex items-center gap-1 font-medium text-blue-600 hover:underline"
+                >
+                  Upload di halaman kandidat &rarr;
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* CV history */}

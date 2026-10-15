@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.pydantic_utils import AutoStrUUID
 
@@ -30,6 +30,12 @@ class EducationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class LastEducationResponse(BaseModel):
+    institution: str | None = None
+    major: str | None = None
+    graduation_year: int | None = None
 
 
 class ExperienceCreate(BaseModel):
@@ -129,6 +135,9 @@ class CandidateResponse(BaseModel):
     is_blacklisted: bool = False
     created_at: datetime
     updated_at: datetime
+    last_education: LastEducationResponse | None = None
+    applied_positions: list[str] = Field(default_factory=list)
+    experience_level: str | None = None
 
     class Config:
         from_attributes = True

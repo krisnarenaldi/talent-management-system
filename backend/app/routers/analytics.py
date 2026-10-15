@@ -134,6 +134,39 @@ async def contracts_expiring(
     ]
 
 
+@router.get("/active-positions")
+async def analytics_active_positions(
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    _current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """Top N lowongan aktif dengan jumlah pelamar untuk dashboard."""
+    query = (
+        select(
+            Position.id.label("position_id"),
+            Position.title.label("position_title"),
+            Client.name.label("client_name"),
+            func.count(Application.id).label("total_applications"),
+        )
+        .join(Client, Position.client_id == Client.id)
+        .outerjoin(Application, Application.position_id == Position.id)
+        .where(Position.is_active == True)
+        .group_by(Position.id, Position.title, Client.name, Position.created_at)
+        .order_by(func.count(Application.id).desc(), Position.created_at.desc())
+        .limit(limit)
+    )
+    rows = db.execute(query).all()
+    return [
+        {
+            "position_id": str(r.position_id),
+            "position_title": r.position_title or "-",
+            "client_name": r.client_name or "-",
+            "total_applications": r.total_applications or 0,
+        }
+        for r in rows
+    ]
+
+
 @router.get("/pipeline-breakdown")
 async def analytics_pipeline_breakdown(
     db: Session = Depends(get_db),

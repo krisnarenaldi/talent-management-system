@@ -6,6 +6,7 @@ import type {
   AnalyticsSummary, 
   RecentApplication, 
   ContractExpiring,
+  ActivePositionSummary,
   PipelineAnalyticsItem,
   PositionSuccessRate,
   SourceSuccessRate,
@@ -27,6 +28,11 @@ export async function fetchRecentApplications(limit = 5): Promise<RecentApplicat
 export async function fetchContractsExpiring(limit = 5): Promise<ContractExpiring[]> {
   const response = await api.get(`/api/v1/analytics/contracts-expiring?limit=${limit}`);
   return response.data as ContractExpiring[];
+}
+
+export async function fetchActivePositions(limit = 5): Promise<ActivePositionSummary[]> {
+  const response = await api.get(`/api/v1/analytics/active-positions?limit=${limit}`);
+  return response.data as ActivePositionSummary[];
 }
 
 export async function fetchPipelineBreakdown(

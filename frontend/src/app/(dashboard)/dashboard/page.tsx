@@ -1,9 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { fetchAnalyticsSummary, fetchRecentApplications, fetchContractsExpiring } from "@/lib/api/analytics";
-import type { AnalyticsSummary, RecentApplication, ContractExpiring } from "@/types";
+import api from "@/lib/api";
+import {
+  fetchAnalyticsSummary,
+  fetchRecentApplications,
+  fetchContractsExpiring,
+  fetchActivePositions,
+} from "@/lib/api/analytics";
+import type {
+  AnalyticsSummary,
+  RecentApplication,
+  ContractExpiring,
+  ActivePositionSummary,
+  Application,
+} from "@/types";
 
 // ── Stage label helper ────────────────────────────────────────────────────────
 const STAGE_LABELS: Record<string, string> = {
@@ -35,6 +48,123 @@ function stageBadgeColor(stage: string): string {
     Existing: "bg-gray-100 text-gray-800",
   };
   return c[stage] ?? "bg-gray-100 text-gray-800";
+}
+
+// ── Pipeline Stage Accordion Item ──────────────────────────────────────────────
+function PipelineStageAccordionItem({
+  stage,
+  count,
+  isExpanded,
+  onToggle,
+}: {
+  stage: string;
+  count: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const { data: candidates = [], isLoading } = useQuery<Application[]>({
+    queryKey: ["pipeline-stage-candidates", stage],
+    queryFn: async () => {
+      const res = await api.get("/api/v1/applications", {
+        params: { current_stage: stage, status_filter: "active", limit: 5 },
+      });
+      return res.data;
+    },
+    enabled: isExpanded && count > 0,
+    staleTime: 60 * 1000,
+  });
+
+  return (
+    <div className="border border-outline-variant/70 rounded-lg overflow-hidden transition-all bg-surface-container-lowest shadow-xs">
+      {/* Header button */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`w-full flex items-center justify-between p-3 text-left transition-colors hover:bg-surface-container-low ${
+          isExpanded ? "bg-surface-container-low/80 font-medium" : ""
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={`material-symbols-outlined text-[18px] text-on-surface-variant transition-transform duration-200 ${
+              isExpanded ? "rotate-90 text-primary" : ""
+            }`}
+          >
+            chevron_right
+          </span>
+          <span className="text-body-sm text-on-surface">
+            {stageLabel(stage)}
+          </span>
+        </div>
+        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface">
+          {count}
+        </span>
+      </button>
+
+      {/* Accordion Content */}
+      {isExpanded && (
+        <div className="p-3 border-t border-outline-variant/50 bg-surface/50 space-y-2">
+          {count === 0 ? (
+            <p className="text-xs text-on-surface-variant italic py-1">
+              Tidak ada kandidat aktif di tahapan ini
+            </p>
+          ) : isLoading ? (
+            <div className="flex items-center gap-2 py-2 text-xs text-on-surface-variant">
+              <span className="material-symbols-outlined animate-spin text-[16px]">
+                progress_activity
+              </span>
+              <span>Memuat kandidat...</span>
+            </div>
+          ) : candidates.length > 0 ? (
+            <div className="space-y-1.5">
+              {candidates.map((app) => (
+                <Link
+                  key={app.id}
+                  href={`/applications/${app.id}`}
+                  className="group block p-2 rounded-md hover:bg-surface-container transition-colors border border-transparent hover:border-outline-variant/40"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-on-surface group-hover:text-primary transition-colors truncate">
+                        {app.candidate_name || "Tanpa Nama"}
+                      </p>
+                      <p className="text-[11px] text-on-surface-variant truncate">
+                        {app.position_title || "-"}
+                        {app.client_name ? ` (${app.client_name})` : ""}
+                      </p>
+                    </div>
+                    <span className="material-symbols-outlined text-[15px] text-on-surface-variant/40 group-hover:text-primary transition-colors shrink-0">
+                      open_in_new
+                    </span>
+                  </div>
+                </Link>
+              ))}
+
+              {count > 5 ? (
+                <Link
+                  href={`/applications?stage=${stage}&status=active`}
+                  className="block pt-2 text-center text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  + {count - 5} kandidat lainnya (Lihat semua di Applications →)
+                </Link>
+              ) : (
+                <Link
+                  href={`/applications?stage=${stage}&status=active`}
+                  className="block pt-2 text-center text-[11px] font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  Lihat di tabel Applications →
+                </Link>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-on-surface-variant italic py-1">
+              Tidak ada data kandidat
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Metric Card ────────────────────────────────────────────────────────────────
@@ -75,6 +205,8 @@ function MetricCard({
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
+
   const { data: summary, isLoading: loadingSummary } = useQuery({
     queryKey: ["analytics-summary"],
     queryFn: fetchAnalyticsSummary,
@@ -88,6 +220,11 @@ export default function DashboardPage() {
   const { data: expiring = [], isLoading: loadingContracts } = useQuery({
     queryKey: ["contracts-expiring"],
     queryFn: () => fetchContractsExpiring(5),
+  });
+
+  const { data: activePositions = [], isLoading: loadingActivePositions } = useQuery<ActivePositionSummary[]>({
+    queryKey: ["active-positions"],
+    queryFn: () => fetchActivePositions(5),
   });
 
   // Total candidates in pipeline (active applications)
@@ -125,32 +262,104 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ── Layout: left = pipeline breakdown, right = two tables ── */}
+        {/* ── Layout: left = pipeline breakdown & lowongan aktif, right = two tables ── */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-gutter">
-          {/* Pipeline Breakdown */}
-          <div className="xl:col-span-1 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden flex flex-col">
-            <div className="p-stack-md border-b border-outline-variant bg-surface-bright">
-              <h3 className="text-headline-sm text-on-surface font-semibold">
-                Pipeline Kandidat
-              </h3>
+          {/* Left column: Pipeline Breakdown & Lowongan Aktif */}
+          <div className="xl:col-span-1 space-y-gutter flex flex-col">
+            {/* Pipeline Breakdown Accordion */}
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden flex flex-col">
+              <div className="p-stack-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+                <div>
+                  <h3 className="text-headline-sm text-on-surface font-semibold">
+                    Pipeline Kandidat
+                  </h3>
+                  <p className="text-[11px] text-on-surface-variant mt-0.5">
+                    Klik tahapan untuk melihat preview kandidat
+                  </p>
+                </div>
+                <Link
+                  href="/applications"
+                  className="text-body-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                >
+                  Semua →
+                </Link>
+              </div>
+              <div className="p-3.5 space-y-2 flex-1">
+                {loadingSummary ? (
+                  <p className="text-body-sm text-on-surface-variant p-2">Memuat...</p>
+                ) : summary?.pipeline_breakdown?.length ? (
+                  summary.pipeline_breakdown.map((b) => (
+                    <PipelineStageAccordionItem
+                      key={b.stage}
+                      stage={b.stage}
+                      count={b.count}
+                      isExpanded={expandedStage === b.stage}
+                      onToggle={() =>
+                        setExpandedStage((prev) => (prev === b.stage ? null : b.stage))
+                      }
+                    />
+                  ))
+                ) : (
+                  <p className="text-body-sm text-on-surface-variant p-2">Belum ada data</p>
+                )}
+              </div>
             </div>
-            <div className="p-4 space-y-3 flex-1">
-              {loadingSummary ? (
-                <p className="text-body-sm text-on-surface-variant">Memuat...</p>
-              ) : summary?.pipeline_breakdown?.length ? (
-                summary.pipeline_breakdown.map((b) => (
-                  <div key={b.stage} className="flex items-center justify-between">
-                    <span className="text-body-sm text-on-surface-variant">
-                      {stageLabel(b.stage)}
-                    </span>
-                    <span className="text-body-sm font-semibold text-on-surface">
-                      {b.count}
-                    </span>
+
+            {/* Lowongan Aktif Section */}
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_12px_rgba(9,30,66,0.08)] overflow-hidden flex flex-col">
+              <div className="p-stack-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[20px]">
+                    work
+                  </span>
+                  <div>
+                    <h3 className="text-headline-sm text-on-surface font-semibold">
+                      Lowongan Aktif
+                    </h3>
                   </div>
-                ))
-              ) : (
-                <p className="text-body-sm text-on-surface-variant">Belum ada data</p>
-              )}
+                </div>
+                <Link
+                  href="/admin/positions"
+                  className="text-body-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                >
+                  Lihat Semua →
+                </Link>
+              </div>
+              <div className="p-3.5 space-y-2 flex-1">
+                {loadingActivePositions ? (
+                  <p className="text-body-sm text-on-surface-variant p-2">Memuat...</p>
+                ) : activePositions.length ? (
+                  activePositions.map((pos) => (
+                    <Link
+                      key={pos.position_id}
+                      href={`/applications?position_id=${pos.position_id}`}
+                      className="group flex items-center justify-between p-2.5 rounded-lg border border-outline-variant/60 hover:border-primary/40 hover:bg-surface-container-low transition-all"
+                      title="Klik untuk melihat pelamar lowongan ini"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="text-body-sm font-semibold text-on-surface group-hover:text-primary transition-colors truncate">
+                          {pos.position_title}
+                        </p>
+                        <p className="text-xs text-on-surface-variant truncate">
+                          {pos.client_name}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary">
+                          {pos.total_applications} Pelamar
+                        </span>
+                        <span className="material-symbols-outlined text-[18px] text-on-surface-variant/40 group-hover:text-primary transition-colors">
+                          chevron_right
+                        </span>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-body-sm text-on-surface-variant p-2">
+                    Tidak ada lowongan aktif
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
