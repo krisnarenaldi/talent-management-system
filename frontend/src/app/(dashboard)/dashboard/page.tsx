@@ -319,7 +319,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <Link
-                  href="/admin/positions"
+                  href="/applications"
                   className="text-body-sm text-primary hover:text-primary/80 font-medium transition-colors"
                 >
                   Lihat Semua →
