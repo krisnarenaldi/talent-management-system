@@ -11,7 +11,7 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.application import Application, STAGE_NAMES
+from app.models.application import Application, StageHistory, STAGE_NAMES
 from app.models.candidate import Candidate, CandidateDocument, CandidateEducation, CandidateExperience
 from app.models.employee import Employee
 from app.models.position import Position
@@ -50,6 +50,8 @@ def _get_excel_response_for_candidates(
             joinedload(Candidate.educations),
             joinedload(Candidate.experiences),
             joinedload(Candidate.documents),
+            joinedload(Candidate.applications).joinedload(Application.stage_histories),
+            joinedload(Candidate.applications).joinedload(Application.position),
         )
         .filter(Candidate.is_deleted == False)
     )
@@ -108,6 +110,11 @@ def _get_excel_response_for_candidates(
                         CandidateExperience.description.ilike(pattern),
                     )
                 ),
+                Candidate.applications.any(
+                    Application.stage_histories.any(
+                        StageHistory.notes.ilike(pattern)
+                    )
+                ),
             )
         )
 
@@ -161,112 +168,228 @@ def _get_excel_response_for_candidates(
 
     candidates = query.all()
 
-    # Create workbook
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Candidates"
+    # ── Determine dynamic column counts ─────────────────────────────────────
+    max_educations = max((len(c.educations) for c in candidates), default=0)
+    max_experiences = max((len(c.experiences) for c in candidates), default=0)
+    # At least 1 slot each so headers always appear
+    max_educations = max(max_educations, 1)
+    max_experiences = max(max_experiences, 1)
 
-    # Header row
-    headers = [
-        "No",
-        "ID",
-        "Nama",
-        "Email",
-        "Phone",
-        "NIK (KTP)",
-        "TTL",
-        "Jenis Kelamin",
-        "Golongan Darah",
-        "Domisili",
-        "Sumber Channel",
-        "Gaji Saat Ini",
-        "Gaji Diharapkan",
-        "Notice Period (hari)",
-        "Status Kelengkapan",
-        "Status Kontak",
-        "Catatan",
-        "Tanggal Dibuat",
-        "Tanggal Diperbarui",
-        "Dokumen",
-        "Pendidikan Terakhir",
-        "Pengalaman Kerja Terakhir",
+    # ── Create workbook with two sheets ─────────────────────────────────────
+    wb = Workbook()
+
+    # ── Sheet 1: Kandidat ────────────────────────────────────────────────────
+    ws = wb.active
+    ws.title = "Kandidat"
+
+    header_font = Font(bold=True)
+    header_fill_green = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+    header_fill_blue = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
+    header_fill_orange = PatternFill(start_color="FFE0CC", end_color="FFE0CC", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    wrap_align = Alignment(wrap_text=True, vertical="top")
+
+    # Build headers dynamically
+    base_headers = [
+        ("No", "green"),
+        ("Nama", "green"),
+        ("Email", "green"),
+        ("Phone", "green"),
+        ("NIK (KTP)", "green"),
+        ("TTL", "green"),
+        ("Jenis Kelamin", "green"),
+        ("Golongan Darah", "green"),
+        ("Domisili", "green"),
+        ("Gaji Saat Ini", "green"),
+        ("Gaji Ekspektasi", "green"),
+        ("Notice Period (hari)", "green"),
+        ("Tanggal Dibuat", "green"),
+        ("Tanggal Diperbarui", "green"),
+        ("Catatan Kandidat", "green"),
     ]
 
-    ws.append(headers)
+    edu_headers = []
+    for i in range(1, max_educations + 1):
+        edu_headers += [
+            (f"Pendidikan {i} (Institusi)", "blue"),
+            (f"Pendidikan {i} Jurusan", "blue"),
+            (f"Pendidikan {i} Tahun Lulus", "blue"),
+            (f"Pendidikan {i} IPK", "blue"),
+        ]
 
-    # Style header
-    header_font = Font(bold=True)
-    header_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
-    header_alignment = Alignment(horizontal="center", vertical="center")
+    exp_headers = []
+    for i in range(1, max_experiences + 1):
+        exp_headers += [
+            (f"Pengalaman {i} (Perusahaan)", "orange"),
+            (f"Pengalaman {i} Posisi", "orange"),
+            (f"Pengalaman {i} Mulai Kerja", "orange"),
+            (f"Pengalaman {i} Akhir Kerja", "orange"),
+        ]
 
-    for col_num, header in enumerate(headers, 1):
+    all_headers = base_headers + edu_headers + exp_headers
+
+    # Write header row
+    for col_num, (header, color) in enumerate(all_headers, 1):
         cell = ws.cell(row=1, column=col_num, value=header)
         cell.font = header_font
-        cell.fill = header_fill
+        cell.fill = header_fill_blue if color == "blue" else (
+            header_fill_orange if color == "orange" else header_fill_green
+        )
         cell.alignment = header_alignment
 
-    # Data rows
+    ws.row_dimensions[1].height = 30
+
+    # Sort educations/experiences by year desc / start_date desc for consistency
     for idx, candidate in enumerate(candidates, 1):
-        # Get last education from joinedload relationship
-        last_education = None
-        if candidate.educations:
-            last_education = sorted(
-                candidate.educations,
-                key=lambda x: x.graduation_year or 0,
-                reverse=True,
-            )[0]
+        sorted_edus = sorted(
+            candidate.educations or [],
+            key=lambda x: x.graduation_year or 0,
+            reverse=True,
+        )
+        sorted_exps = sorted(
+            candidate.experiences or [],
+            key=lambda x: x.start_date or datetime.min.date(),
+            reverse=True,
+        )
 
-        # Get last experience from joinedload relationship
-        last_experience = None
-        if candidate.experiences:
-            last_experience = sorted(
-                candidate.experiences,
-                key=lambda x: x.start_date or datetime.min.date(),
-                reverse=True,
-            )[0]
+        birth_str = ""
+        if candidate.birth_place and candidate.birth_date:
+            bd = candidate.birth_date
+            birth_str = f"{candidate.birth_place}, {bd.strftime('%d-%m-%Y') if hasattr(bd, 'strftime') else bd}"
+        elif candidate.birth_date:
+            bd = candidate.birth_date
+            birth_str = bd.strftime('%d-%m-%Y') if hasattr(bd, 'strftime') else str(bd)
 
-        # Count documents
-        doc_count = len(candidate.documents)
-
-        row_data = [
+        row: list = [
             idx,
-            str(candidate.id),
             candidate.full_name or "",
             candidate.email or "",
             candidate.phone or "",
             candidate.identity_no or "",
-            f"{candidate.birth_place or ''}, {candidate.birth_date or ''}",
+            birth_str,
             candidate.gender or "",
             candidate.blood_type or "",
             candidate.domicile or "",
-            candidate.source_channel or "",
-            str(candidate.current_salary or ""),
-            str(candidate.expected_salary or ""),
-            str(candidate.notice_period_days or ""),
-            candidate.completeness_status,
-            candidate.contact_status,
+            float(candidate.current_salary) if candidate.current_salary else "",
+            float(candidate.expected_salary) if candidate.expected_salary else "",
+            candidate.notice_period_days or "",
+            candidate.created_at.strftime("%d-%m-%Y") if candidate.created_at else "",
+            candidate.updated_at.strftime("%d-%m-%Y") if candidate.updated_at else "",
             candidate.notes or "",
-            candidate.created_at.strftime("%Y-%m-%d %H:%M:%S") if candidate.created_at else "",
-            candidate.updated_at.strftime("%Y-%m-%d %H:%M:%S") if candidate.updated_at else "",
-            f"{doc_count} dokumen",
-            f"{last_education.institution if last_education else ''} ({last_education.graduation_year if last_education else ''})",
-            f"{last_experience.company_name if last_experience else ''} - {last_experience.job_title if last_experience else ''}",
         ]
 
-        ws.append(row_data)
+        # Education columns (padded to max_educations)
+        for i in range(max_educations):
+            if i < len(sorted_edus):
+                edu = sorted_edus[i]
+                row += [
+                    edu.institution or "",
+                    edu.major or "",
+                    edu.graduation_year or "",
+                    "",  # IPK — not stored yet, placeholder
+                ]
+            else:
+                row += ["", "", "", ""]
 
-    # Auto-adjust column widths
+        # Experience columns (padded to max_experiences)
+        for i in range(max_experiences):
+            if i < len(sorted_exps):
+                exp = sorted_exps[i]
+                start_str = exp.start_date.strftime("%d-%m-%Y") if exp.start_date else ""
+                end_str = exp.end_date.strftime("%d-%m-%Y") if exp.end_date else "Sekarang"
+                row += [
+                    exp.company_name or "",
+                    exp.job_title or "",
+                    start_str,
+                    end_str,
+                ]
+            else:
+                row += ["", "", "", ""]
+
+        ws.append(row)
+        ws.row_dimensions[idx + 1].height = 15
+
+    # Auto-adjust column widths for Sheet 1
     for column in ws.columns:
         max_length = 0
         column_letter = column[0].column_letter
         for cell in column:
             try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
+                cell_len = len(str(cell.value)) if cell.value else 0
+                if cell_len > max_length:
+                    max_length = cell_len
+            except Exception:
                 pass
-        adjusted_width = min(max_length + 2, 50)
-        ws.column_dimensions[column_letter].width = adjusted_width
+        ws.column_dimensions[column_letter].width = min(max_length + 2, 45)
+
+    ws.freeze_panes = "B2"
+
+    # ── Sheet 2: Catatan ─────────────────────────────────────────────────────
+    ws2 = wb.create_sheet(title="Catatan")
+
+    note_header_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    note_headers = [
+        "No",
+        "Nama Kandidat",
+        "Sumber Catatan",
+        "Posisi Lamaran",
+        "Tahap Seleksi",
+        "Tanggal",
+        "Isi Catatan",
+    ]
+
+    for col_num, header in enumerate(note_headers, 1):
+        cell = ws2.cell(row=1, column=col_num, value=header)
+        cell.font = header_font
+        cell.fill = note_header_fill
+        cell.alignment = header_alignment
+
+    ws2.row_dimensions[1].height = 30
+
+    note_row_idx = 2
+    for candidate in candidates:
+        # Row: catatan dari tabel candidate (Catatan Recruiter)
+        if candidate.notes and candidate.notes.strip():
+            ws2.append([
+                note_row_idx - 1,
+                candidate.full_name or "",
+                "Catatan Recruiter",
+                "",
+                "",
+                candidate.updated_at.strftime("%d-%m-%Y") if candidate.updated_at else "",
+                candidate.notes,
+            ])
+            ws2.cell(row=note_row_idx, column=7).alignment = wrap_align
+            note_row_idx += 1
+
+        # Rows: catatan dari stage_history
+        for app in (candidate.applications or []):
+            position_title = app.position.title if app.position else ""
+            sorted_histories = sorted(
+                app.stage_histories or [],
+                key=lambda h: h.created_at or datetime.min,
+            )
+            for h in sorted_histories:
+                if h.notes and h.notes.strip():
+                    date_str = h.created_at.strftime("%d-%m-%Y") if h.created_at else ""
+                    ws2.append([
+                        note_row_idx - 1,
+                        candidate.full_name or "",
+                        "Catatan Tahapan Seleksi",
+                        position_title,
+                        h.stage_name,
+                        date_str,
+                        h.notes,
+                    ])
+                    ws2.cell(row=note_row_idx, column=7).alignment = wrap_align
+                    note_row_idx += 1
+
+    # Auto-adjust column widths for Sheet 2
+    col_widths = [5, 25, 25, 25, 25, 15, 60]
+    for col_num, width in enumerate(col_widths, 1):
+        ws2.column_dimensions[ws2.cell(row=1, column=col_num).column_letter].width = width
+
+    ws2.freeze_panes = "A2"
 
     # Save to bytes buffer
     buffer = BytesIO()

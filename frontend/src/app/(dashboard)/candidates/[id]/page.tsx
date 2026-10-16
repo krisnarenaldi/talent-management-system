@@ -13,6 +13,7 @@ import type {
   Candidate,
   CandidateEducation,
   CandidateExperience,
+  StageHistory,
 } from "@/types";
 
 interface DraftProjectItem {
@@ -48,6 +49,11 @@ async function fetchApplications(): Promise<Application[]> {
   return response.data;
 }
 
+async function fetchApplicationDetail(appId: string): Promise<Application> {
+  const response = await api.get(`/api/v1/applications/${appId}`);
+  return response.data;
+}
+
 async function fetchCandidateProjects(id: string): Promise<DraftProjectItem[]> {
   const response = await api.get(`/api/v1/candidates/${id}/projects`);
   return response.data;
@@ -79,6 +85,16 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
       const result = await fetchApplications();
       return result.filter((application) => application.candidate_id === id);
     },
+  });
+
+  // Fetch detail (with stage_history) for each application — used in Catatan tab
+  const { data: applicationDetails = [] } = useQuery({
+    queryKey: ["candidate-application-details", id, applications.map((a) => a.id).join(",")],
+    queryFn: async () => {
+      if (applications.length === 0) return [];
+      return Promise.all(applications.map((a) => fetchApplicationDetail(a.id)));
+    },
+    enabled: applications.length > 0,
   });
 
   const { data: documents = [] } = useQuery({
@@ -403,11 +419,104 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
       )}
 
       {tab === "catatan" && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">Catatan Recruiter</h2>
-          <p className="whitespace-pre-line text-sm text-gray-700">
-            {candidate.notes || "Belum ada catatan untuk kandidat ini."}
-          </p>
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
+          {/* Catatan Recruiter — dari form edit kandidat */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="material-symbols-outlined text-base text-violet-600">edit_note</span>
+              <h2 className="text-base font-semibold text-gray-900">Catatan Recruiter</h2>
+            </div>
+            {candidate.notes ? (
+              <p className="whitespace-pre-line text-sm text-gray-700 leading-relaxed">
+                {candidate.notes}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-400 italic">Belum ada catatan recruiter.</p>
+            )}
+            <div className="mt-4 border-t border-gray-100 pt-3">
+              <Link
+                href={`/candidates/${id}/edit`}
+                className="text-xs font-medium text-primary-600 hover:underline"
+              >
+                Edit catatan →
+              </Link>
+            </div>
+          </div>
+
+          {/* Catatan Tahapan Seleksi — dari stage_history */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="material-symbols-outlined text-base text-amber-600">history</span>
+              <h2 className="text-base font-semibold text-gray-900">Catatan Tahapan Seleksi</h2>
+            </div>
+
+            {applicationDetails.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">Belum ada lamaran atau catatan tahapan.</p>
+            ) : (
+              <div className="space-y-5">
+                {applicationDetails.map((app) => {
+                  const stagesWithNotes = (app.stage_history ?? []).filter(
+                    (h: StageHistory) => h.notes && h.notes.trim()
+                  );
+                  if (stagesWithNotes.length === 0) return null;
+                  return (
+                    <div key={app.id}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
+                          {app.position_title || "Posisi tidak diketahui"}
+                        </span>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                          app.status === "hired"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : app.status === "rejected"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-blue-100 text-blue-700"
+                        }`}>
+                          {app.status}
+                        </span>
+                      </div>
+                      <ol className="relative border-l border-gray-200 pl-4 space-y-4">
+                        {stagesWithNotes.map((h: StageHistory) => (
+                          <li key={h.id} className="relative">
+                            <span className="absolute -left-[1.1rem] top-1.5 flex h-3 w-3 items-center justify-center rounded-full bg-amber-400 ring-2 ring-white" />
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1">
+                              <span className="text-xs font-semibold text-gray-800">
+                                {h.stage_name.replace(/_/g, " ")}
+                              </span>
+                              {h.result && (
+                                <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                  ["pass", "lolos", "lanjut", "ok"].includes(h.result.toLowerCase())
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : ["fail", "tidak_lolos", "not_recommended"].includes(h.result.toLowerCase())
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-gray-100 text-gray-600"
+                                }`}>
+                                  {h.result}
+                                </span>
+                              )}
+                              {h.created_at && (
+                                <span className="text-[10px] text-gray-400">
+                                  {format(new Date(h.created_at), "dd MMM yyyy", { locale: idLocale })}
+                                </span>
+                              )}
+                            </div>
+                            <p className="whitespace-pre-line text-sm text-gray-600 leading-relaxed">
+                              {h.notes}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  );
+                })}
+                {applicationDetails.every(
+                  (app) => !(app.stage_history ?? []).some((h: StageHistory) => h.notes?.trim())
+                ) && (
+                  <p className="text-sm text-gray-400 italic">Belum ada catatan di tahapan seleksi.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

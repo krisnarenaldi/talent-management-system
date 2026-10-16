@@ -197,6 +197,7 @@ export interface Application {
   } | null;
   is_blacklisted?: boolean;
   blacklist_reason?: string | null;
+  stage_history?: StageHistory[];
 }
 
 export interface StageHistory {

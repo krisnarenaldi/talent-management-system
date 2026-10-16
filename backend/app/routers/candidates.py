@@ -11,7 +11,7 @@ from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.blacklist import Blacklist
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience, CandidateDocument
 from app.models.candidate_project import CandidateProject
-from app.models.application import Application
+from app.models.application import Application, StageHistory
 from app.models.employee import Employee
 from app.schemas.candidate import (
     CandidateCreate,
@@ -141,7 +141,12 @@ def list_candidates(
                         CandidateExperience.job_title.ilike(pattern),
                         CandidateExperience.description.ilike(pattern)
                     )
-                )
+                ),
+                Candidate.applications.any(
+                    Application.stage_histories.any(
+                        StageHistory.notes.ilike(pattern)
+                    )
+                ),
             )
         )
         
