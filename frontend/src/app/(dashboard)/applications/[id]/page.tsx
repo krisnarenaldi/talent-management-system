@@ -296,7 +296,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             <div className="space-y-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Nama kandidat</p>
-                <p className="mt-1 text-base font-semibold text-gray-900">{application.candidate_name || application.candidate?.full_name || "-"}</p>
+                <p className="mt-1 text-base font-semibold text-gray-900">{application.candidate_name || "-"}</p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Posisi</p>
