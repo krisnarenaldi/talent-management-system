@@ -52,6 +52,7 @@ function PersonalDataTab({
     mutationFn: (payload: Partial<Employee>) => updateEmployee(employee.id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employee", employee.id] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
       showToast("success", "Data karyawan berhasil diperbarui.");
     },
     onError: (err: unknown) => {

@@ -573,7 +573,7 @@ export default function CandidateCVPage({
                             {cv.language ?? "ID"}
                           </span>
                           <SummarySourceBadge source={cv.summary_source} />
-                          {cv.is_stale && (
+                          {idx === 0 && cv.is_stale && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                               <AlertTriangle className="h-3 w-3" /> Outdated
                             </span>

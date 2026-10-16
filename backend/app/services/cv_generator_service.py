@@ -12,7 +12,7 @@ Alur generate:
      - summary_source == "AI" atau belum ada → panggil LLM (fallback ke heuristik)
   4. Render HTML via Jinja2 → convert ke PDF via WeasyPrint
   5. Upload PDF ke storage (local/OneDrive)
-  6. Upsert record GeneratedCV di DB
+  6. Insert record GeneratedCV baru di DB (versi lama dipertahankan sebagai riwayat)
   7. Return GeneratedCV record
 
 Staleness rule:
@@ -546,7 +546,7 @@ async def generate_cv(
                                 untuk menebak position title.
 
     Returns:
-        GeneratedCV record (baru atau yang sudah ada jika masih fresh)
+        GeneratedCV record (baru, atau record terbaru jika masih fresh)
     """
     # 1. Load candidate dengan relasi
     candidate: Candidate | None = (
@@ -711,38 +711,20 @@ async def generate_cv(
     file_url = upload_result.get("file_url", "")
     drive_item_id = upload_result.get("drive_item_id", "")
 
-    # 12. Hapus file lama dari storage (jika ada dan berbeda URL)
-    if existing_cv and existing_cv.file_url and existing_cv.file_url != file_url:
-        try:
-            await storage.delete(existing_cv.file_url)
-        except Exception as exc:
-            logger.warning("Gagal hapus file CV lama %s: %s", existing_cv.file_url, exc)
-
-    # 13. Upsert record GeneratedCV
-    if existing_cv:
-        existing_cv.template_used = "altek_standard"
-        existing_cv.language = language.upper()
-        existing_cv.summary_source = final_summary_source
-        existing_cv.summary_text = final_summary_text
-        existing_cv.file_url = file_url
-        existing_cv.drive_item_id = drive_item_id
-        existing_cv.generated_at = datetime.datetime.now(datetime.timezone.utc)
-        if application_id:
-            existing_cv.application_id = application_id
-        db.flush()
-        return existing_cv
-    else:
-        new_cv = GeneratedCV(
-            candidate_id=candidate_id,
-            application_id=application_id,
-            template_used="altek_standard",
-            language=language.upper(),
-            summary_source=final_summary_source,
-            summary_text=final_summary_text,
-            file_url=file_url,
-            drive_item_id=drive_item_id,
-            generated_at=datetime.datetime.now(datetime.timezone.utc),
-        )
-        db.add(new_cv)
-        db.flush()
-        return new_cv
+    # 12. Selalu INSERT record baru (bukan overwrite) supaya "Riwayat CV" bertambah
+    #     setiap kali CV digenerate. File PDF versi lama sengaja TIDAK dihapus
+    #     agar versi lama tetap bisa dibuka/diunduh dari riwayat.
+    new_cv = GeneratedCV(
+        candidate_id=candidate_id,
+        application_id=application_id,
+        template_used="altek_standard",
+        language=language.upper(),
+        summary_source=final_summary_source,
+        summary_text=final_summary_text,
+        file_url=file_url,
+        drive_item_id=drive_item_id,
+        generated_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    db.add(new_cv)
+    db.flush()
+    return new_cv
