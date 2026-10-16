@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import HTTPException
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -328,6 +328,16 @@ def _get_excel_response_for_candidates(
     ws2 = wb.create_sheet(title="Catatan")
 
     note_header_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    # Zebra fills: alternating light backgrounds per candidate group
+    zebra_fills = [
+        PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid"),  # white
+        PatternFill(start_color="F0F4FF", end_color="F0F4FF", fill_type="solid"),  # light blue
+    ]
+    name_font_bold = Font(bold=True)
+    center_middle = Alignment(horizontal="center", vertical="center")
+    top_left = Alignment(vertical="top", wrap_text=True)
+    top_center = Alignment(horizontal="center", vertical="top")
+
     note_headers = [
         "No",
         "Nama Kandidat",
@@ -346,24 +356,26 @@ def _get_excel_response_for_candidates(
 
     ws2.row_dimensions[1].height = 30
 
-    note_row_idx = 2
-    for candidate in candidates:
-        # Row: catatan dari tabel candidate (Catatan Recruiter)
-        if candidate.notes and candidate.notes.strip():
-            ws2.append([
-                note_row_idx - 1,
-                candidate.full_name or "",
-                "Catatan Recruiter",
-                "",
-                "",
-                candidate.updated_at.strftime("%d-%m-%Y") if candidate.updated_at else "",
-                candidate.notes,
-            ])
-            ws2.cell(row=note_row_idx, column=7).alignment = wrap_align
-            note_row_idx += 1
+    # ── Build rows grouped per candidate first, then write with merge ────────
+    # Each entry: (candidate_name, source, position, stage, date_str, notes_text)
+    CandidateNoteGroup = list  # list of (source, position, stage, date_str, notes)
 
-        # Rows: catatan dari stage_history
-        for app in (candidate.applications or []):
+    candidate_note_groups: list[tuple[str, CandidateNoteGroup]] = []
+
+    for candidate in candidates:
+        rows: CandidateNoteGroup = []
+
+        # 1. Catatan recruiter (from candidate.notes)
+        if candidate.notes and candidate.notes.strip():
+            date_str = candidate.updated_at.strftime("%d-%m-%Y") if candidate.updated_at else ""
+            rows.append(("Catatan Recruiter", "", "", date_str, candidate.notes))
+
+        # 2. Catatan dari setiap stage_history, sorted by application then created_at
+        sorted_apps = sorted(
+            candidate.applications or [],
+            key=lambda a: a.created_at or datetime.min,
+        )
+        for app in sorted_apps:
             position_title = app.position.title if app.position else ""
             sorted_histories = sorted(
                 app.stage_histories or [],
@@ -371,25 +383,69 @@ def _get_excel_response_for_candidates(
             )
             for h in sorted_histories:
                 if h.notes and h.notes.strip():
-                    date_str = h.created_at.strftime("%d-%m-%Y") if h.created_at else ""
-                    ws2.append([
-                        note_row_idx - 1,
-                        candidate.full_name or "",
-                        "Catatan Tahapan Seleksi",
-                        position_title,
-                        h.stage_name,
-                        date_str,
-                        h.notes,
-                    ])
-                    ws2.cell(row=note_row_idx, column=7).alignment = wrap_align
-                    note_row_idx += 1
+                    h_date = h.created_at.strftime("%d-%m-%Y") if h.created_at else ""
+                    rows.append(("Catatan Tahapan Seleksi", position_title, h.stage_name, h_date, h.notes))
 
-    # Auto-adjust column widths for Sheet 2
-    col_widths = [5, 25, 25, 25, 25, 15, 60]
+        if rows:
+            candidate_note_groups.append((candidate.full_name or "", rows))
+
+    # ── Write rows with merge + zebra striping ────────────────────────────────
+    note_row_idx = 2
+    candidate_seq = 0  # for zebra alternation
+
+    for cand_name, rows in candidate_note_groups:
+        fill = zebra_fills[candidate_seq % 2]
+        candidate_seq += 1
+        group_start = note_row_idx
+        group_end = note_row_idx + len(rows) - 1
+
+        for row_offset, (source, position, stage, date_str, notes_text) in enumerate(rows):
+            absolute_row = note_row_idx + row_offset
+            # Col A: sequential number — only on first row of group
+            seq_no = candidate_seq  # one number per candidate group
+            ws2.cell(row=absolute_row, column=1, value=seq_no if row_offset == 0 else "")
+            ws2.cell(row=absolute_row, column=1).fill = fill
+            ws2.cell(row=absolute_row, column=1).alignment = top_center
+
+            # Col B: name — written only on first row; merged later
+            ws2.cell(row=absolute_row, column=2, value=cand_name if row_offset == 0 else "")
+            ws2.cell(row=absolute_row, column=2).font = name_font_bold if row_offset == 0 else Font()
+            ws2.cell(row=absolute_row, column=2).fill = fill
+            ws2.cell(row=absolute_row, column=2).alignment = top_center if row_offset == 0 else Alignment(vertical="top")
+
+            # Cols C–G: catatan detail
+            for col_offset, val in enumerate([source, position, stage, date_str, notes_text], start=3):
+                c = ws2.cell(row=absolute_row, column=col_offset, value=val)
+                c.fill = fill
+                c.alignment = top_left if col_offset == 7 else Alignment(vertical="top")
+
+        # Merge A and B across the group rows (only if more than 1 row)
+        if len(rows) > 1:
+            ws2.merge_cells(
+                start_row=group_start, start_column=1,
+                end_row=group_end, end_column=1,
+            )
+            ws2.merge_cells(
+                start_row=group_start, start_column=2,
+                end_row=group_end, end_column=2,
+            )
+            # Re-apply alignment on the merged cell (merge resets it)
+            ws2.cell(row=group_start, column=1).alignment = center_middle
+            ws2.cell(row=group_start, column=2).alignment = center_middle
+
+        # Add a subtle top border on the first row of each group (col A–G)
+        group_border_top = Border(top=Side(style="medium", color="AAAAAA"))
+        for col in range(1, 8):
+            ws2.cell(row=group_start, column=col).border = group_border_top
+
+        note_row_idx += len(rows)
+
+    # ── Column widths for Sheet 2 ─────────────────────────────────────────────
+    col_widths = [5, 28, 25, 28, 25, 13, 62]
     for col_num, width in enumerate(col_widths, 1):
         ws2.column_dimensions[ws2.cell(row=1, column=col_num).column_letter].width = width
 
-    ws2.freeze_panes = "A2"
+    ws2.freeze_panes = "C2"
 
     # Save to bytes buffer
     buffer = BytesIO()
