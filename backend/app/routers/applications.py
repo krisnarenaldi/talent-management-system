@@ -244,7 +244,12 @@ def list_applications(
     total = query.count()
     items = query.order_by(Application.created_at.desc()).offset(skip).limit(limit).all()
 
-    serialized = [ApplicationResponse.model_validate(item).model_dump(mode="json") for item in items]
+    serialized = []
+    for item in items:
+        data = ApplicationResponse.model_validate(item).model_dump(mode="json")
+        # Inject candidate_email from the joined ORM relationship (Pydantic doesn't serialize the object)
+        data["candidate_email"] = item.candidate.email if item.candidate else None
+        serialized.append(data)
     resp = JSONResponse(content=serialized)
     resp.headers["X-Total-Count"] = str(total)
     return resp
@@ -861,6 +866,13 @@ def update_stage(
         handler_id=current_user.id,
     )
     db.add(history)
+
+    # Sync gaji ke tabel candidate (source of truth)
+    # Jika user mengisi salary di form tahapan, update langsung ke candidate
+    if payload.salary_current_input is not None:
+        application.candidate.current_salary = payload.salary_current_input
+    if payload.salary_expected_input is not None:
+        application.candidate.expected_salary = payload.salary_expected_input
 
     # Update application (hanya jika berbeda stage)
     if not is_same_stage:

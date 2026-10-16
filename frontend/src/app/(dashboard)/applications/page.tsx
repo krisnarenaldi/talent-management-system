@@ -367,7 +367,7 @@ function ApplicationsContent() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-semibold text-gray-900">{application.candidate_name || "-"}</p>
-                        <p className="text-xs text-gray-500">{application.candidate?.email || "-"}</p>
+                        <p className="text-xs text-gray-500">{application.candidate_email || "-"}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{application.position_title || "-"}</td>

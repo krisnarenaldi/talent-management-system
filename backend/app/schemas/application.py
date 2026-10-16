@@ -101,6 +101,7 @@ class ApplicationResponse(BaseModel):
     ai_screening: AIScreeningInfo | None = None
     is_blacklisted: bool = False
     blacklist_reason: str | None = None
+    candidate_email: str | None = None
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod

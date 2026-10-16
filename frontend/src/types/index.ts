@@ -174,6 +174,7 @@ export interface Application {
   id: string;
   candidate_id: string;
   candidate_name?: string;
+  candidate_email?: string | null;
   position_id: string;
   position_title?: string;
   client_name?: string;
@@ -185,7 +186,6 @@ export interface Application {
   cv_submitted_to_pm_date?: string;
   created_at: string;
   updated_at?: string;
-  candidate?: Pick<Candidate, "id" | "full_name" | "email">;
   ai_score?: number | null;
   ai_screening_status?: string | null;
   ai_screening?: {
