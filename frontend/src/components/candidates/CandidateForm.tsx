@@ -258,14 +258,16 @@ export default function CandidateForm({
       };
 
       let targetId = candidateId;
+      let isBlacklisted = false;
+      let isDuplicate = false;
 
       if (mode === "create") {
         const response = await api.post("/api/v1/candidates", candidatePayload);
         const createdCandidate = response.data?.candidate ?? response.data ?? null;
         targetId = createdCandidate?.id ?? null;
 
-        const isBlacklisted = Boolean(response.data?.is_blacklisted);
-        const isDuplicate = Boolean(response.data?.is_duplicate);
+        isBlacklisted = Boolean(response.data?.is_blacklisted);
+        isDuplicate = Boolean(response.data?.is_duplicate);
 
         if (!preventNavigationOnCreate) {
           if (isBlacklisted) {
@@ -274,10 +276,6 @@ export default function CandidateForm({
           if (isDuplicate) {
             showToast("warning", "Kemungkinan kandidat duplikat terdeteksi.");
           }
-        }
-
-        if (onCreateResult && targetId) {
-          onCreateResult({ candidateId: targetId, isBlacklisted, isDuplicate });
         }
       } else if (candidateId) {
         await api.put(`/api/v1/candidates/${candidateId}`, candidatePayload);
@@ -355,7 +353,11 @@ export default function CandidateForm({
       queryClient.invalidateQueries({ queryKey: ["candidate-education", targetId] });
       queryClient.invalidateQueries({ queryKey: ["candidate-experience", targetId] });
       queryClient.invalidateQueries({ queryKey: ["candidate-applications", targetId] });
-      if (!(mode === "create" && preventNavigationOnCreate)) {
+      if (mode === "create" && preventNavigationOnCreate) {
+        if (onCreateResult && targetId) {
+          onCreateResult({ candidateId: targetId, isBlacklisted, isDuplicate });
+        }
+      } else {
         router.push(`/candidates/${targetId}`);
       }
     } catch (error) {
