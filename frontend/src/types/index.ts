@@ -56,6 +56,9 @@ export interface Position {
   contract_duration_months: number | null;
   is_active: boolean;
   ai_scoring_config: AIScoringConfig | null;
+  salary_budget?: number | null;
+  location?: string | null;
+  client_user_names?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -553,4 +556,19 @@ export interface CVGenerateResponse extends GeneratedCV {
   /** True if the existing cached CV was returned without regeneration. */
   was_cached: boolean;
   message: string;
+}
+
+// --- Bulk CV Upload (TASK-20.3) ---
+export interface FileUploadStatus {
+  file: File;
+  status: 'pending' | 'uploading' | 'done' | 'error';
+  errorMessage?: string;
+  screeningId?: string;
+  screeningStatus?: AIScreeningResult['status'];
+}
+
+export interface BulkUploadResult {
+  message: string;
+  screening_ids: string[];
+  failed_files?: string[];
 }
