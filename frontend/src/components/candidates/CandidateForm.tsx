@@ -54,6 +54,12 @@ const candidateFormSchema = z.object({
 
 type CandidateFormValues = z.infer<typeof candidateFormSchema>;
 
+export interface CreateCandidateResult {
+  candidateId: string;
+  isBlacklisted: boolean;
+  isDuplicate: boolean;
+}
+
 const defaultEducation = {
   id: "",
   institution: "",
@@ -95,9 +101,13 @@ async function fetchExperienceById(candidateId: string) {
 export default function CandidateForm({
   mode,
   candidateId,
+  onCreateResult,
+  preventNavigationOnCreate = false,
 }: {
   mode: "create" | "edit";
   candidateId?: string;
+  onCreateResult?: (result: CreateCandidateResult) => void;
+  preventNavigationOnCreate?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -254,11 +264,20 @@ export default function CandidateForm({
         const createdCandidate = response.data?.candidate ?? response.data ?? null;
         targetId = createdCandidate?.id ?? null;
 
-        if (response.data?.is_blacklisted) {
-          showToast("warning", "Kandidat masuk daftar blacklist. Mohon cek kembali sebelum lanjut.");
+        const isBlacklisted = Boolean(response.data?.is_blacklisted);
+        const isDuplicate = Boolean(response.data?.is_duplicate);
+
+        if (!preventNavigationOnCreate) {
+          if (isBlacklisted) {
+            showToast("warning", "Kandidat masuk daftar blacklist. Mohon cek kembali sebelum lanjut.");
+          }
+          if (isDuplicate) {
+            showToast("warning", "Kemungkinan kandidat duplikat terdeteksi.");
+          }
         }
-        if (response.data?.is_duplicate) {
-          showToast("warning", "Kemungkinan kandidat duplikat terdeteksi.");
+
+        if (onCreateResult && targetId) {
+          onCreateResult({ candidateId: targetId, isBlacklisted, isDuplicate });
         }
       } else if (candidateId) {
         await api.put(`/api/v1/candidates/${candidateId}`, candidatePayload);
@@ -336,7 +355,9 @@ export default function CandidateForm({
       queryClient.invalidateQueries({ queryKey: ["candidate-education", targetId] });
       queryClient.invalidateQueries({ queryKey: ["candidate-experience", targetId] });
       queryClient.invalidateQueries({ queryKey: ["candidate-applications", targetId] });
-      router.push(`/candidates/${targetId}`);
+      if (!(mode === "create" && preventNavigationOnCreate)) {
+        router.push(`/candidates/${targetId}`);
+      }
     } catch (error) {
       showToast("error", getErrorMessage(error, "Gagal menyimpan data kandidat."));
     } finally {
