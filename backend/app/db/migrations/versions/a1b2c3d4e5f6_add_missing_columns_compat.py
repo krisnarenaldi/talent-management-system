@@ -5,7 +5,7 @@ on databases that were already migrated via baseline.
 
 Revision ID: a1b2c3d4e5f6
 Revises: f1a2b3c4d5e6
-Create Date: 2025-01-01 00:00:00.000000
+Create Date: 2025-01-01 00:00:00.000001
 """
 from typing import Sequence, Union
 
@@ -39,13 +39,13 @@ def upgrade() -> None:
         ADD COLUMN IF NOT EXISTS talent_pool_updated_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS talent_pool_updated_by UUID REFERENCES "user"(id);
 
-    -- ── position: ai_scoring_config ───────────────────────────────────────────
+    -- ── position: kolom yang ditambahkan setelah live ────────────────────────
     ALTER TABLE position
-        ADD COLUMN IF NOT EXISTS ai_scoring_config JSONB;
-
-    -- ── position: client_user_names ───────────────────────────────────────────
-    ALTER TABLE position
-        ADD COLUMN IF NOT EXISTS client_user_names JSONB DEFAULT '[]'::jsonb;
+        ADD COLUMN IF NOT EXISTS salary_budget           NUMERIC(15,2),
+        ADD COLUMN IF NOT EXISTS location                VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS job_description         TEXT,
+        ADD COLUMN IF NOT EXISTS client_user_names       JSONB DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS ai_scoring_config       JSONB;
 
     -- ── candidate: skills ─────────────────────────────────────────────────────
     ALTER TABLE candidate
@@ -83,6 +83,13 @@ def upgrade() -> None:
     -- ── employee_document: drive_item_id ──────────────────────────────────────
     ALTER TABLE employee_document
         ADD COLUMN IF NOT EXISTS drive_item_id VARCHAR(500);
+
+    -- ── generated_cv: model memakai template_used & file_url ─────────────────
+    -- Baseline keliru menamai kolom template_name/html_content/pdf_url;
+    -- model & service memakai template_used + file_url.
+    ALTER TABLE generated_cv
+        ADD COLUMN IF NOT EXISTS template_used  VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS file_url       VARCHAR(500);
 
     -- ── openai_usage_log ──────────────────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS openai_usage_log (
