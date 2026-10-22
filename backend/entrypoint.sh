@@ -46,6 +46,29 @@ echo "==> [entrypoint] Database siap."
 
 echo "==> [entrypoint] Menjalankan Alembic migration..."
 
+# Deteksi revision yang tidak dikenal di database (misal sisa dari migration lama
+# yang sudah dihapus). Jika ada, stamp ulang ke revision awal chain yang diketahui
+# sebelum menjalankan upgrade head.
+if python -m alembic current 2>&1 | grep -q "Can't locate revision"; then
+    echo "==> [entrypoint] Revision tidak dikenal terdeteksi. Melakukan stamp ke x2y3z4a5b6c7..."
+    python -c "
+import psycopg2, os
+conn = psycopg2.connect(
+    host=os.getenv('POSTGRES_HOST', 'pgbouncer'),
+    port=int(os.getenv('POSTGRES_PORT', 5432)),
+    dbname=os.getenv('POSTGRES_DB'),
+    user=os.getenv('POSTGRES_USER'),
+    password=os.getenv('POSTGRES_PASSWORD'),
+)
+cur = conn.cursor()
+cur.execute(\"UPDATE alembic_version SET version_num = 'x2y3z4a5b6c7'\")
+conn.commit()
+cur.close()
+conn.close()
+print('Stamp selesai.')
+"
+fi
+
 # Jalankan upgrade head. Jika gagal, exit dengan error (jangan stamp).
 python -m alembic upgrade head
 

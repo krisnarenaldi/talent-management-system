@@ -45,7 +45,20 @@
 	          kalimat serupa.
 	
 	
-	08775461198
+	docker compose logs -f backend
+	tms_backend  | ==> [entrypoint] Menunggu database siap...
+	tms_backend  | ==> [entrypoint] Database siap.
+	tms_backend  | ==> [entrypoint] Menjalankan Alembic migration...
+	tms_backend  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+	tms_backend  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+	tms_backend  | ERROR [alembic.util.messaging] Can't locate revision identified by 'v1w2x3y4z5a6'
+	tms_backend  | FAILED: Can't locate revision identified by 'v1w2x3y4z5a6'
+	
+	docker compose ps
+	NAME            IMAGE                      COMMAND                  SERVICE     CREATED              STATUS                           PORTS
+	tms_backend     tms-backend                "/app/entrypoint.sh …"   backend     2 minutes ago        Restarting (255) 2 seconds ago   
+	tms_frontend    tms-frontend               "docker-entrypoint.s…"   frontend    About a minute ago   Up About a minute (healthy)      3000/tcp
+	tms_pgbouncer   edoburu/pgbouncer:latest   "/entrypoint.sh /usr…"   pgbouncer   3 weeks ago          Up 5 days                        5432/tcp
 	
 	
 	
