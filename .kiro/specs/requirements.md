@@ -1,239 +1,188 @@
 # Requirements — Talent Management System (TMS)
-**Client:** Altek (Perusahaan Penyedia Jasa Rekrutmen / RPO)
-**Versi:** 1.0
-**Tanggal:** September 2026
+**Client:** Altek (Perusahaan Penyedia Jasa Rekrutmen / RPO)  
+**Versi:** 2.0 (Pasca-UAT Flow Revision)  
+**Tanggal:** Oktober 2026  
 
 ---
 
-## 1. Latar Belakang
+## 1. Latar Belakang & Revisi Alur v2.0
 
-Altek adalah perusahaan penyedia jasa rekrutmen yang menyalurkan talent ke perusahaan kliennya (mayoritas Bank). Seluruh proses rekrutmen — dari pencarian kandidat, screening CV, tracking pipeline interview, hingga monitoring karyawan outsource — saat ini dilakukan secara manual.
+Altek adalah perusahaan penyedia jasa rekrutmen yang menyalurkan talent ke perusahaan kliennya (mayoritas Bank dan institusi keuangan). Seluruh proses rekrutmen — dari pencarian kandidat, screening CV, tracking pipeline interview, hingga monitoring karyawan outsource — didigitalkan melalui TMS.
 
-TMS dibangun untuk mendigitalkan seluruh alur tersebut: database kandidat terpusat, standarisasi CV, pipeline rekrutmen end-to-end, blacklist, serta AI screening (bertahap).
-
----
-
-## 2. Roles & Akses
-
-| Role | Deskripsi Akses |
-|---|---|
-| **HR** | CRUD kandidat, upload dokumen, update tahapan rekrutmen, input catatan, generate CV standar |
-| **Manager** | Semua akses HR + approval blacklist, dashboard analytics, **Natural Language Search** (eksklusif) |
-| **Admin** | Kelola user & hak akses, master data (Client, Position, Blacklist Status Type, Agreement Type, CV template), export data |
-
-> Pihak klien Bank **tidak memiliki akses login** ke sistem — laporan dikirim manual oleh HR/Manager dalam bentuk Excel atau PDF.
+### Konteks Perubahan Alur v2.0 (Hasil UAT Klien):
+Berdasarkan evaluasi UAT bersama klien, alur kerja rekrutmen di lapangan memiliki karakteristik penting:
+1. **Sourcing Multikanal Massal:** HR memasang lowongan kerja di berbagai job portal eksternal (Glints, LinkedIn, Jobstreet, Indeed, dsb.) dan mengunduh CV pelamar secara massal (*bulk download*).
+2. **Database Ingestion Pertama Kali:** HR membutuhkan tempat penampungan terpusat (CV Bank / Database Kandidat) untuk mengunggah puluhan hingga ratusan CV sekaligus tanpa harus langsung mengikat CV tersebut ke satu lowongan tertentu. Ekstraksi data (nama, kontak, pendidikan, pengalaman, skill) harus dilakukan otomatis oleh AI saat ingestion tanpa memicu penilaian kecocokan (*scoring*) posisi.
+3. **Penyortiran Talent Pool Pasca-Evaluasi HR:**
+   - Kandidat yang dinilai potensial dan cocok secara kualifikasi namun tidak sepakat di ekspektasi gaji dikelompokkan ke dalam **"Talent Pool"** agar dapat dihubungi kembali ketika ada lowongan dengan budget sesuai.
+   - Kandidat yang belum cocok dari segi skill atau pengalaman disimpan di dalam Database umum sebagai **"Kebutuhan Masa Depan" (Future Leads)**.
+4. **Sourcing Fleksibel ke Lowongan:** Ketika ada posisi baru, HR dapat menarik kandidat dari Talent Pool maupun Database umum ke dalam pipeline lamaran, baik melalui pencarian manual (*bulk assign*) maupun melalui asisten rekomendasi AI (*AI Sourcing & Matching*).
 
 ---
 
-## 3. Kebutuhan Fungsional
+## 2. Roles & Hak Akses (RBAC)
+
+| Role | Deskripsi Hak Akses Utama | Hak Akses Spesifik Fitur AI & Sourcing |
+|---|---|---|
+| **HR** | • CRUD kandidat & upload dokumen<br>• Bulk upload CV ke Database umum<br>• Set/Unset status Talent Pool<br>• Assign kandidat ke lowongan kerja<br>• Update tahapan interview & pipeline lamaran<br>• Generate CV standar Altek | • Menjalankan AI Sourcing di `/applications/new`<br>• **TIDAK DAPAT** melihat atau mengakses Toggle "Jalankan AI Screening" saat Assign manual (otomatis 0 token)<br>• Tidak memiliki akses Natural Language Search |
+| **Manager** | • Seluruh akses HR<br>• Approval pengajuan blacklist<br>• Dashboard analytics lengkap<br>• Natural Language Search (eksklusif) | • **DAPAT melihat dan mengatur Toggle "Jalankan AI Screening"** saat bulk assign kandidat ke lowongan<br>• Konfigurasi bobot penilaian AI per posisi |
+| **Admin** | • Kelola akun user & hak akses<br>• Master data (Client, Position, Blacklist Status, Agreement Type, Template CV)<br>• Export data sistem | • **DAPAT melihat dan mengatur Toggle "Jalankan AI Screening"** saat bulk assign kandidat ke lowongan<br>• Akses penuh audit log dan monitoring penggunaan token API |
+
+> **Kebijakan Pihak Klien:** PIC/User dari perusahaan klien Bank **tidak memiliki akses login** langsung ke aplikasi. User klien dicatat sebagai master data referensi agar setiap lamaran terasosiasi dengan PIC spesifik dari sisi klien. Laporan progres rekrutmen dikirimkan oleh HR/Manager Altek dalam format Excel/PDF.
+
+---
+
+## 3. Kebutuhan Fungsional (Functional Requirements)
 
 ### FR-01: Autentikasi & Manajemen User
-- `FR-01.1` Login dengan email & password
-- `FR-01.2` Admin dapat CRUD user beserta role-nya
-- `FR-01.3` Role-based access control (RBAC) diterapkan di level API, bukan hanya UI
-- `FR-01.4` Session management dengan JWT (access token + refresh token)
+- `FR-01.1` Login dengan email & password terenkripsi.
+- `FR-01.2` Admin dapat melakukan CRUD user beserta penetapan rolenya (`admin`, `manager`, `hr`).
+- `FR-01.3` Role-Based Access Control (RBAC) ditegakkan secara ketat di level API FastAPI dependency (`require_role`), bukan hanya penyembunyian komponen di antarmuka frontend.
+- `FR-01.4` Manajemen sesi menggunakan JWT (Access Token 15 menit + Refresh Token 7 hari) disimpan dalam httpOnly secure cookie.
 
 ### FR-02: Manajemen Master Data (Admin)
-- `FR-02.1` CRUD data Client (nama, industri, PIC, kontak PIC)
-- `FR-02.2` CRUD Position per Client (judul, requirement, tipe pekerjaan, durasi kontrak, status aktif)
-- `FR-02.3` CRUD Blacklist Status Type (master data, bisa ditambah/dinonaktifkan, tidak hardcoded)
-- `FR-02.4` CRUD Agreement Type / Jenis Perjanjian Altek-Klien (master data, bisa ditambah/dinonaktifkan)
-- `FR-02.5` Kelola template CV standar
+- `FR-02.1` CRUD data Client (nama perusahaan, industri, PIC utama, kontak).
+- `FR-02.2` CRUD Position per Client (judul, requirement, job description, budget gaji, batas pengalaman, status aktif).
+- `FR-02.3` CRUD User Klien (PIC User spesifik dari pihak klien, misalnya "Joni", "Ahmad", yang bertindak sebagai pewawancara teknis/user di perusahaan klien).
+- `FR-02.4` CRUD Blacklist Status Type (master data dinamis untuk kategori pelanggaran kandidat).
+- `FR-02.5` CRUD Agreement Type / Jenis Perjanjian Altek-Klien (PKWT, PKWTT, Freelance, dll).
+- `FR-02.6` Kelola template CV standar Altek.
 
-### FR-03: Manajemen Database Kandidat
-- `FR-03.1` CRUD data kandidat: nama, email, telepon, NIK/KTP, domisili, foto, channel sumber (LinkedIn/Glints/Email/dll), gaji saat ini, gaji diharapkan, notice period
-- `FR-03.2` Riwayat pendidikan: bisa lebih dari satu entri (institusi, jurusan, tahun lulus, IPK)
-- `FR-03.3` Riwayat pengalaman kerja: bisa lebih dari satu entri (perusahaan, jabatan, periode, deskripsi)
-- `FR-03.4` Upload dokumen kandidat: CV asli, foto, KTP, KK, Ijazah, Transkrip, Sertifikat, Surat BI Checking (opsional) — disimpan sebagai baris terpisah per tipe dokumen agar fleksibel
-- `FR-03.5` Flag kelengkapan dokumen ("belum lengkap") dan flag kontak tidak dapat dihubungi
-- `FR-03.6` **Deteksi duplikat**: saat input kandidat baru, sistem mengecek kecocokan email & no. HP; jika cocok satu (bukan keduanya), tandai sebagai kemungkinan duplikat untuk review manual
-- `FR-03.7` Catatan bebas oleh recruiter per kandidat
-- `FR-03.8` Cek otomatis blacklist saat input kandidat baru: cocokkan berdasarkan email / no. HP / NIK, tampilkan warning jika match
-- `FR-03.9` **Bulk Upload CV (AI-Assisted Entry)**: HR dapat mengunggah banyak file CV (PDF) sekaligus di halaman `/applications/new` saat membuat lamaran baru untuk suatu posisi. Alur upload:
-  1. HR membuka `/applications/new`, memilih posisi (termasuk nama client/perusahaan)
-  2. HR mengupload satu atau banyak file CV sekaligus (multi-file)
-  3. FastAPI menerima file, mengupload ke OneDrive (folder terstruktur per posisi/client), mencatat status `menunggu_screening_ai` ke DB, lalu mengirim webhook ke n8n
-  4. n8n memproses setiap CV secara asinkron: download dari OneDrive → parsing teks (PyMuPDF/OCR) → kirim ke LLM → terima JSON terstruktur + skor → POST ke FastAPI `/internal/ai/extraction-result`
-  5. Setelah selesai, sistem membuat notifikasi in-app untuk HR yang mengupload
-  6. HR membuka halaman review, melihat hasil ekstraksi AI di sebelah form kandidat, mengedit tiap field bila perlu, lalu memutuskan aksi (lihat FR-08.8)
-  - Upload melalui FastAPI (bukan langsung ke Drive) agar setiap file terasosiasi ke posisi, user, dan waktu upload yang jelas (audit trail)
+### FR-03: Manajemen Database Kandidat & Talent Pool (Diperbarui v2.0)
+- `FR-03.1` CRUD data profil kandidat: nama lengkap, email, telepon, NIK KTP, tanggal lahir, tempat lahir, jenis kelamin, status pernikahan, domisili, foto, channel sumber (LinkedIn, Glints, Jobstreet, dll), gaji saat ini, gaji yang diharapkan, notice period, dan catatan bebas recruiter.
+- `FR-03.2` Riwayat pendidikan multi-entri (institusi, jurusan, tahun kelulusan, IPK).
+- `FR-03.3` Riwayat pengalaman kerja multi-entri (perusahaan, jabatan, periode kerja, deskripsi pekerjaan).
+- `FR-03.4` Upload dokumen kandidat per baris tipe: CV Asli, Foto, KTP, KK, Ijazah, Transkrip, Sertifikat, dan Hasil BI Checking.
+- `FR-03.5` Deteksi duplikasi otomatis berdasarkan kecocokan email, nomor HP, atau NIK KTP.
+- `FR-03.6` Cek otomatis status blacklist saat input atau assign kandidat.
+- `FR-03.7` **Bulk Upload CV Mandiri ke Database (CV Ingestion di `/candidates/new`):**
+  - HR/Manager/Admin dapat mengunggah file CV (PDF/DOCX) secara massal (hingga 20 file per batch) langsung ke Database Kandidat tanpa harus memilih posisi pekerjaan dan tanpa memilih sumber lamaran.
+  - Sistem melakukan validasi format dan ukuran file (maksimal 5 MB per file).
+  - Sistem mengekstrak teks PDF/DOCX dan memanggil model LLM ekstraksi untuk mengidentifikasi field entitas: Nama, Email, Telepon, NIK KTP, Skill, Riwayat Pendidikan, dan Riwayat Pengalaman Kerja.
+  - **Deteksi duplikasi otomatis:** Setelah ekstraksi, sistem memeriksa kecocokan email, nomor HP, atau NIK KTP dengan kandidat yang sudah ada di database. Jika ditemukan duplikat, record `ai_screening_result` diberi status `duplikat` dan ditautkan ke kandidat existing.
+  - **Cek blacklist otomatis:** Sistem memeriksa status blacklist aktif berdasarkan email, nomor HP, atau NIK KTP. Jika kandidat terblacklist, record diberi status `blacklisted` dengan catatan alasan pelanggaran.
+  - Data hasil ekstraksi (jika lolos duplikat dan blacklist) otomatis diinput ke tabel `candidate`, `candidate_education`, `candidate_experience`, dan menyimpan file fisik CV asli ke storage OneDrive.
+  - Jika terjadi kegagalan pembacaan teks (misal: PDF/DOCX hasil scan tanpa OCR atau dokumen rusak), sistem memberikan peringatan kesalahan status (status: `error`) dan menyediakan tautan langsung untuk input/koreksi data manual kandidat.
+- `FR-03.8` **Manajemen Status Talent Pool:**
+  - Setiap kandidat memiliki flag status pool: `pool_status` (`database`, `talent_pool`, `future_lead`).
+  - Di tabel halaman `/candidates`, pada kolom "Aksi" tersedia kontrol cepat (toggle/checkbox/modal) untuk mengubah flag kandidat menjadi **"Talent Pool"**.
+  - Saat kandidat dimasukkan ke Talent Pool, sistem menyediakan opsi input alasan:
+    1. *Gaji Tidak Sesuai* (kandidat kompeten namun ekspektasi gaji di atas budget).
+    2. *Kebutuhan Masa Depan* (skill/pengalaman belum sesuai dengan lowongan yang dibuka saat ini).
+    3. *Lainnya* (+ catatan bebas recruiter).
+- `FR-03.9` **Halaman Dedicated "Talent Pool":**
+  - Menu navigasi baru di sidebar bernama **"Talent Pool"**.
+  - Halaman ini menampilkan tabel kandidat yang memiliki status `pool_status = 'talent_pool'`.
+  - Fitur pencarian, filter kota/domisili, filter pendidikan, filter pengalaman, dan filter rentang gaji berfungsi sama persis dengan tabel database utama `/candidates`.
+- `FR-03.10` **Bulk Assign Kandidat ke Lowongan (Manual Push):**
+  - Di halaman `/candidates` dan `/talent-pool`, HR dapat memilih satu atau beberapa kandidat menggunakan checkbox baris tabel.
+  - Tombol aksi massal: **"Assign ke Lowongan"**.
+  - Modal konfirmasi menampilkan: daftar nama kandidat terpilih, dropdown pencarian posisi aktif, peringatan blacklist/cooldown, dan **Toggle "Jalankan AI Screening"**:
+    - **Pembatasan Hak Akses:** Toggle ini **HANYA muncul dan dapat diatur oleh role Admin dan Manager**. Role **HR tidak dapat melihat keberadaan toggle ini** (disembunyikan dari UI dan dijamin non-aktif di backend).
+    - **Jika Toggle Non-Aktif (atau user HR):** Sistem langsung membuat relasi `Application` di tahap "Dijadwalkan Interview" dengan **0 konsumsi token API**.
+    - **Jika Toggle Aktif (Admin/Manager):** Sistem membuat `Application` dan mendaftarkan task asinkron ke worker untuk menghitung skor kecocokan CV terhadap posisi terkait.
 
 ### FR-04: Tracking Pipeline Rekrutmen
-- `FR-04.1` Satu kandidat dapat memiliki lebih dari satu Application (terhadap posisi/waktu berbeda) tanpa menimpa riwayat
-- `FR-04.2` Setiap perubahan tahapan disimpan di Stage_History dengan timestamp & user yang mengupdate (audit trail)
-- `FR-04.3` Tahapan pipeline yang di-track per Application:
+- `FR-04.1` Satu kandidat dapat memiliki beberapa record `Application` terhadap posisi/waktu berbeda tanpa menimpa riwayat masa lalu.
+- `FR-04.2` Setiap perubahan tahapan pipeline dicatat ke `Stage_History` lengkap dengan timestamp, catatan hasil (*pass, fail, negosiasi, reschedule*), dan user yang melakukan update (audit trail).
+- `FR-04.3` Tahapan pipeline berurutan:
+  1. *Dijadwalkan Interview*
+  2. *Konfirmasi Kehadiran* (OK / Reschedule)
+  3. *Interview HR* (Input gaji saat ini, gaji diharapkan, catatan; Lolos ke User / Simpan ke Talent Pool / Tolak)
+  4. *Psikotest* (Opsional sesuai posisi; Lolos / Tidak Lolos)
+  5. *Interview User (Client)* (Tanggal, catatan evaluasi user klien)
+  6. *Offering* (Lolos Kontrak / Negosiasi)
+  7. *Tanda Tangan Kontrak*
+  8. *Onboarding*
+  9. *Existing* (Karyawan aktif)
+- `FR-04.4` Ketika Application mencapai status *Existing*, sistem otomatis membuat record baru di tabel `Employee`.
 
-| # | Tahapan | Field Input |
-|---|---|---|
-| 1 | Dijadwalkan Interview | Tanggal jadwal |
-| 2 | Konfirmasi Kehadiran | Status: OK / Reschedule (+ form tanggal baru jika reschedule) |
-| 3 | Interview HR/Recruiter | Gaji saat ini, gaji diharapkan, catatan bebas; radio: Lanjut / Not Recommended |
-| 4 | Psikotest | Tanggal psikotest; radio: Lolos / Tidak Lolos |
-| 5 | Interview User (Client) | Tanggal, catatan |
-| 6 | Offering | Radio: Lolos Kontrak / Negosiasi (sub-status: OK / Not OK) |
-| 7 | Tanda Tangan Kontrak | Tanggal TTD |
-| 8 | Onboarding | Tanggal onboarding |
-| 9 | Existing | Status karyawan aktif (trigger pembuatan Employee record) |
-
-- `FR-04.4` Saat Application mencapai tahap **Existing**, sistem otomatis membuat **Employee record** baru dengan data awal dari Candidate
-
-### FR-05: Blacklist
-- `FR-05.1` HR/Manager dapat menambah kandidat ke daftar blacklist dengan memilih status type, mengisi alasan, catatan, dan tanggal
-- `FR-05.2` Approval blacklist ada di tangan Manager
-- `FR-05.3` Status blacklist default (seed data): Menolak Offer Tanpa Alasan Jelas, Tidak Hadir Interview Tanpa Konfirmasi, Terbukti Manipulasi Data, Bermasalah di Tempat Kerja Client, Referensi Negatif
-- `FR-05.4` Admin dapat menambah/menonaktifkan jenis status blacklist kapan saja tanpa deployment ulang
+### FR-05: Blacklist & Cooldown Management
+- `FR-05.1` HR/Manager dapat mengajukan kandidat ke daftar blacklist dengan memilih jenis pelanggaran, alasan detail, dan tanggal.
+- `FR-05.2` Persetujuan (*approval*) blacklist berada di tangan Manager.
+- `FR-05.3` **Cooldown Enforcement:** Kandidat yang pernah ditolak (*rejected*) pada posisi yang sama dalam jangka waktu 6 bulan memiliki masa cooldown. Sistem memunculkan dialog konfirmasi override manual bagi HR/Manager.
+- `FR-05.4` Kandidat blacklist aktif yang disetujui akan memunculkan modal peringatan keras saat akan dimasukkan ke suatu lowongan.
 
 ### FR-06: Export & Laporan
-- `FR-06.1` Export seluruh atau sebagian database kandidat ke Excel, dengan filter: posisi, status, periode, dll
-- `FR-06.2` Laporan kandidat dengan data belum lengkap
-- `FR-06.3` Export pipeline rekrutmen per posisi/periode
+- `FR-06.1` Export data kandidat ke Excel dengan filter dinamis (posisi, domisili, rentang gaji, status talent pool, periode).
+- `FR-06.2` Export data pipeline lamaran per posisi/periode untuk pelaporan berkala ke pihak klien Bank.
 
-### FR-07: Standarisasi CV (Fase 2)
-- `FR-07.1` Generate CV standar sesuai template Altek, tanpa PII (email/no. HP dihilangkan)
-- `FR-07.2` Foto kandidat diupload **manual** oleh HR (bukan diekstrak otomatis dari PDF) — keputusan klien
-- `FR-07.3` Jika foto belum diupload, layout CV menyesuaikan otomatis (tidak ada slot kosong)
-- `FR-07.4` Summary/ringkasan kandidat: bisa ditulis manual oleh HR atau digenerate AI, dengan pilihan bahasa (ID/EN)
+### FR-07: Standarisasi CV Altek
+- `FR-07.1` Otomatisasi generate format CV Altek tanpa informasi kontak privat (PII redaction: no HP dan email disembunyikan untuk keperluan submission ke klien).
+- `FR-07.2` Foto kandidat diunggah secara manual oleh HR (tidak dipotong paksa dari PDF).
+- `FR-07.3` Ringkasan kualifikasi profesional dapat digenerate secara otomatis via AI atau ditulis manual oleh recruiter.
 
-### FR-08: AI Screening & Ekstraksi CV (Fase 3)
-- `FR-08.1` Ekstraksi teks dari PDF menggunakan PyMuPDF/pdfplumber (text-based PDF); untuk CV hasil scan, gunakan OCR biasa (Tesseract/PaddleOCR) terlebih dahulu — **bukan model vision LLM** (lebih murah, sesuai keputusan klien). Logic parsing ditempatkan di FastAPI sebagai internal endpoint (bukan di dalam container n8n) — n8n berperan sebagai orchestrator alur, bukan processing engine
-- `FR-08.2` AI (model text-only) mengekstrak field terstruktur: nama, kontak, pendidikan, pengalaman, skill → mengisi kolom database
-- `FR-08.3` **Wajib ada UI review/edit** sebelum data hasil ekstraksi AI tersimpan final (human-in-the-loop). Komponen `AIExtractionReview` menampilkan hasil AI di sebelah form kandidat; HR bisa edit tiap field sebelum simpan
-- `FR-08.4` AI mencocokkan profil kandidat dengan requirement posisi dan memberi scoring/ranking. Skor bersifat **per-posisi**, dikonfigurasi oleh Admin/Manager di master data posisi (`ai_scoring_config` JSON pada tabel `position`), mencakup: bobot per dimensi (pendidikan, lama pengalaman, kecocokan skill, relevansi domain), required skills, min pengalaman, dan threshold skor untuk tiap kategori keputusan
-- `FR-08.5` AI menyusun draft daftar "Project" dari pengalaman kerja kandidat; recruiter edit/setujui sebelum masuk CV final
-- `FR-08.6` Proses ekstraksi berjalan **asinkron** (antrian/queue) — tidak memblokir upload dan tidak membekukan UI
-- `FR-08.7` Estimasi biaya operasional AI: ~Rp 400–900 ribu/bulan untuk 200 CV/hari (text-only, tergantung model yang dipilih)
-- `FR-08.8` **Aksi HR berdasarkan skor AI** setelah review hasil ekstraksi:
-  - Skor ≥ threshold tinggi (default 80): badge "Rekomendasi Kuat" + tombol **"Terima & Buat Lamaran"** (1-click — buat `candidate` + `application` + `ai_screening_result` sekaligus)
-  - Skor antara threshold rendah–tinggi (default 60–79): badge "Perlu Pertimbangan" + tombol **"Review & Buat Lamaran"** (buka form edit lengkap sebelum simpan)
-  - Skor < threshold rendah (default 60): badge "Kurang Sesuai" + tombol **"Simpan Sebagai Kandidat"** (buat `candidate` saja, tanpa `application`) dan **"Tetap Proses"** (override manual)
-  - HR/Manager **selalu bisa override** keputusan AI apapun nilainya — skor hanya rekomendasi, bukan penentu otomatis
-- `FR-08.9` Hasil AI screening ditampilkan di halaman `/applications`:
-  - List view: kolom/badge **"AI Score"** per baris lamaran dengan warna (hijau/kuning/merah) dan status pemrosesan (⏳ Memproses / ✅ Siap Review / ✓ Sudah Direview)
-  - Detail view `/applications/[id]`: panel "Hasil AI Screening" menampilkan skor angka, catatan AI, dan ringkasan match per dimensi
+### FR-08: AI Screening & Sourcing Terintegrasi di `/applications/new` (Diperbarui v2.0)
+- `FR-08.1` **Pusat Sourcing & Input Lamaran di `/applications/new`:**
+  - Halaman `/applications/new` memuat form input pemilihan:
+    1. **Posisi yang Dilamar:** Dropdown pencarian lowongan aktif.
+    2. **User Klien:** Dropdown PIC User dari sisi perusahaan klien (misal: "Joni", "Ahmad") sesuai master data posisi/klien.
+    3. **Sumber Kandidat:** Dropdown pilihan sumber:
+       - *Talent Pool:* Saring hanya kandidat yang berstatus `talent_pool`.
+       - *Database:* Saring kandidat reguler di database.
+       - *Semua:* Menggabungkan kandidat Talent Pool dan Database umum.
+- `FR-08.2` **Arsitektur Two-Stage Matching (Pencegahan Pemborosan Token):**
+  - Sistem dilarang keras mengirimkan seluruh baris database kandidat secara mentah (*brute-force*) ke model LLM.
+  - **Tahap 1 — SQL Hard Filter di Database (0 Token, Latensi < 10 ms):**
+    - Saring berdasarkan status pool yang dipilih di dropdown Sumber.
+    - Saring batas toleransi gaji: `expected_salary <= position.salary_budget` (atau kandidat yang belum menginput ekspektasi gaji).
+    - Filter domisili/lokasi sesuai kriteria lowongan jika disyaratkan.
+    - Otomatis mengecualikan kandidat yang berstatus Blacklist aktif dan kandidat yang sedang dalam masa Cooldown pada posisi tersebut.
+    - Dari 1.000+ kandidat, hasil saringan SQL mengerucutkan kandidat menjadi $\sim$20–50 kandidat potensial.
+  - **Tahap 2 — AI Scoring LLM Terfokus (Hemat Biaya Token):**
+    - Sistem mengambil maksimal Top 10–15 profil kandidat paling relevan dari Tahap 1.
+    - Model LLM hanya menilai 10–15 kandidat tersebut terhadap requirement posisi, menghasilkan skor kecocokan (0–100) dan ringkasan justifikasi singkat.
+    - Konsumsi token terkendali ketat ($\sim$10.000–15.000 token per pencarian, biaya $\approx$ Rp 50 – Rp 100).
+- `FR-08.3` **Antarmuka Rekomendasi & Pemilihan Kandidat:**
+  - Hasil screening AI ditampilkan tepat di bawah form dalam bentuk tabel interaktif:
+    - Kolom Checkbox pilihan.
+    - Nama Kandidat & Kontak.
+    - Skor AI (%) dengan badge visual (Hijau $\ge$ 80%, Kuning 60–79%, Merah < 60%).
+    - Ringkasan Alasan Kecocokan AI.
+  - HR dapat memilih beberapa kandidat sekaligus menggunakan checkbox, lalu menekan tombol **"Masukkan Kandidat ke Pipeline Lamaran"**.
+  - Seluruh kandidat terpilih otomatis dibuatkan entri `Application` dengan tahapan awal "Dijadwalkan Interview".
 
-### FR-09: Natural Language Search (Fase 3, Eksklusif Manager)
-- `FR-09.1` Hanya role **Manager** yang dapat mengakses fitur ini, dibatasi di level API (bukan hanya UI)
-- `FR-09.2` Manager mengetik query bahasa natural, AI menerjemahkan ke filter terstruktur (JSON) — **bukan** AI membuat SQL mentah langsung ke database (mencegah SQL injection & query tidak valid)
-- `FR-09.3` Filter terstruktur dieksekusi oleh backend sebagai query database normal
-- `FR-09.4` Manager dapat melihat filter yang dipakai AI (transparansi) untuk koreksi jika salah tafsir
+### FR-09: Natural Language Search (Eksklusif Manager)
+- `FR-09.1` Akses khusus role Manager untuk mencari kandidat di seluruh database menggunakan bahasa alami (contoh: *"Cari programmer Java senior minimal 4 tahun pengalaman di perbankan"*).
+- `FR-09.2` LLM menerjemahkan query bahasa alami ke parameter JSON terstruktur yang aman, kemudian dieksekusi sebagai query database terparameterisasi (mencegah SQL Injection).
 
-### FR-10: Dashboard Analytics (Fase 4)
-- `FR-10.1` Jumlah kandidat per tahapan, per posisi, per periode
-- `FR-10.2` Rasio lolos vs ditolak di tahap User Interview
-- `FR-10.3` Pola sederhana: posisi/sumber/karakteristik CV dengan rasio lolos tertinggi (analisis deskriptif)
-
-### FR-11: Modul Karyawan / Monitoring Outsource
-- `FR-11.1` Employee record dibuat otomatis saat Application mencapai tahap Existing, membawa data dari Candidate
-- `FR-11.2` Data karyawan mencakup: data pribadi & identitas, status & penempatan, riwayat kontrak, payroll, dokumen
-- `FR-11.3` **Usia dan masa kontrak berjalan dihitung otomatis** dari tanggal lahir & join date — tidak disimpan sebagai kolom statis
-- `FR-11.4` Riwayat kontrak disimpan per periode (Employee_Contract terpisah) — tidak menimpa data lama saat perpanjangan
-- `FR-11.5` Data payroll (THP, rekening, BPJS, NPWP) disimpan di tabel terpisah (Employee_Payroll) dengan akses dibatasi ke **Manager & Admin** saja
-- `FR-11.6` Dokumen karyawan disimpan sebagai baris per tipe (fleksibel, sama pola dengan dokumen kandidat)
-- `FR-11.7` Form input karyawan dibagi menjadi tab: **Data Pribadi / Kontrak / Payroll / Dokumen**
-
-### FR-12: Notifikasi In-App (Fase 3)
-- `FR-12.1` Sistem membuat notifikasi in-app untuk user HR yang melakukan upload CV saat semua CV dalam satu batch selesai diproses oleh AI (n8n POST ke `/internal/ai/extraction-result` → FastAPI buat record `notification` di DB)
-- `FR-12.2` Notifikasi ditampilkan via **bell icon di navbar** — badge angka menunjukkan jumlah notifikasi belum dibaca; frontend polling tiap 30 detik saat user aktif
-- `FR-12.3` Klik notifikasi langsung mengarahkan ke halaman `/applications/pending-review` (list semua hasil AI yang belum direview oleh HR)
-- `FR-12.4` Halaman `/applications/pending-review` menampilkan semua screening dengan status `siap_review`, diurutkan dari yang terlama menunggu, dilengkapi filter posisi dan tanggal upload
-- `FR-12.5` Manager juga menerima notifikasi yang sama sebagai pengawas (boleh dikonfigurasi — by default Manager menerima notifikasi untuk semua posisi yang ia kelola)
-- `FR-12.6` Notifikasi disimpan di tabel `notification` (DB): `id`, `user_id`, `type`, `message`, `link`, `is_read`, `created_at`
+### FR-10: Modul Karyawan & Monitoring Outsource
+- `FR-10.1` Terintegrasi otomatis dari kandidat yang lolos tahap *Existing*.
+- `FR-10.2` Manajemen data karyawan outsource: data identitas, penempatan di klien Bank, masa berlaku kontrak PKWT, dan payroll terenkripsi (hanya Manager/Admin).
 
 ---
 
-## 4. Kebutuhan Non-Fungsional
+## 4. Kebutuhan Non-Fungsional (Non-Functional Requirements)
 
-| ID | Kebutuhan | Detail |
+| ID | Kategori | Spesifikasi & Batasan |
 |---|---|---|
-| NFR-01 | **Asinkron** | Proses PDF parsing & AI ekstraksi harus masuk antrian (queue via n8n/Redis), tidak boleh memblokir HTTP request |
-| NFR-02 | **Keamanan data** | Enkripsi at-rest untuk dokumen (via OneDrive Business); akses berbasis role; audit log akses dokumen sensitif |
-| NFR-03 | **Audit trail** | Setiap perubahan status tahapan dicatat dengan `updated_by` (user ID) dan timestamp |
-| NFR-04 | **Volume** | ±200 CV/hari (~6.000/bulan); sistem dirancang menampung pertumbuhan moderat |
-| NFR-05 | **File storage** | OneDrive for Business (1TB, sudah dibayar klien) via Microsoft Graph API — server hanya simpan referensi `file_url`, bukan file fisik |
-| NFR-06 | **Backup** | `pg_dump` terjadwal harian, hasil disimpan ke OneDrive |
-| NFR-07 | **Connection pooling** | PgBouncer untuk mengelola koneksi dari Next.js + FastAPI + n8n ke PostgreSQL |
-| NFR-08 | **Monitoring** | Pantau disk, RAM, CPU, kuota OneDrive sejak awal |
-| NFR-09 | **UU PDP** | Perlu kebijakan retensi data kandidat yang tidak lolos (open question, perlu konfirmasi klien) |
+| **NFR-01** | **Asinkron & Queue** | Semua pemrosesan file CV massal dan AI scoring berjalan asinkron melalui antrean Arq worker + Redis. Request HTTP upload harus return dalam waktu $< 2$ detik. |
+| **NFR-02** | **Efisiensi Token AI** | Sistem menjamin konsumsi token untuk pencarian kandidat tidak melebihi batas 20.000 token per request melalui arsitektur penyaringan bertingkat (*Two-Stage Matching*). |
+| **NFR-03** | **Role Enforced Security** | Fitur yang dibatasi role (Toggle AI score, approval blacklist, akses payroll) harus divalidasi ganda: di level komponen UI Next.js dan di level middleware dependency FastAPI. |
+| **NFR-04** | **Penyimpanan Dokumen** | Seluruh dokumen fisik disimpan di Microsoft OneDrive for Business via Microsoft Graph API (atau storage lokal di environment staging). Database hanya menyimpan metadata dan URL referensi. |
+| **NFR-05** | **Audit Trail** | Setiap perubahan tahapan lamaran, pengubahan status talent pool, dan assigning posisi mencatat `updated_by` dan `created_at`. |
 
 ---
 
-## 5. Infrastruktur & Arsitektur
+## 5. Ringkasan Perubahan v2.0 vs v1.0
 
-### Stack
-| Layer | Teknologi |
-|---|---|
-| Frontend | Next.js (App Router) + TypeScript + Tailwind CSS |
-| Backend | FastAPI (Python) |
-| Database | PostgreSQL |
-| Automation / Queue | n8n (self-hosted) |
-| File Storage | OneDrive for Business via Microsoft Graph API |
-| Containerisasi | Docker Compose |
-| Server | Hostinger VPS (lihat opsi di bawah) |
-
-### Rekomendasi VPS Hostinger
-
-| Paket | Spek | Harga | Cocok untuk |
-|---|---|---|---|
-| **KVM 1** | 1 vCPU, 4 GB RAM, 50 GB NVMe | $6.49/mo | Terlalu kecil untuk semua komponen bersamaan — **tidak disarankan** |
-| **KVM 2** ✅ | 2 vCPU, 8 GB RAM, 100 GB NVMe | $8.99/mo | **Cukup untuk MVP/pilot** dengan Docker Compose |
-| **KVM 4** | 4 vCPU, 16 GB RAM, 200 GB NVMe | $12.99/mo | Disarankan jika volume naik atau tim HR >5 orang aktif bersamaan |
-
-**Kesimpulan: Ya, semua komponen bisa dalam satu server KVM 2**, dengan syarat:
-1. Proses PDF parsing/OCR berjalan asinkron (tidak sinkron di HTTP request)
-2. File dokumen tidak disimpan di disk VPS — semua ke OneDrive via Graph API
-3. Connection pooling dengan PgBouncer aktif
-4. Monitoring disk & RAM sejak awal
-5. Siapkan rencana upgrade ke KVM 4 jika tim berkembang
-
-### Deployment Architecture (Single Server, Docker Compose)
 ```
-┌─────────────────────────────── Hostinger VPS KVM 2 ────────────────────────────────┐
-│                                                                                      │
-│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────────────────┐ │
-│  │  Next.js    │   │   FastAPI   │   │ PostgreSQL  │   │   n8n (automation)      │ │
-│  │  (port 3000)│──▶│  (port 8000)│──▶│  (port 5432)│   │   (port 5678)           │ │
-│  └─────────────┘   └─────────────┘   └─────────────┘   └─────────────────────────┘ │
-│         │                │                  │                      │                 │
-│  ┌──────┴────────────────┴──────────────────┘                      │                 │
-│  │              PgBouncer (connection pooling)                      │                 │
-│  └─────────────────────────────────────────────────────────────────┘                 │
-│                                                                                      │
-│  Reverse Proxy: Nginx (port 80/443, SSL via Let's Encrypt)                          │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                    │                          │
-          Microsoft Graph API          LLM API (Anthropic/
-          (OneDrive for Business)      OpenAI/Gemini — eksternal)
+┌─────────────────────────────────┬────────────────────────────────────────────────────────┐
+│ Fitur / Alur                    │ Perubahan di Versi 2.0                                 │
+├─────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ Ingestion CV Massal             │ Dipindah ke /candidates/new (Database Umum), tanpa      │
+│                                 │ mewajibkan pilih posisi dan tanpa scoring posisi.      │
+├─────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ Konsep Talent Pool              │ Bukan tabel terpisah. Menggunakan flag `pool_status`   │
+│                                 │ di tabel `candidate` + halaman dedicated /talent-pool. │
+├─────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ Assign Kandidat ke Posisi       │ Disediakan Bulk Action Checkbox di tabel kandidat      │
+│                                 │ (bukan dropdown per baris yang sempit dan rawan).     │
+├─────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ Toggle AI Screening saat Assign │ Dibatasi hanya untuk Admin & Manager. Tersembunyi      │
+│                                 │ bagi role HR untuk menjaga efisiensi biaya token.      │
+├─────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ Form /applications/new          │ Berfungsi sebagai Pusat Sourcing: pilih Posisi, User   │
+│                                 │ Klien, Sumber (Pool/DB) + Two-Stage AI Matching.       │
+└─────────────────────────────────┴────────────────────────────────────────────────────────┘
 ```
-
-### Alur Integrasi File (OneDrive for Business)
-- **Upload**: Next.js → FastAPI → Microsoft Graph API → OneDrive
-- **Referensi**: `file_url` / `drive_item_id` disimpan di PostgreSQL
-- **Download**: FastAPI menghasilkan pre-authenticated URL (`@microsoft.graph.downloadUrl`) → browser langsung download dari OneDrive
-- File >4MB menggunakan *upload session* Graph API
-- Disk lokal VPS hanya dipakai sementara saat parsing PDF, kemudian file dihapus
-
----
-
-## 6. Fasa Implementasi
-
-| Fase | Fokus | Modul |
-|---|---|---|
-| **Fase 1 — MVP** | Database & pipeline inti | FR-01, FR-02, FR-03, FR-04, FR-05, FR-06, FR-11 (sebagian) |
-| **Fase 2 — Standarisasi CV** | Otomasi dokumen | FR-07 |
-| **Fase 3 — AI** | Ekstraksi & scoring | FR-08, FR-09 |
-| **Fase 4 — Analytics** | Insight & pola | FR-10 |
-
-Fase 1 bisa langsung dipakai operasional; Fase 2–4 dikembangkan menyusul tanpa memblokir go-live.
-
----
-
-## 7. Open Questions (Perlu Konfirmasi Klien)
-
-1. Apakah PM/klien Bank butuh akses login, atau laporan dikirim manual (Excel/PDF)?
-2. Kebijakan retensi data kandidat tidak lolos (terkait UU PDP)
-3. Target akurasi minimum AI ekstraksi sebelum dianggap siap produksi
-4. Contoh template CV standar Altek (disebutkan akan dilampirkan saat kickoff)
-5. Sample CV asli berbagai format untuk uji akurasi parsing (dibutuhkan sebelum Fase 3)
-6. Siapa admin M365 dari sisi Altek yang bisa mendaftarkan aplikasi di Microsoft Entra?
-7. Role mana yang boleh akses data payroll penuh (selain Manager & Admin)?
-8. Daftar baku jenis perjanjian (PKWT/PKWTT/PPJP dll) sebagai seed data Agreement Type

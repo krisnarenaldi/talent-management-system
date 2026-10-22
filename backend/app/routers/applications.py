@@ -35,7 +35,7 @@ from app.schemas.application import (
     StageHistoryResponse,
 )
 from app.services import employee_service
-from app.services.candidate_service import normalize_phone, _phone_variants
+from app.core.phone_utils import phone_variants
 from app.services.storage_service import get_storage_service
 from app.core.arq_pool import get_redis_pool
 
@@ -118,7 +118,7 @@ def _get_sibling_candidate_ids(db: Session, candidate: Candidate) -> set[str]:
         filters.append(Candidate.email == candidate.email)
     if candidate.phone:
         # Match any stored variant of this phone number
-        variants = _phone_variants(candidate.phone)
+        variants = phone_variants(candidate.phone)
         if variants:
             filters.append(Candidate.phone.in_(variants))
 
@@ -298,6 +298,17 @@ def create_application(
     if not position.is_active:
         raise HTTPException(status_code=400, detail="Posisi ini sudah tidak aktif.")
 
+    # PIC pewawancara mengikuti PIC yang sudah ditugaskan pada posisi.
+    client_user_name = position.resolve_pic_name(payload.client_user_name)
+    if payload.client_user_name and client_user_name is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"PIC '{payload.client_user_name}' tidak terdaftar pada posisi '{position.title}'. "
+                f"PIC yang tersedia: {', '.join(position.pic_names) or '(belum ada)'}."
+            ),
+        )
+
     # Validasi recruiter_id (jika diisi)
     if payload.recruiter_id:
         from app.models.user import User
@@ -367,6 +378,8 @@ def create_application(
         candidate_id=payload.candidate_id,
         position_id=payload.position_id,
         recruiter_id=payload.recruiter_id,
+        client_user_name=client_user_name,
+        client_user_id=payload.client_user_id if payload.client_user_id else None,
         current_stage=payload.current_stage,
     )
     db.add(application)

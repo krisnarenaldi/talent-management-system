@@ -5,17 +5,42 @@ import { useRouter, useParams } from "next/navigation";
 import { useState } from "react";
 import { useModalEscape } from "@/hooks/useModalEscape";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import Link from "next/link";
 import api from "@/lib/api";
-import type { AgreementType, Client, Position, PositionByClient } from "@/types";
+import type { AgreementType, Client, ClientPic, Position, PositionByClient } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
+import { getClientPics } from "@/lib/clients";
+import TagInput from "@/components/shared/TagInput";
+import RupiahInput from "@/components/shared/RupiahInput";
+
+const optionalNumber = z.preprocess(
+  (val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    if (typeof val === "number") return Number.isNaN(val) ? undefined : val;
+    if (typeof val === "string") {
+      const num = Number(val);
+      return Number.isNaN(num) ? undefined : num;
+    }
+    return val;
+  },
+  z.number().min(0, "Nilai tidak boleh negatif").optional(),
+);
+
+const optionalText = z.preprocess(
+  (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
+  z.string().optional(),
+);
+
+const clientUserNamesSchema = z
+  .array(z.string())
+  .min(1, "PIC klien wajib dipilih dari master klien");
 
 const positionCreateSchema = z.object({
   client_id: z.string().min(1, "Klien wajib dipilih"),
@@ -28,6 +53,11 @@ const positionCreateSchema = z.object({
       (val) => (val === "" || val === null || (typeof val === "number" && Number.isNaN(val)) ? undefined : val),
       z.number().optional().default(0),
     ),
+  salary_budget: optionalNumber,
+  location: optionalText,
+  client_user_names: clientUserNamesSchema,
+  ai_required_skills: z.array(z.string()).default([]),
+  ai_min_experience_years: optionalNumber,
   is_active: z.boolean().default(true),
 });
 
@@ -42,6 +72,9 @@ const positionUpdateSchema = z
         (val) => (val === "" || val === null || (typeof val === "number" && Number.isNaN(val)) ? undefined : val),
         z.number().optional().default(0),
       ),
+    salary_budget: optionalNumber,
+    location: optionalText,
+    client_user_names: clientUserNamesSchema.optional(),
     is_active: z.boolean().optional(),
     ai_threshold_auto: z.number().min(0).max(100).optional(),
     ai_threshold_manual: z.number().min(0).max(100).optional(),
@@ -49,8 +82,8 @@ const positionUpdateSchema = z
     ai_weight_experience: z.number().min(0).max(100).optional(),
     ai_weight_skill: z.number().min(0).max(100).optional(),
     ai_weight_domain: z.number().min(0).max(100).optional(),
-    ai_required_skills: z.string().optional(),
-    ai_min_experience_years: z.number().min(0).optional(),
+    ai_required_skills: z.array(z.string()).default([]),
+    ai_min_experience_years: optionalNumber,
   })
   .partial()
   .refine(
@@ -73,6 +106,46 @@ type PositionUpdateForm = z.infer<typeof positionUpdateSchema>;
 interface PositionsResponse {
   data: Position[];
   total: number;
+}
+
+interface ExtractCriteriaResponse {
+  salary_budget: number | null;
+  location: string | null;
+  required_skills: string[];
+  min_experience_years: number | null;
+  message: string;
+}
+
+/** Susun payload `ai_scoring_config` dari field form yang datar. */
+function buildAiScoringConfig(data: Record<string, unknown>): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+
+  const requiredSkills = Array.isArray(data.ai_required_skills)
+    ? (data.ai_required_skills as string[])
+    : [];
+  config.required_skills = requiredSkills;
+
+  if (typeof data.ai_threshold_auto === "number") {
+    config.threshold_auto_recommend = data.ai_threshold_auto;
+  }
+  if (typeof data.ai_threshold_manual === "number") {
+    config.threshold_manual_review = data.ai_threshold_manual;
+  }
+  if (typeof data.ai_min_experience_years === "number" && !Number.isNaN(data.ai_min_experience_years)) {
+    config.min_experience_years = data.ai_min_experience_years;
+  }
+
+  const weights = {
+    education: data.ai_weight_education as number | undefined,
+    experience_years: data.ai_weight_experience as number | undefined,
+    skill_match: data.ai_weight_skill as number | undefined,
+    domain_relevance: data.ai_weight_domain as number | undefined,
+  };
+  if (Object.values(weights).every((v) => typeof v === "number")) {
+    config.weights = weights;
+  }
+
+  return config;
 }
 
 async function fetchPositions(params?: Record<string, unknown>): Promise<PositionsResponse> {
@@ -152,6 +225,9 @@ export default function AdminClientPositionsPage() {
     cachedByClient?.find((r) => r.client_id === clientId)?.client_name ??
     clientDetail?.name ??
     "...";
+
+  // Master PIC klien — sumber pilihan penanggung jawab posisi.
+  const clientPics = getClientPics(clientDetail);
 
   const positions = positionsData?.data ?? [];
   const totalPositions = positionsData?.total ?? 0;
@@ -250,15 +326,17 @@ export default function AdminClientPositionsPage() {
           <h1 className="text-headline-lg font-bold text-on-surface">
             Posisi — {clientName}
           </h1>
-          {isRole("admin", "manager") && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-lg">add</span>
-              Tambah Posisi
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isRole("admin", "manager") && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-lg">add</span>
+                Tambah Posisi
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Search & Filter */}
@@ -314,6 +392,9 @@ export default function AdminClientPositionsPage() {
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Klien</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Tipe Pekerjaan</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Durasi (bulan)</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Budget Gaji</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Lokasi</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">PIC Klien</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Status</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Dibuat</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Diubah</th>
@@ -333,6 +414,28 @@ export default function AdminClientPositionsPage() {
                       </td>
                       <td className="py-3 px-4 text-on-surface-variant">
                         {position.contract_duration_months ?? "-"}
+                      </td>
+                      <td className="py-3 px-4 text-on-surface-variant">
+                        {position.salary_budget != null
+                          ? `Rp ${Number(position.salary_budget).toLocaleString("id-ID")}`
+                          : "-"}
+                      </td>
+                      <td className="py-3 px-4 text-on-surface-variant">{position.location ?? "-"}</td>
+                      <td className="py-3 px-4 text-on-surface-variant">
+                        {position.client_user_names?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {position.client_user_names.map((name) => (
+                              <span
+                                key={name}
+                                className="inline-flex items-center rounded-full bg-surface-container-high px-2 py-0.5 text-[11px] font-medium text-on-surface"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         {position.is_active ? (
@@ -387,7 +490,7 @@ export default function AdminClientPositionsPage() {
                   ))}
                   {positions.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-on-surface-variant">
+                      <td colSpan={11} className="py-8 text-center text-on-surface-variant">
                         <span className="material-symbols-outlined text-3xl mb-2">search_off</span>
                         <p>Tidak ada posisi ditemukan.</p>
                       </td>
@@ -408,6 +511,7 @@ export default function AdminClientPositionsPage() {
             key={editingPosition?.id ?? "new"}
             position={editingPosition}
             agreementTypes={agreementTypes}
+            clientPics={clientPics}
             defaultClientId={clientId}
             defaultClientName={clientName}
             onClose={() => {
@@ -428,6 +532,7 @@ export default function AdminClientPositionsPage() {
 function PositionFormModal({
   position,
   agreementTypes,
+  clientPics,
   defaultClientId,
   defaultClientName,
   onClose,
@@ -438,6 +543,7 @@ function PositionFormModal({
 }: {
   position: Position | null;
   agreementTypes: AgreementType[];
+  clientPics: ClientPic[];
   defaultClientId?: string;
   defaultClientName?: string;
   onClose: () => void;
@@ -457,6 +563,8 @@ function PositionFormModal({
     handleSubmit,
     formState: { errors },
     watch,
+    control,
+    setValue,
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: isCreating
@@ -467,6 +575,11 @@ function PositionFormModal({
           job_description: "",
           employment_type: "",
           contract_duration_months: 0,
+          salary_budget: undefined,
+          location: "",
+          client_user_names: [],
+          ai_required_skills: [],
+          ai_min_experience_years: undefined,
           is_active: true,
         }
       : {
@@ -476,6 +589,9 @@ function PositionFormModal({
           job_description: position?.job_description ?? "",
           employment_type: position?.employment_type ?? "",
           contract_duration_months: position?.contract_duration_months ?? undefined,
+          salary_budget: position?.salary_budget != null ? Number(position.salary_budget) : undefined,
+          location: position?.location ?? "",
+          client_user_names: position?.client_user_names ?? [],
           is_active: position?.is_active ?? true,
           ai_threshold_auto: position?.ai_scoring_config?.threshold_auto_recommend ?? 80,
           ai_threshold_manual: position?.ai_scoring_config?.threshold_manual_review ?? 60,
@@ -483,7 +599,7 @@ function PositionFormModal({
           ai_weight_experience: position?.ai_scoring_config?.weights?.experience_years ?? 25,
           ai_weight_skill: position?.ai_scoring_config?.weights?.skill_match ?? 25,
           ai_weight_domain: position?.ai_scoring_config?.weights?.domain_relevance ?? 25,
-          ai_required_skills: position?.ai_scoring_config?.required_skills?.join(", ") ?? "",
+          ai_required_skills: position?.ai_scoring_config?.required_skills ?? [],
           ai_min_experience_years: position?.ai_scoring_config?.min_experience_years ?? 0,
         },
   });
@@ -491,38 +607,96 @@ function PositionFormModal({
   void register;
   void errors;
 
+  const showToast = useToastStore((state) => state.showToast);
+
+  // Opsi PIC: PIC master klien + PIC posisi lama yang sudah tidak terdaftar
+  // (mis. PIC dihapus dari master klien) supaya admin bisa melepas pilihannya.
+  const selectedPics = (watch("client_user_names") as string[] | undefined) ?? [];
+  const picOptions = [
+    ...clientPics.map((pic) => ({ name: pic.name, contact: pic.contact, isStale: false })),
+    ...selectedPics
+      .filter(
+        (name) =>
+          !clientPics.some((pic) => pic.name.toLowerCase() === name.toLowerCase())
+      )
+      .map((name) => ({ name, contact: null, isStale: true })),
+  ];
+
+  // ── Ekstraksi Kriteria Posisi via AI (TASK-20.5) ────────────────────────
+  const extractMutation = useMutation({
+    mutationFn: (text: string) =>
+      api
+        .post("/api/v1/positions/extract-criteria", { text })
+        .then((res) => res.data as ExtractCriteriaResponse),
+    onSuccess: (data) => {
+      if (data.salary_budget != null) {
+        setValue("salary_budget", data.salary_budget, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
+      if (data.location) {
+        setValue("location", data.location, { shouldDirty: true, shouldValidate: true });
+      }
+      if (data.required_skills?.length) {
+        setValue("ai_required_skills", data.required_skills, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
+      if (data.min_experience_years != null) {
+        setValue("ai_min_experience_years", data.min_experience_years, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
+      showToast("success", data.message || "Kriteria posisi berhasil diekstrak.");
+    },
+    onError: (err: unknown) => {
+      showToast("error", getErrorMessage(err, "Gagal mengekstrak kriteria posisi."));
+    },
+  });
+
+  const extractSourceText = [watch("title"), watch("requirement"), watch("job_description")]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0)
+    .join("\n\n");
+
+  const canExtract = extractSourceText.length >= 20 && !extractMutation.isPending;
+
   const onSubmit = async (data: Record<string, unknown>) => {
     try {
+      const location = typeof data.location === "string" ? data.location.trim() : "";
+      const base: Record<string, unknown> = {
+        title: data.title,
+        requirement: typeof data.requirement === "string" ? data.requirement : null,
+        job_description: typeof data.job_description === "string" ? data.job_description : null,
+        employment_type:
+          typeof data.employment_type === "string" && data.employment_type
+            ? data.employment_type
+            : null,
+        contract_duration_months:
+          typeof data.contract_duration_months === "number" && !Number.isNaN(data.contract_duration_months)
+            ? data.contract_duration_months
+            : 0,
+        salary_budget:
+          data.salary_budget != null &&
+          data.salary_budget !== "" &&
+          !Number.isNaN(Number(data.salary_budget))
+            ? Number(data.salary_budget)
+            : null,
+        location: location || null,
+        client_user_names: Array.isArray(data.client_user_names)
+          ? (data.client_user_names as string[])
+          : [],
+        is_active: typeof data.is_active === "boolean" ? data.is_active : true,
+        ai_scoring_config: buildAiScoringConfig(data),
+      };
+
       if (isCreating) {
-        await onCreate(data as unknown as PositionCreateForm);
+        await onCreate({ ...base, client_id: data.client_id } as unknown as PositionCreateForm);
       } else if (position) {
-        const payload: Record<string, unknown> = { ...data };
-        // Build ai_scoring_config from flat form fields
-        const configFields = [
-          "ai_threshold_auto", "ai_threshold_manual",
-          "ai_weight_education", "ai_weight_experience",
-          "ai_weight_skill", "ai_weight_domain",
-          "ai_required_skills", "ai_min_experience_years",
-        ];
-        const hasConfig = configFields.some((f) => data[f] !== undefined && data[f] !== "");
-        if (hasConfig) {
-          const weightsStr = data.ai_required_skills as string;
-          payload.ai_scoring_config = {
-            threshold_auto_recommend: data.ai_threshold_auto as number | undefined,
-            threshold_manual_review: data.ai_threshold_manual as number | undefined,
-            weights: {
-              education: data.ai_weight_education as number | undefined,
-              experience_years: data.ai_weight_experience as number | undefined,
-              skill_match: data.ai_weight_skill as number | undefined,
-              domain_relevance: data.ai_weight_domain as number | undefined,
-            },
-            required_skills: weightsStr
-              ? weightsStr.split(",").map((s: string) => s.trim()).filter(Boolean)
-              : [],
-            min_experience_years: data.ai_min_experience_years as number | undefined,
-          };
-        }
-        await onUpdate({ id: position.id, payload: payload as PositionUpdateForm });
+        await onUpdate({ id: position.id, payload: base as unknown as PositionUpdateForm });
       }
     } catch {
       // Errors handled by mutation's onError callback
@@ -594,6 +768,105 @@ function PositionFormModal({
       </div>
 
       <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Budget Gaji Maksimal
+          <span className="text-on-surface-variant font-normal ml-1">(opsional)</span>
+        </label>
+        <Controller
+          name="salary_budget"
+          control={control}
+          render={({ field }) => (
+            <RupiahInput
+              value={field.value ?? undefined}
+              onChange={(value) => field.onChange(value ?? null)}
+              placeholder="15.000.000"
+            />
+          )}
+        />
+        {errors.salary_budget && (
+          <p className="text-error text-xs mt-1">{errors.salary_budget.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          Lokasi / Kota Penempatan
+          <span className="text-on-surface-variant font-normal ml-1">(opsional)</span>
+        </label>
+        <input
+          type="text"
+          placeholder="Jakarta"
+          {...register("location")}
+          className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+        />
+        {errors.location && (
+          <p className="text-error text-xs mt-1">{errors.location.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-label-md text-on-surface mb-1.5">
+          PIC Klien Penanggung Jawab
+          <span className="text-error ml-1">*</span>
+        </label>
+        {clientPics.length === 0 ? (
+          <div className="rounded-lg border border-error/30 bg-error-container px-3 py-2.5">
+            <p className="text-body-sm text-on-error-container">
+              Klien <span className="font-medium">{defaultClientName ?? "ini"}</span> belum memiliki
+              PIC. Tambahkan PIC pada master klien terlebih dahulu.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {picOptions.map(({ name, contact, isStale }) => {
+              const selected = selectedPics.includes(name);
+              return (
+                <label
+                  key={name}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${
+                    selected
+                      ? "border-primary bg-primary/5"
+                      : "border-outline-variant bg-surface hover:border-primary/40"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="pic_klien_radio"
+                    checked={selected}
+                    onChange={() => {
+                      setValue("client_user_names", [name], {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                    }}
+                    className="w-4 h-4 border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-body-sm text-on-surface">{name}</span>
+                    {contact && (
+                      <span className="block text-xs text-on-surface-variant">{contact}</span>
+                    )}
+                    {isStale && (
+                      <span className="block text-xs text-warning">
+                        PIC ini tidak lagi terdaftar di master klien — hapus pilihannya.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-xs text-on-surface-variant mt-1">
+          PIC diambil dari master klien dan wajib dipilih. PIC ini yang bertanggung jawab atas
+          lamaran untuk posisi ini.
+        </p>
+        {errors.client_user_names && (
+          <p className="text-error text-xs mt-1">{errors.client_user_names.message}</p>
+        )}
+      </div>
+
+      <div>
         <label className="block text-label-md text-on-surface mb-1.5">Persyaratan</label>
         <textarea
           placeholder="Minimal S1 Teknik, pengalaman 3+ tahun dengan Node.js..."
@@ -620,17 +893,72 @@ function PositionFormModal({
         {errors.job_description && (
           <p className="text-error text-xs mt-1">{errors.job_description.message}</p>
         )}
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => extractMutation.mutate(extractSourceText)}
+            disabled={!canExtract}
+            className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-surface px-3 py-1.5 text-label-md text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span
+              className={`material-symbols-outlined text-base ${
+                extractMutation.isPending ? "animate-spin" : ""
+              }`}
+            >
+              {extractMutation.isPending ? "progress_activity" : "auto_awesome"}
+            </span>
+            {extractMutation.isPending
+              ? "Mengekstrak..."
+              : "Ekstrak Kriteria dari Deskripsi (AI)"}
+          </button>
+          <span className="text-xs text-on-surface-variant">
+            Mengisi budget gaji, lokasi, skill wajib, dan minimal pengalaman dari teks lowongan.
+          </span>
+        </div>
       </div>
 
-      {!isCreating && (
-        <>
-          {/* ── AI Scoring Config ─────────────────────────────────── */}
-          <div className="border-t border-outline-variant pt-4 mt-2">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-symbols-outlined text-primary text-lg">tune</span>
-              <h3 className="text-label-lg font-semibold text-on-surface">Konfigurasi AI Screening</h3>
-            </div>
+      {/* ── Konfigurasi AI Screening ─────────────────────────────────────── */}
+      <div className="border-t border-outline-variant pt-4 mt-2">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-symbols-outlined text-primary text-lg">tune</span>
+          <h3 className="text-label-lg font-semibold text-on-surface">Konfigurasi AI Screening</h3>
+        </div>
 
+        {/* Required Skills */}
+        <div className="mb-4">
+          <label className="block text-label-sm text-on-surface mb-1">
+            Skill yang Dibutuhkan
+            <span className="text-on-surface-variant font-normal ml-1">(pisahkan dengan koma)</span>
+          </label>
+          <Controller
+            name="ai_required_skills"
+            control={control}
+            render={({ field }) => (
+              <TagInput
+                value={field.value ?? []}
+                onChange={field.onChange}
+                placeholder="Python, SQL, React, AWS"
+                ariaLabel="Skill yang dibutuhkan"
+              />
+            )}
+          />
+        </div>
+
+        {/* Min Experience */}
+        <div className="mb-4">
+          <label className="block text-label-sm text-on-surface mb-1">
+            Pengalaman Minimum (tahun)
+          </label>
+          <input
+            type="number"
+            min={0}
+            {...register("ai_min_experience_years", { valueAsNumber: true })}
+            className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+          />
+        </div>
+
+        {!isCreating && (
+          <>
             {/* Thresholds */}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
@@ -705,47 +1033,22 @@ function PositionFormModal({
                 );
               })()}
             </div>
+          </>
+        )}
+      </div>
 
-            {/* Required Skills */}
-            <div className="mb-4">
-              <label className="block text-label-sm text-on-surface mb-1">
-                Skill yang Dibutuhkan
-                <span className="text-on-surface-variant font-normal ml-1">(pisahkan dengan koma)</span>
-              </label>
-              <input
-                type="text"
-                {...register("ai_required_skills")}
-                placeholder="Python, SQL, React, AWS"
-                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-              />
-            </div>
-
-            {/* Min Experience */}
-            <div>
-              <label className="block text-label-sm text-on-surface mb-1">
-                Pengalaman Minimum (tahun)
-              </label>
-              <input
-                type="number"
-                min={0}
-                {...register("ai_min_experience_years", { valueAsNumber: true })}
-                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_active"
-              {...register("is_active")}
-              className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
-            />
-            <label htmlFor="is_active" className="text-body-sm text-on-surface cursor-pointer">
-              Posisi aktif
-            </label>
-          </div>
-        </>
+      {!isCreating && (
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="is_active"
+            {...register("is_active")}
+            className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+          />
+          <label htmlFor="is_active" className="text-body-sm text-on-surface cursor-pointer">
+            Posisi aktif
+          </label>
+        </div>
       )}
     </div>
   );
@@ -783,7 +1086,7 @@ function PositionFormModal({
   if (isCreating) {
     return (
       <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-md mx-4 max-h-[90vh] flex flex-col shadow-xl">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col shadow-xl">
           {/* Header */}
           <div className="px-6 pt-6 pb-4 shrink-0">
             <h2 className="text-headline-md font-semibold text-on-surface">Tambah Posisi Baru</h2>

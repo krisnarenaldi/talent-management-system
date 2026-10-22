@@ -1,4 +1,6 @@
-from datetime import date, datetime
+import logging
+import uuid
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional
@@ -7,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+logger = logging.getLogger(__name__)
+
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.blacklist import Blacklist
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience, CandidateDocument
@@ -14,11 +18,15 @@ from app.models.candidate_project import CandidateProject
 from app.models.application import Application, StageHistory
 from app.models.employee import Employee
 from app.schemas.candidate import (
+    BulkAssignRequest,
+    BulkAssignResponse,
+    BulkUploadResponse,
     CandidateCreate,
     CandidateFlagsPatch,
     CandidateProjectResponse,
     CandidateProjectUpdate,
     CandidateResponse,
+    CandidateTalentPoolUpdate,
     CandidateUpdate,
     CandidateWithWarnings,
     DocumentResponse,
@@ -30,9 +38,10 @@ from app.schemas.candidate import (
     ExperienceUpdate,
 )
 from app.services import candidate_service
-from app.services.candidate_service import normalize_phone as _normalize_phone
+from app.core.phone_utils import normalize_phone as _normalize_phone
 from app.services.ai_service import generate_project_drafts
 from app.services.storage_service import get_storage_service
+from app.core.arq_pool import get_redis_pool
 
 router = APIRouter()
 
@@ -104,6 +113,7 @@ def list_candidates(
     max_current_salary: Decimal | None = Query(None),
     min_expected_salary: Decimal | None = Query(None),
     max_expected_salary: Decimal | None = Query(None),
+    pool_status: str | None = Query(None, description="Filter by talent pool status: 'database', 'talent_pool', 'future_lead', or 'all' (default)"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -203,6 +213,9 @@ def list_candidates(
     if max_expected_salary is not None:
         query = query.filter(Candidate.expected_salary <= max_expected_salary)
 
+    if pool_status and pool_status != "all":
+        query = query.filter(Candidate.pool_status == pool_status)
+
     # Exclude candidates who are already active employees
     query = query.filter(
         ~Candidate.id.in_(
@@ -300,7 +313,7 @@ def create_candidate(
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
     # Normalise phone number before duplicate check and save
-    payload.phone = _normalize_phone(payload.phone)
+    payload.phone = _normalize_phone(payload.phone) or None
 
     # Duplikat check
     dup = candidate_service.check_duplicate(db, payload.email, payload.phone, payload.identity_no)
@@ -324,6 +337,387 @@ def create_candidate(
         duplicate_candidate_id=dup["existing_id"],
         is_blacklisted=bl["is_blacklisted"],
         blacklist_entries=bl["blacklist_entries"],
+    )
+
+
+# ── Bulk Upload ──────────────────────────────────────────────────────────────
+
+@router.post("/bulk-upload", response_model=BulkUploadResponse, status_code=status.HTTP_202_ACCEPTED)
+async def bulk_upload_candidates(
+    files: list[UploadFile] = File(...),
+    source_channel: str | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Bulk upload CV files ke database tanpa mengaitkan dengan posisi.
+
+    - Maximal 20 file per request
+    - Format: PDF atau DOCX
+    - Ukuran maksimal 5MB per file
+    - Setiap file diupload ke storage (folder: candidates/raw_cv/)
+    - Membuat record ai_screening_result dengan status 'menunggu_ekstraksi'
+    - Enqueue arq job 'process_cv_ingestion' untuk ekstraksi data asinkron
+    """
+    MAX_FILES = 20
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+    ALLOWED_EXTENSIONS = {".pdf", ".docx"}
+
+    if len(files) > MAX_FILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maksimal {MAX_FILES} file per request",
+        )
+
+    storage = get_storage_service()
+    screening_ids: list[str] = []
+    errors: list[str] = []
+
+    for file in files:
+        try:
+            # Validate extension
+            ext = Path(file.filename or "").suffix.lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                errors.append(f"{file.filename}: format tidak didukung (hanya PDF atau DOCX)")
+                continue
+
+            # Read file content
+            content = await file.read()
+            if len(content) > MAX_FILE_SIZE:
+                errors.append(f"{file.filename}: ukuran melebihi 5MB")
+                continue
+
+            # Upload to storage
+            folder = "candidates/raw_cv"
+            result = await storage.upload(
+                file_content=content,
+                filename=file.filename or "cv.pdf",
+                folder=folder,
+            )
+
+            # Create ai_screening_result record (tanpa position_id)
+            from app.models.application import AIScreeningResult
+            screening = AIScreeningResult(
+                application_id=None,
+                candidate_id=None,
+                position_id=None,
+                uploaded_by=current_user.id,
+                cv_file_url=result.get("file_url"),
+                cv_drive_item_id=result.get("drive_item_id"),
+                source_channel=source_channel,
+                status="menunggu_ekstraksi",
+            )
+            db.add(screening)
+            db.commit()
+            db.refresh(screening)
+
+            screening_ids.append(str(screening.id))
+
+        except Exception as exc:
+            errors.append(f"{file.filename}: {str(exc)}")
+            continue
+
+    if not screening_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Gagal mengupload file. Errors: {'; '.join(errors)}",
+        )
+
+    # Enqueue arq jobs for async processing
+    try:
+        redis = await get_redis_pool()
+        for sid in screening_ids:
+            await redis.enqueue_job("process_cv_ingestion", sid)
+    except Exception as exc:
+        logger.warning("Gagal enqueue arq job: %s", exc)
+
+    db.commit()
+
+    return BulkUploadResponse(
+        screening_ids=screening_ids,
+        total_files=len(screening_ids),
+        message=f"{len(screening_ids)} file successfully queued for ingestion" + (f". {len(errors)} errors: {'; '.join(errors)}" if errors else ""),
+    )
+
+
+# ── Failed / Pending Ingestion Reviews ─────────────────────────────────────
+
+@router.get("/pending-review", response_model=list[dict])
+def list_candidate_pending_reviews(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Daftar CV kandidat yang gagal diproses (error) atau menunggu ekstraksi pada alur ingestion talent pool.
+    """
+    from app.models.application import AIScreeningResult
+    from app.routers.applications import _normalize_extracted_json
+
+    query = (
+        db.query(AIScreeningResult)
+        .filter(
+            AIScreeningResult.position_id.is_(None),
+            AIScreeningResult.status.in_([
+                "error", "menunggu_ekstraksi", "sedang_diproses",
+                "duplikat", "blacklisted",
+            ]),
+        )
+    )
+
+    if current_user.role == "hr":
+        query = query.filter(AIScreeningResult.uploaded_by == current_user.id)
+
+    results = query.order_by(AIScreeningResult.created_at.desc(), AIScreeningResult.id.desc()).all()
+
+    return [
+        {
+            "id": str(r.id),
+            "candidate_id": str(r.candidate_id) if r.candidate_id else None,
+            "cv_file_url": r.cv_file_url,
+            "cv_drive_item_id": r.cv_drive_item_id,
+            "source_channel": r.source_channel,
+            "uploaded_by_name": r.uploader.name if r.uploader else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "ai_notes": r.ai_notes,
+            "extracted_json": _normalize_extracted_json(r.extracted_json),
+            "status": r.status,
+        }
+        for r in results
+    ]
+
+
+@router.delete("/pending-review/{screening_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_candidate_screening(
+    screening_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Hapus item screening kandidat yang gagal / pending review.
+    """
+    from app.models.application import AIScreeningResult
+
+    screening = db.query(AIScreeningResult).filter(
+        AIScreeningResult.id == screening_id.strip(),
+        AIScreeningResult.position_id.is_(None),
+    ).first()
+
+    if not screening:
+        raise HTTPException(status_code=404, detail="Data screening tidak ditemukan")
+
+    if current_user.role == "hr" and str(screening.uploaded_by) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Anda tidak memiliki izin untuk menghapus data ini")
+
+    db.delete(screening)
+    db.commit()
+
+
+@router.post("/pending-review/retry-all-errors", response_model=dict)
+async def retry_all_candidate_errors(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Re-enqueue semua CV kandidat berstatus 'error'.
+    """
+    from app.models.application import AIScreeningResult
+
+    query = db.query(AIScreeningResult).filter(
+        AIScreeningResult.position_id.is_(None),
+        AIScreeningResult.status == "error",
+    )
+    if current_user.role == "hr":
+        query = query.filter(AIScreeningResult.uploaded_by == current_user.id)
+
+    screenings = query.all()
+    if not screenings:
+        return {"retried": 0, "message": "Tidak ada CV gagal yang ditemukan"}
+
+    redis = await get_redis_pool()
+    for s in screenings:
+        s.status = "menunggu_ekstraksi"
+        s.ai_notes = None
+        s.extracted_json = None
+        await redis.enqueue_job("process_cv_ingestion", str(s.id))
+
+    db.commit()
+    return {"retried": len(screenings), "message": f"{len(screenings)} file CV di-enqueue ulang untuk diproses"}
+
+
+# ── Talent Pool ────────────────────────────────────────────────────────────
+
+@router.patch("/{candidate_id}/talent-pool", response_model=CandidateResponse)
+async def update_talent_pool(
+    candidate_id: str,
+    payload: CandidateTalentPoolUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Update talent pool status untuk kandidat.
+    """
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+
+    # Validasi pool_status
+    if payload.pool_status not in ("database", "talent_pool", "future_lead"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="pool_status harus berupa 'database', 'talent_pool', atau 'future_lead'",
+        )
+
+    # Update field
+    candidate.pool_status = payload.pool_status
+    candidate.talent_pool_reason = payload.talent_pool_reason
+    candidate.talent_pool_notes = payload.talent_pool_notes
+    candidate.talent_pool_updated_at = datetime.now(timezone.utc)
+    candidate.talent_pool_updated_by = current_user.id
+
+    db.commit()
+    db.refresh(candidate)
+    return candidate
+
+
+
+# ── Bulk Assign ────────────────────────────────────────────────────────────
+
+@router.post("/bulk-assign", response_model=BulkAssignResponse)
+async def bulk_assign_candidates(
+    payload: BulkAssignRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Bulk assign candidates to a position.
+    """
+    # Enforce RBAC: HR cannot trigger AI screening
+    effective_run_ai = payload.run_ai_screening
+    if getattr(current_user, "role", None) == "hr":
+        effective_run_ai = False
+
+    # Verify position exists
+    from app.models.position import Position
+    position = db.query(Position).filter(Position.id == payload.position_id).first()
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+
+    # PIC pewawancara mengikuti PIC yang sudah ditugaskan pada posisi.
+    client_user_name = position.resolve_pic_name(payload.client_user_name)
+    if payload.client_user_name and client_user_name is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"PIC '{payload.client_user_name}' tidak terdaftar pada posisi '{position.title}'. "
+                f"PIC yang tersedia: {', '.join(position.pic_names) or '(belum ada)'}."
+            ),
+        )
+
+    now = datetime.now(timezone.utc)
+    six_months_ago = now - timedelta(days=180)  # 6 bulan = 180 hari
+
+    success_count = 0
+    skipped_details = []
+    matching_job_ids: list[str] = []
+
+    for candidate_id_str in payload.candidate_ids:
+        try:
+            candidate_id = uuid.UUID(candidate_id_str) if isinstance(candidate_id_str, str) else candidate_id_str
+        except Exception:
+            skipped_details.append({"candidate_id": candidate_id_str, "reason": "Invalid candidate ID format"})
+            continue
+
+        candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate:
+            skipped_details.append({"candidate_id": str(candidate_id), "reason": "Candidate not found"})
+            continue
+
+        # Blacklist check
+        bl_result = candidate_service.check_blacklist(
+            db,
+            email=candidate.email,
+            phone=candidate.phone,
+            identity_no=candidate.identity_no
+        )
+        if bl_result["is_blacklisted"]:
+            skipped_details.append({
+                "candidate_id": str(candidate_id),
+                "reason": f"Blacklisted: {', '.join([e['reason'] for e in bl_result['blacklist_entries']])}"
+            })
+            continue
+
+        # Cooldown check: rejected on same position in last 6 months
+        rejected_recent = db.query(Application).filter(
+            Application.candidate_id == candidate_id,
+            Application.position_id == payload.position_id,
+            Application.status == "rejected",
+            Application.updated_at >= six_months_ago
+        ).first()
+        if rejected_recent:
+            skipped_details.append({
+                "candidate_id": str(candidate_id),
+                "reason": "Cooldown: rejected on this position in the last 6 months"
+            })
+            continue
+
+        # Existing active application
+        existing_active = db.query(Application).filter(
+            Application.candidate_id == candidate_id,
+            Application.position_id == payload.position_id,
+            Application.status == "active"
+        ).first()
+        if existing_active:
+            skipped_details.append({
+                "candidate_id": str(candidate_id),
+                "reason": "Active application already exists for this position"
+            })
+            continue
+
+        # Create Application
+        application = Application(
+            candidate_id=candidate_id,
+            position_id=payload.position_id,
+            current_stage="Dijadwalkan_Interview",
+            status="active",
+            recruiter_id=current_user.id,
+            client_user_name=client_user_name,
+            client_user_id=payload.client_user_id if payload.client_user_id else None,
+        )
+        db.add(application)
+        db.flush()  # obtain application.id
+
+        # Create initial StageHistory
+        stage_history = StageHistory(
+            application_id=application.id,
+            stage_name="Dijadwalkan_Interview",
+            notes="Initial assignment via bulk assign",
+            updated_by=current_user.id,
+        )
+        db.add(stage_history)
+
+        # Enqueue AI scoring job jika diminta (hanya manager/admin yang bisa set run_ai_screening=True)
+        if effective_run_ai:
+            matching_job_ids.append(str(application.id))
+
+        success_count += 1
+
+    db.commit()
+
+    # Enqueue setelah commit agar record Application sudah tersimpan di DB.
+    if matching_job_ids:
+        try:
+            redis = await get_redis_pool()
+            for app_id in matching_job_ids:
+                await redis.enqueue_job("process_position_matching", app_id)
+        except Exception as exc:
+            logger.warning("Gagal enqueue arq job process_position_matching: %s", exc)
+
+    message = f"{success_count} candidates successfully assigned, {len(skipped_details)} skipped."
+    return BulkAssignResponse(
+        success_count=success_count,
+        skipped_count=len(skipped_details),
+        skipped_details=skipped_details,
+        message=message,
     )
 
 
@@ -401,7 +795,7 @@ def update_candidate(
 
     # Normalise phone if included in update
     if "phone" in payload.model_dump(exclude_unset=True):
-        payload.phone = _normalize_phone(payload.phone)
+        payload.phone = _normalize_phone(payload.phone) or None
 
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(candidate, key, value)

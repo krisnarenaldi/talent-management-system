@@ -16,13 +16,17 @@ from arq.connections import RedisSettings
 from arq.cron import cron
 
 from app.core.config import settings
-from app.services.cv_pipeline import process_cv_screening
+from app.services.cv_pipeline import (
+    process_cv_ingestion,
+    process_cv_screening,
+    process_position_matching,
+)
 from app.services.ops_jobs import backup_database, check_contract_expiry
 
 
 class WorkerSettings:
     # ── Task functions ────────────────────────────────────────────────────────
-    functions = [process_cv_screening]
+    functions = [process_cv_ingestion, process_cv_screening, process_position_matching]
 
     # ── Cron jobs ─────────────────────────────────────────────────────────────
     cron_jobs = [

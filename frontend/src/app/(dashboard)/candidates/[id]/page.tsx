@@ -5,9 +5,12 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { FileText } from "lucide-react";
+import { FileText, Users, UserMinus } from "lucide-react";
 import api from "@/lib/api";
 import DocumentUploader from "@/components/candidates/DocumentUploader";
+import TalentPoolModal from "@/components/candidates/TalentPoolModal";
+import { useAuthStore } from "@/stores/auth.store";
+import { useToastStore } from "@/stores/toast.store";
 import type {
   Application,
   Candidate,
@@ -28,6 +31,11 @@ interface DraftProjectItem {
 }
 
 type TabKey = "profil" | "dokumen" | "lamaran" | "catatan";
+
+function normalizeRole(role: string | undefined): string {
+  if (!role) return "";
+  return role.split(".").pop()?.toLowerCase() || role;
+}
 
 async function fetchCandidate(id: string): Promise<Candidate> {
   const response = await api.get(`/api/v1/candidates/${id}`);
@@ -62,7 +70,16 @@ async function fetchCandidateProjects(id: string): Promise<DraftProjectItem[]> {
 export default function CandidateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [tab, setTab] = useState<TabKey>("profil");
+  const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState(false);
+  const [isRemoveTalentPoolOpen, setIsRemoveTalentPoolOpen] = useState(false);
+  const [isRemovingTalentPool, setIsRemovingTalentPool] = useState(false);
   const queryClient = useQueryClient();
+  const { showToast } = useToastStore();
+
+  const user = useAuthStore((state) => state.user);
+  const canMoveTalentPool = user
+    ? ["admin", "hr", "manager"].includes(normalizeRole(user.role))
+    : false;
 
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["candidate", id],
@@ -159,6 +176,36 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
     return <div className="p-6 text-gray-500">Memuat detail kandidat...</div>;
   }
 
+  const inTalentPool = Boolean(
+    candidate?.pool_status === "talent_pool" ||
+      (candidate as any)?.talent_pool === 1 ||
+      (candidate as any)?.talent_pool === true ||
+      (candidate as any)?.is_talent_pool
+  );
+
+  const handleRemoveFromTalentPool = async () => {
+    if (!candidate) return;
+    setIsRemovingTalentPool(true);
+    try {
+      await api.patch(`/api/v1/candidates/${id}/talent-pool`, {
+        pool_status: "database",
+        talent_pool_reason: null,
+        talent_pool_notes: null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["candidate", id] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
+      showToast("success", `${candidate.full_name} berhasil dikeluarkan dari Talent Pool`);
+      setIsRemoveTalentPoolOpen(false);
+    } catch (error: any) {
+      showToast(
+        "error",
+        error?.response?.data?.detail || "Gagal mengeluarkan kandidat dari Talent Pool"
+      );
+    } finally {
+      setIsRemovingTalentPool(false);
+    }
+  };
+
   const tabs: Array<{ key: TabKey; label: string; icon: string; desc: string }> = [
     { key: "profil", label: "Profil", icon: "person", desc: "Data pribadi, pendidikan & pengalaman" },
     { key: "dokumen", label: "Dokumen", icon: "folder", desc: "CV, KTP, Ijazah, dll" },
@@ -182,10 +229,21 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             )}
           </div>
           <div>
-            <Link href="/candidates" className="text-sm font-medium text-primary-600 hover:underline">
+            <Link href="/candidates" className="text-sm font-medium text-primary hover:underline">
               ← Kembali ke kandidat
             </Link>
-            <h1 className="mt-2 text-2xl font-bold text-gray-900">{candidate.full_name}</h1>
+            <div className="mt-2 flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">{candidate.full_name}</h1>
+              {(candidate.pool_status === "talent_pool" ||
+                (candidate as any).talent_pool === 1 ||
+                (candidate as any).talent_pool === true ||
+                (candidate as any).is_talent_pool) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                  <Users className="h-3.5 w-3.5" />
+                  Talent Pool
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -196,6 +254,27 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             <FileText className="h-4 w-4" />
             CV Standar
           </Link>
+          {canMoveTalentPool && (
+            inTalentPool ? (
+              <button
+                type="button"
+                onClick={() => setIsRemoveTalentPoolOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors"
+              >
+                <UserMinus className="h-4 w-4" />
+                Keluarkan dari Talent Pool
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsTalentPoolModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+              >
+                <Users className="h-4 w-4" />
+                Pindahkan ke Talent Pool
+              </button>
+            )
+          )}
           <Link
             href={`/candidates/${id}/edit`}
             className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -204,6 +283,63 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
           </Link>
         </div>
       </div>
+
+      {/* Talent Pool Modal */}
+      {candidate && (
+        <TalentPoolModal
+          candidateId={id}
+          candidateName={candidate.full_name}
+          isOpen={isTalentPoolModalOpen}
+          onClose={() => setIsTalentPoolModalOpen(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["candidate", id] });
+          }}
+        />
+      )}
+
+      {/* Remove from Talent Pool Modal */}
+      {isRemoveTalentPoolOpen && candidate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setIsRemoveTalentPoolOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100">
+                <UserMinus className="h-5 w-5 text-rose-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Keluarkan dari Talent Pool</h2>
+                <p className="text-sm text-gray-500">{candidate.full_name}</p>
+              </div>
+            </div>
+            <p className="mb-6 text-sm text-gray-600">
+              Apakah Anda yakin ingin mengeluarkan <strong>{candidate.full_name}</strong> dari Talent Pool? Status kandidat akan dikembalikan menjadi Database kandidat biasa.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsRemoveTalentPoolOpen(false)}
+                disabled={isRemovingTalentPool}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveFromTalentPool}
+                disabled={isRemovingTalentPool}
+                className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isRemovingTalentPool ? "Mengeluarkan..." : "Keluarkan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
@@ -436,7 +572,7 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             <div className="mt-4 border-t border-gray-100 pt-3">
               <Link
                 href={`/candidates/${id}/edit`}
-                className="text-xs font-medium text-primary-600 hover:underline"
+                className="text-xs font-medium text-primary hover:underline"
               >
                 Edit catatan →
               </Link>
@@ -574,7 +710,7 @@ function ProjectCard({
             value={fields.project_name}
             onChange={(e) => handleChange("project_name", e.target.value)}
             onBlur={(e) => onBlur(project, "project_name", e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </label>
         <label className="block text-sm text-gray-700">
@@ -583,7 +719,7 @@ function ProjectCard({
             value={fields.role}
             onChange={(e) => handleChange("role", e.target.value)}
             onBlur={(e) => onBlur(project, "role", e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </label>
       </div>
@@ -596,7 +732,7 @@ function ProjectCard({
             onChange={(e) => handleChange("summary", e.target.value)}
             onBlur={(e) => onBlur(project, "summary", e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </label>
         <label className="block text-sm text-gray-700 md:col-span-2">
@@ -606,7 +742,7 @@ function ProjectCard({
             onChange={(e) => handleChange("impact", e.target.value)}
             onBlur={(e) => onBlur(project, "impact", e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </label>
         <label className="block text-sm text-gray-700">
@@ -615,7 +751,7 @@ function ProjectCard({
             value={fields.duration}
             onChange={(e) => handleChange("duration", e.target.value)}
             onBlur={(e) => onBlur(project, "duration", e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </label>
         <label className="block text-sm text-gray-700">
@@ -641,7 +777,7 @@ function ProjectCard({
                   .filter(Boolean),
               )
             }
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-400"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </label>
       </div>

@@ -257,7 +257,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Link href="/applications" className="text-sm font-medium text-primary-600 hover:underline">
+          <Link href="/applications" className="text-sm font-medium text-primary hover:underline">
             ← Kembali ke pipeline
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">Detail Lamaran</h1>
@@ -442,7 +442,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     key={history.id ?? `${history.stage_name ?? "stage"}-${history.created_at ?? index}`}
                     className="relative rounded-lg border border-gray-200 p-4 pl-8"
                   >
-                    <div className="absolute left-3 top-5 h-2.5 w-2.5 rounded-full bg-primary-500" />
+                    <div className="absolute left-3 top-5 h-2.5 w-2.5 rounded-full bg-primary" />
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <p className="font-medium text-gray-900">{formatStageLabel(history.stage_name)}</p>
                       <div className="flex items-center gap-2">
@@ -526,7 +526,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     value={selectedStage}
                     onChange={(e) => setSelectedStage(e.target.value)}
                     disabled={!canEdit || isStageFailed}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     {baseStageOptions.map((stage) => (
                       <option key={stage} value={stage}>
@@ -545,7 +545,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                       value={result}
                       onChange={(e) => setResult(e.target.value)}
                       disabled={isStageFailed}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Pilih hasil</option>
                       {selectedStage === "Konfirmasi_Kehadiran" && (
@@ -588,7 +588,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
                       disabled={isStageFailed}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -602,7 +602,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                         value={salaryCurrent}
                         onChange={(e) => setSalaryCurrent(e.target.value)}
                         disabled={isStageFailed}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="0"
                       />
                     </div>
@@ -613,7 +613,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                         value={salaryExpected}
                         onChange={(e) => setSalaryExpected(e.target.value)}
                         disabled={isStageFailed}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="0"
                       />
                     </div>
@@ -627,7 +627,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     disabled={!canEdit || isStageFailed}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Tambahkan catatan atau keputusan interview..."
                   />
                 </div>
@@ -667,7 +667,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               <select
                 value={assignRecruiterInput}
                 onChange={(e) => setAssignRecruiterInput(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               >
                 <option value="">-- Pilih recruiter --</option>
                 {hrUsers.map((u) => (

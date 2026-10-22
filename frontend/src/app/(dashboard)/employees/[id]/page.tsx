@@ -130,7 +130,7 @@ function PersonalDataTab({
                 type={key.includes("date") ? "date" : "text"}
                 value={(form[key] as string | number | undefined) ?? ""}
                 onChange={(e) => handleChange(key, e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               />
             </div>
           ))}
@@ -143,7 +143,7 @@ function PersonalDataTab({
             <select
               value={form.gender ?? ""}
               onChange={(e) => handleChange("gender", e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Pilih</option>
               <option value="Laki-laki">Laki-laki</option>
@@ -159,7 +159,7 @@ function PersonalDataTab({
             <select
               value={form.blood_type ?? ""}
               onChange={(e) => handleChange("blood_type", e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Pilih</option>
               <option value="A">A</option>
@@ -177,7 +177,7 @@ function PersonalDataTab({
             <select
               value={form.marital_status ?? ""}
               onChange={(e) => handleChange("marital_status", e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Pilih</option>
               <option value="Belum Menikah">Belum Menikah</option>
@@ -196,7 +196,7 @@ function PersonalDataTab({
               value={form.notes ?? ""}
               onChange={(e) => handleChange("notes", e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
         </div>
@@ -212,7 +212,7 @@ function PersonalDataTab({
               <select
                 value={form.employee_status ?? ""}
                 onChange={(e) => handleChange("employee_status", e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               >
                 {statusOptions.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -231,7 +231,7 @@ function PersonalDataTab({
                     type="date"
                     value={form.resign_date ?? ""}
                     onChange={(e) => handleChange("resign_date", e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
                   />
                 </div>
                 <div className="sm:col-span-1">
@@ -243,7 +243,7 @@ function PersonalDataTab({
                     placeholder="Opsional"
                     value={form.resign_reason ?? ""}
                     onChange={(e) => handleChange("resign_reason", e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
                   />
                 </div>
               </>
@@ -339,7 +339,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             <select
               value={contractForm.agreement_type_id}
               onChange={(e) => setContractForm((f) => ({ ...f, agreement_type_id: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Pilih jenis perjanjian</option>
               {agreementTypes.map((t) => (
@@ -355,7 +355,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
               placeholder="Nomor kontrak"
               value={contractForm.contract_number}
               onChange={(e) => setContractForm((f) => ({ ...f, contract_number: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div>
@@ -367,7 +367,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
               placeholder="12"
               value={contractForm.duration_months}
               onChange={(e) => setContractForm((f) => ({ ...f, duration_months: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div>
@@ -378,7 +378,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
               type="date"
               value={contractForm.join_date}
               onChange={(e) => setContractForm((f) => ({ ...f, join_date: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div>
@@ -389,7 +389,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
               type="date"
               value={contractForm.end_date}
               onChange={(e) => setContractForm((f) => ({ ...f, end_date: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div className="flex items-end">
@@ -573,7 +573,7 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
                     [key]: key === "thp" ? Number(e.target.value) : e.target.value,
                   }))
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               />
             </div>
           ))}
@@ -619,7 +619,7 @@ function PayrollTab({ employeeId }: { employeeId: string }) {
                     : prev,
                 )
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
         ))}
@@ -699,7 +699,7 @@ function LeavesTab({ employeeId }: { employeeId: string }) {
               type="date"
               value={leaveForm.start_date}
               onChange={(e) => setLeaveForm((f) => ({ ...f, start_date: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div>
@@ -710,7 +710,7 @@ function LeavesTab({ employeeId }: { employeeId: string }) {
               type="date"
               value={leaveForm.end_date}
               onChange={(e) => setLeaveForm((f) => ({ ...f, end_date: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div className="sm:col-span-2">
@@ -722,7 +722,7 @@ function LeavesTab({ employeeId }: { employeeId: string }) {
               placeholder="Tulis alasan cuti…"
               value={leaveForm.reason}
               onChange={(e) => setLeaveForm((f) => ({ ...f, reason: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div className="sm:col-span-2 flex justify-end">
@@ -841,7 +841,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
   if (isLoading || !employee) {
     return (
       <div className="space-y-6">
-        <Link href="/employees" className="text-sm font-medium text-primary-600 hover:underline">
+        <Link href="/employees" className="text-sm font-medium text-primary hover:underline">
           ← Kembali ke daftar karyawan
         </Link>
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
@@ -855,7 +855,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link href="/employees" className="text-sm font-medium text-primary-600 hover:underline">
+          <Link href="/employees" className="text-sm font-medium text-primary hover:underline">
             ← Kembali
           </Link>
           <div>

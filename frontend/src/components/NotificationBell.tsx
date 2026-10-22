@@ -71,9 +71,14 @@ export default function NotificationBell() {
             </p>
             {unreadCount > 0 && (
               <button
-                onClick={async () => {
-                  await api.patch("/api/v1/notifications/read-all", {}).catch(() => {});
-                  queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                onClick={() => {
+                  // Optimistic: mark all read in cache immediately
+                  queryClient.setQueryData<NotificationData[]>(["notifications"], (old = []) =>
+                    old.map((n) => ({ ...n, is_read: true }))
+                  );
+                  api.patch("/api/v1/notifications/read-all", {}).catch(() => {
+                    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                  });
                 }}
                 className="text-xs text-primary hover:underline"
               >
@@ -94,12 +99,17 @@ export default function NotificationBell() {
                     key={notif.id}
                     title={notif.message}
                     onClick={() => {
-                      setOpen(false);
+                      // Optimistic update: mark as read in cache immediately, no refetch after
                       if (!notif.is_read) {
-                        api.patch(`/api/v1/notifications/${notif.id}/read`, {})
-                          .then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }))
-                          .catch(() => {});
+                        queryClient.setQueryData<NotificationData[]>(["notifications"], (old = []) =>
+                          old.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
+                        );
+                        api.patch(`/api/v1/notifications/${notif.id}/read`, {}).catch(() => {
+                          // Revert on failure
+                          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                        });
                       }
+                      setOpen(false);
                       if (notif.link && notif.link !== "#") {
                         window.location.href = notif.link;
                       }
@@ -128,6 +138,22 @@ export default function NotificationBell() {
               </div>
             )}
           </div>
+
+          {/* Footer: Hapus semua */}
+          {notifications.length > 0 && (
+            <div className="px-4 py-2 border-t border-outline-variant text-right">
+              <button
+                onClick={async () => {
+                  if (!confirm("Hapus semua notifikasi?")) return;
+                  await api.delete("/api/v1/notifications/clear-all").catch(() => {});
+                  queryClient.setQueryData(["notifications"], []);
+                }}
+                className="text-xs text-red-500 hover:text-red-700 hover:underline"
+              >
+                Hapus semua
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -137,6 +163,7 @@ export default function NotificationBell() {
 function getNotificationIcon(type: string): string {
   switch (type) {
     case "ai_screening_done":
+    case "cv_ingestion_done":
       return "psychology";
     case "contract_expiring":
       return "fact_check";

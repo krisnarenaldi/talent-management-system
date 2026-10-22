@@ -82,6 +82,9 @@ class CandidateCreate(BaseModel):
     current_salary: Decimal | None = None
     expected_salary: Decimal | None = None
     notice_period_days: int | None = None
+    pool_status: str = "database"
+    talent_pool_reason: str | None = None
+    talent_pool_notes: str | None = None
     notes: str | None = None
     skills: List[str] | None = None
 
@@ -102,6 +105,9 @@ class CandidateUpdate(BaseModel):
     current_salary: Decimal | None = None
     expected_salary: Decimal | None = None
     notice_period_days: int | None = None
+    pool_status: str | None = None
+    talent_pool_reason: str | None = None
+    talent_pool_notes: str | None = None
     notes: str | None = None
     skills: List[str] | None = None
 
@@ -109,6 +115,42 @@ class CandidateUpdate(BaseModel):
 class CandidateFlagsPatch(BaseModel):
     completeness_status: Optional[str] = None
     contact_status: Optional[str] = None
+
+
+class CandidateTalentPoolUpdate(BaseModel):
+    pool_status: str = Field(..., description="'database' | 'talent_pool' | 'future_lead'")
+    talent_pool_reason: str | None = None
+    talent_pool_notes: str | None = None
+
+
+class BulkTalentPoolUpdateRequest(BaseModel):
+    candidate_ids: List[AutoStrUUID]
+    pool_status: str = Field(..., description="'database' | 'talent_pool' | 'future_lead'")
+    talent_pool_reason: str | None = None
+    talent_pool_notes: str | None = None
+
+
+class BulkAssignRequest(BaseModel):
+    candidate_ids: List[AutoStrUUID]
+    position_id: AutoStrUUID
+    client_user_name: str | None = None
+    client_user_id: AutoStrUUID | None = None
+    run_ai_screening: bool = False
+
+
+class BulkUploadResponse(BaseModel):
+    """Response schema for bulk CV upload endpoint."""
+    screening_ids: List[AutoStrUUID]
+    total_files: int
+    message: str
+
+
+class BulkAssignResponse(BaseModel):
+    """Response schema for bulk assign endpoint."""
+    success_count: int
+    skipped_count: int
+    skipped_details: List[dict]  # each dict: candidate_id, reason
+    message: str
 
 
 class CandidateResponse(BaseModel):
@@ -130,6 +172,11 @@ class CandidateResponse(BaseModel):
     notice_period_days: int | None
     completeness_status: str
     contact_status: str
+    pool_status: str = "database"
+    talent_pool_reason: str | None = None
+    talent_pool_notes: str | None = None
+    talent_pool_updated_at: datetime | None = None
+    talent_pool_updated_by: AutoStrUUID | None = None
     notes: str | None
     skills: List[str] | None
     is_blacklisted: bool = False

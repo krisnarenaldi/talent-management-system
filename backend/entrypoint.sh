@@ -46,13 +46,8 @@ echo "==> [entrypoint] Database siap."
 
 echo "==> [entrypoint] Menjalankan Alembic migration..."
 
-# Coba upgrade head. Jika gagal karena objek sudah ada (deploy ulang / manual migration),
-# stamp ke head lalu coba lagi.
-if ! python -m alembic upgrade head 2>&1; then
-    echo "==> [entrypoint] Migration gagal, mencoba stamp ke head lalu retry..."
-    python -m alembic stamp head
-    python -m alembic upgrade head
-fi
+# Jalankan upgrade head. Jika gagal, exit dengan error (jangan stamp).
+python -m alembic upgrade head
 
 echo "==> [entrypoint] Migration selesai."
 

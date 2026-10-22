@@ -2,12 +2,14 @@ import uuid
 
 from sqlalchemy import Boolean, Column, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
 COMPLETENESS_STATUS = ("lengkap", "belum_lengkap")
 CONTACT_STATUS = ("aktif", "tidak_bisa_dihubungi")
+POOL_STATUS = ("database", "talent_pool", "future_lead")
 
 
 class SourceChannel(Base):
@@ -50,6 +52,15 @@ class Candidate(Base):
     )
     possible_duplicate = Column(Boolean, default=False, nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
+    pool_status = Column(
+        PgEnum(*POOL_STATUS, name="pool_status_enum", create_type=False),
+        server_default="database",
+        nullable=False,
+    )
+    talent_pool_reason = Column(String(100), nullable=True)
+    talent_pool_notes = Column(Text, nullable=True)
+    talent_pool_updated_at = Column(DateTime(timezone=True), nullable=True)
+    talent_pool_updated_by = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True)
     notes = Column(Text)                                 # Catatan bebas recruiter
     skills = Column(JSONB, default=list, nullable=True)  # e.g. ["PHP", "Next.js", "Python"]
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -61,6 +72,7 @@ class Candidate(Base):
     projects = relationship("CandidateProject", back_populates="candidate", cascade="all, delete-orphan")
     applications = relationship("Application", back_populates="candidate")
     blacklists = relationship("Blacklist", back_populates="candidate")
+    talent_pool_updater = relationship("User", foreign_keys=[talent_pool_updated_by])
 
 
 class CandidateEducation(Base):

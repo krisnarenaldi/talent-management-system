@@ -133,7 +133,18 @@ export default function BulkAssignModal({
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["candidates"] });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
-      showToast("success", `Berhasil assign ${data.assigned_count ?? candidateIds.length} kandidat ke lowongan`);
+
+      const skipped = data.skipped_details ?? [];
+      if (skipped.length > 0) {
+        showToast(
+          "warning",
+          `${data.success_count} kandidat berhasil di-assign, ${skipped.length} dilewati: ${skipped
+            .map((s: { reason?: string }) => s.reason || "Alasan tidak diketahui")
+            .join("; ")}`
+        );
+      } else {
+        showToast("success", `Berhasil assign ${data.success_count} kandidat ke lowongan`);
+      }
       onSuccess();
       onClose();
     },

@@ -179,7 +179,7 @@ export default function BulkCVUploadPage() {
         </div>
         <Link
           href="/candidates/manual/new"
-          className="shrink-0 text-sm font-medium text-primary-600 hover:underline"
+          className="shrink-0 text-sm font-medium text-primary hover:underline"
         >
           Input Manual →
         </Link>
@@ -200,13 +200,13 @@ export default function BulkCVUploadPage() {
           onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
           className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 transition-colors ${
             dragActive
-              ? "border-primary-500 bg-primary-50"
-              : "border-gray-300 bg-gray-50 hover:border-primary-400 hover:bg-primary-50/40"
+              ? "border-primary bg-primary/5"
+              : "border-gray-300 bg-gray-50 hover:border-primary/80 hover:bg-primary/5"
           }`}
         >
           <span className="material-symbols-outlined text-4xl text-gray-400">upload_file</span>
           <p className="text-sm font-medium text-gray-700">
-            Seret file ke sini, atau <span className="text-primary-600">pilih file</span>
+            Seret file ke sini, atau <span className="text-primary">pilih file</span>
           </p>
           <p className="text-xs text-gray-400">
             PDF / DOCX · Maks. {MAX_FILES} file · Maks. 5 MB per file
@@ -241,7 +241,7 @@ export default function BulkCVUploadPage() {
                   {item.status === "error" && (
                     <Link
                       href="/candidates/manual/new"
-                      className="text-xs font-medium text-primary-600 hover:underline"
+                      className="text-xs font-medium text-primary hover:underline"
                     >
                       Input Manual
                     </Link>
@@ -271,7 +271,7 @@ export default function BulkCVUploadPage() {
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200">
               <div
-                className="h-1.5 rounded-full bg-primary-600 transition-all duration-300"
+                className="h-1.5 rounded-full bg-primary transition-all duration-300"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>
@@ -280,13 +280,29 @@ export default function BulkCVUploadPage() {
 
         {/* ── Post-upload informational message ── */}
         {hasUploaded && !uploadMutation.isPending && (
-          <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            File berhasil diupload. AI sedang mengekstrak data — hasil dapat dilihat di halaman{" "}
-            <Link href="/candidates/pending-review" className="font-medium underline hover:text-blue-900">
-              Pending Review
-            </Link>
-            .
-          </p>
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            <div className="flex items-start gap-2.5">
+              <span className="material-symbols-outlined text-blue-600 mt-0.5 text-xl">check_circle</span>
+              <div className="space-y-1">
+                <p className="font-semibold text-blue-950">File berhasil diupload dan sedang diproses!</p>
+                <p className="text-blue-800">
+                  AI sedang mengekstrak data teks dan identitas kandidat di latar belakang.
+                  Kandidat yang berhasil diekstrak akan otomatis muncul di{" "}
+                  <Link href="/candidates" className="font-semibold underline hover:text-blue-950">
+                    Database Kandidat
+                  </Link>
+                  . Anda juga akan menerima notifikasi lonceng ketika seluruh file selesai diproses.
+                </p>
+                <p className="text-xs text-blue-700 pt-1">
+                  Jika terdapat CV yang format teksnya tidak terbaca / gagal diproses, Anda dapat melihatnya di{" "}
+                  <Link href="/candidates/pending-review" className="font-medium underline hover:text-blue-900">
+                    Pending Review Kandidat
+                  </Link>
+                  .
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -299,7 +315,7 @@ export default function BulkCVUploadPage() {
           id="source-channel"
           value={selectedChannel}
           onChange={(e) => setSelectedChannel(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
         >
           <option value="">— Pilih channel asal —</option>
           {sourceChannels.map((ch) => (
@@ -318,67 +334,41 @@ export default function BulkCVUploadPage() {
         >
           Lewati — input manual
         </Link>
-        <button
-          type="button"
-          disabled={!canUpload}
-          onClick={() => uploadMutation.mutate()}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-        >
-          {uploadMutation.isPending ? (
-            <>
-              <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
-              Mengupload...
-            </>
-          ) : (
-            <>
-              <span className="material-symbols-outlined text-base">cloud_upload</span>
-              Upload &amp; Ekstrak CV
-            </>
-          )}
-        </button>
+        {hasUploaded ? (
+          <button
+            type="button"
+            onClick={() => {
+              setFileStatuses([]);
+              setUploadResult(null);
+              setHasUploaded(false);
+              setUploadProgress(0);
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+          >
+            <span className="material-symbols-outlined text-base">add_circle</span>
+            Upload File Lainnya
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={!canUpload}
+            onClick={() => uploadMutation.mutate()}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+          >
+            {uploadMutation.isPending ? (
+              <>
+                <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                Mengupload...
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-base">cloud_upload</span>
+                Upload &amp; Ekstrak CV
+              </>
+            )}
+          </button>
+        )}
       </div>
-
-      {/* ── Results section ── */}
-      {hasUploaded && uploadResult && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Hasil Upload</h2>
-          <p className="mb-4 text-sm text-gray-600">{uploadResult.message}</p>
-
-          {uploadResult.screening_ids.length > 0 ? (
-            <ul className="space-y-2">
-              {uploadResult.screening_ids.map((sid, idx) => (
-                <li
-                  key={sid}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-4 py-2.5"
-                >
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Screening ID</p>
-                    <p className="font-mono text-sm text-gray-800">{sid}</p>
-                    {fileStatuses[idx] && (
-                      <p className="mt-0.5 truncate text-xs text-gray-400">
-                        {fileStatuses[idx].file.name}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <StatusBadge status={fileStatuses[idx]?.status ?? "done"} />
-                    {fileStatuses[idx]?.status === "error" && (
-                      <Link
-                        href="/candidates/manual/new"
-                        className="text-xs font-medium text-primary-600 hover:underline"
-                      >
-                        Input Manual
-                      </Link>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-gray-500">Tidak ada screening ID yang dikembalikan.</p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

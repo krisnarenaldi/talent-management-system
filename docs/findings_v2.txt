@@ -1,0 +1,51 @@
+1. [Database] kasih badge "Talent Pool"
+2. [Position] pic adalah mandatory dan diambil dari [clients]
+	
+	
+	docker exec tms_postgres psql -U talent26 -d db_talent -c "TRUNCATE candidate RESTART IDENTITY CASCADE;"
+	
+	tanyakan ke ai: apakah dalam satu proses ada yang harus diwaspadai?
+	
+	
+	
+	Tambah Kandidat - Bulk Upload CV
+	
+	Hey, saya punya request improvement di page /candidates/new ketika bulk upload cv. Ini saya dapat ide ketika 
+	upload cv kandidat berstatus blacklist dan cv kandidat yang sudah ada di DB.
+	1. Tidak Muncul di Halaman Pending Review:
+	   - Di endpoint GET /api/v1/candidates/pending-review, filter hanya mengambil status ["error", "menunggu_ekstraksi", "sedang_diproses"].
+	   - Status "duplikat" dan "blacklisted" tidak masuk filter, sehingga pengguna tidak bisa melihat CV mana saja
+	     yang ditolak karena duplikat atau blacklist di halaman
+		 /candidates/pending-review/candidates/pending-review/page.tsx).
+    2. Notifikasi Lonceng Menyamarkan Hasil:
+	   Di fungsi _create_candidate_ingestion_notification, status "duplikat" dan "blacklisted"
+	   digolongkan ke dalam done_count:
+	   done_count = recent_query.filter(
+		   AIScreeningResult.status.in_(["selesai", "duplikat", "blacklisted"])
+	   ).count()
+	   
+	3. Dokumen CV Baru Hilang (Untuk Kasus Duplikat):
+	   Jika seorang kandidat mengirimkan CV versi terbaru
+	   (misal lulus kuliah baru atau tambah pengalaman baru),
+	   file CV baru tersebut tidak otomatis di-attach ke tab dokumen kandidat lama yang sudah ada di sistem.
+	   
+	4. Visibilitas Status
+	   Isu saat ini: CV yang statusnya duplikat atau blacklisted tersembunyi dari pantauan HR.
+	   Saran: Tambahkan tab atau filter status duplikat dan blacklisted
+	          di halaman /candidates/pending-review/candidates/pending-review/page.tsx) lengkap dengan
+			  link menuju profil kandidat terkait / alasan blacklist.
+    
+	5. Akurasi Notifikasi
+	   Isu saat ini: Pesan notifikasi lonceng menganggap duplikat & blacklist sebagai kandidat baru yang berhasil.
+	   Saran: Pecah rincian notifikasi, misalnya: "X CV baru ditambahkan, Y duplikat terdeteksi, Z terindikasi blacklist."
+	
+	6. Pembaruan CV (Update CV)
+	   Isu saat ini: Saat kandidat lama mengirim CV baru, CV baru tersebut diabaikan begitu saja.
+	   Saran: Jika terdeteksi duplikat, sistem update data kandidat dengan label "Kandidat sudah ada, data diupdate" atau kasih
+	          kalimat serupa.
+	
+	
+	08775461198
+	
+	
+	

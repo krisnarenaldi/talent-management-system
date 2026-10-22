@@ -79,3 +79,13 @@ def mark_all_read(
         .order_by(Notification.created_at.desc())
         .all()
     )
+
+
+@router.delete("/clear-all", status_code=204)
+def clear_all_notifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Hapus semua notifikasi milik user yang sedang login."""
+    db.query(Notification).filter(Notification.user_id == current_user.id).delete()
+    db.commit()

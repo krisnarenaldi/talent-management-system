@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from sqlalchemy import func, or_, text
@@ -567,6 +568,496 @@ def execute_structured_filters(
     results = base_q.order_by(Candidate.created_at.desc()).limit(100).all()
 
     return results, total_count
+
+
+# ── Two-Stage Matching: Recommend Candidates for Position ──────────────────────
+
+async def recommend_candidates_for_position(
+    db: Session,
+    position_id: str,
+    source: str = "all",  # 'talent_pool' | 'database' | 'all'
+    limit_stage1: int = 50,
+    limit_stage2: int = 15,
+) -> dict[str, Any]:
+    """
+    Two-Stage Matching untuk AI Sourcing & Matching.
+
+    Tahap 1 (SQL Filter - 0 Token):
+      - Query kandidat aktif berdasarkan pool_status (source)
+      - Filter expected_salary <= position.salary_budget (atau gaji belum diisi)
+      - Exclude kandidat blacklist aktif & disetujui
+      - Exclude kandidat dengan cooldown (rejected pada posisi sama dalam 6 bulan terakhir)
+      - Batasi hasil ke limit_stage1 (default 50)
+
+    Tahap 2 (LLM Focused Scoring - Hemat Biaya Token):
+      - Ambil Top limit_stage2 (default 15) kandidat terbaik dari stage 1
+      - Susun prompt ringkas: Requirement posisi vs Ringkasan Profil (Nama, Skill, Lama Exp)
+      - Panggil LLM untuk menghasilkan Skor 1-100 dan alasan singkat
+      - Return daftar kandidat rekomendasi terurut berdasarkan skor tertinggi
+    """
+    from app.models.position import Position
+    from app.models.application import Application
+    from app.models.blacklist import Blacklist
+    from sqlalchemy import select as sa_select
+    from datetime import datetime, timezone, timedelta
+
+    # ── Load Position ──────────────────────────────────────────────────────────
+    position = db.query(Position).filter(Position.id == position_id).first()
+    if not position:
+        return {"error": "Position not found", "candidates": []}
+
+    # ── Tahap 1: SQL Filter ────────────────────────────────────────────────────
+    # Base query: kandidat aktif, tidak dihapus
+    q = db.query(Candidate).filter(
+        Candidate.is_deleted == False,
+        Candidate.contact_status == "aktif",
+    )
+
+    # Filter berdasarkan source (pool_status)
+    if source == "talent_pool":
+        q = q.filter(Candidate.pool_status == "talent_pool")
+    elif source == "database":
+        q = q.filter(Candidate.pool_status == "database")
+    # source == "all" -> tidak filter pool_status
+
+    # Exclude kandidat yang sudah jadi employee
+    emp_subq = sa_select(Employee.candidate_id).where(Employee.candidate_id != None)
+    q = q.filter(Candidate.id.not_in(emp_subq))
+
+    # Exclude kandidat dengan blacklist aktif & disetujui
+    bl_subq = sa_select(Blacklist.candidate_id).where(
+        Blacklist.candidate_id != None,
+        Blacklist.is_active == True,
+        Blacklist.is_approved == True,
+    )
+    q = q.filter(Candidate.id.not_in(bl_subq))
+
+    # Filter expected_salary <= position.salary_budget (jika budget diisi)
+    if position.salary_budget:
+        q = q.filter(
+            or_(
+                Candidate.expected_salary <= position.salary_budget,
+                Candidate.expected_salary == None,
+            )
+        )
+
+    # Filter location jika position.location diisi
+    if position.location:
+        q = q.filter(Candidate.domicile.ilike(f"%{position.location}%"))
+
+    # Cooldown: exclude kandidat yang ditolak pada posisi sama dalam 6 bulan terakhir
+    six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
+    rejected_subq = sa_select(Application.candidate_id).where(
+        Application.position_id == position_id,
+        Application.status == "rejected",
+        Application.updated_at >= six_months_ago,
+    )
+    q = q.filter(Candidate.id.not_in(rejected_subq))
+
+    # Batasi hasil stage 1
+    stage1_candidates = q.order_by(Candidate.created_at.desc()).limit(limit_stage1).all()
+
+    if not stage1_candidates:
+        return {"position_id": str(position_id), "candidates": [], "message": "Tidak ada kandidat yang cocok di stage 1"}
+
+    # ── Tahap 2: LLM Scoring ───────────────────────────────────────────────────
+    # Ambil top kandidat untuk LLM scoring
+    candidates_for_llm = stage1_candidates[:limit_stage2]
+
+    # Bangun prompt untuk LLM
+    scoring_config = position.ai_scoring_config or {}
+    required_skills = scoring_config.get("required_skills", [])
+    min_experience_years = scoring_config.get("min_experience_years", 0)
+
+    # Prepare candidate summaries for LLM
+    candidate_summaries = []
+    for idx, c in enumerate(candidates_for_llm):
+        # Calculate experience years
+        exp_years = 0
+        for exp in c.experiences:
+            if exp.start_date:
+                end = exp.end_date or datetime.now(timezone.utc).date()
+                exp_years += max(0, (end - exp.start_date).days / 365.25)
+
+        summary = {
+            "index": idx,
+            "candidate_id": str(c.id),
+            "full_name": c.full_name,
+            "skills": c.skills or [],
+            "experience_years": round(exp_years, 1),
+            "expected_salary": float(c.expected_salary) if c.expected_salary else None,
+            "current_salary": float(c.current_salary) if c.current_salary else None,
+            "domicile": c.domicile,
+            "pool_status": c.pool_status,
+        }
+        candidate_summaries.append(summary)
+
+    # Build LLM prompt
+    prompt = _build_matching_prompt(
+        position_title=position.title,
+        position_requirement=position.requirement or "",
+        position_job_description=position.job_description or "",
+        salary_budget=float(position.salary_budget) if position.salary_budget else None,
+        location=position.location,
+        required_skills=required_skills,
+        min_experience_years=min_experience_years,
+        candidate_summaries=candidate_summaries,
+    )
+
+    # Call LLM
+    scored_candidates = await _call_llm_matching(prompt)
+
+    if not scored_candidates:
+        # Fallback: return stage 1 candidates without scoring
+        return {
+            "position_id": str(position_id),
+            "candidates": [
+                {
+                    "candidate_id": str(c.id),
+                    "full_name": c.full_name,
+                    "skills": c.skills or [],
+                    "experience_years": 0,
+                    "expected_salary": float(c.expected_salary) if c.expected_salary else None,
+                    "domicile": c.domicile,
+                    "pool_status": c.pool_status,
+                    "ai_score": None,
+                    "ai_notes": "LLM scoring tidak tersedia",
+                }
+                for c in candidates_for_llm
+            ],
+            "message": "LLM scoring gagal, hasil stage 1 saja",
+        }
+
+    # Merge LLM scores with candidate data
+    scored_map = {sc["candidate_id"]: sc for sc in scored_candidates}
+    results = []
+    for c in candidates_for_llm:
+        sc = scored_map.get(str(c.id))
+        if sc:
+            results.append({
+                "candidate_id": str(c.id),
+                "full_name": c.full_name,
+                "skills": c.skills or [],
+                "experience_years": sc.get("experience_years", 0),
+                "expected_salary": float(c.expected_salary) if c.expected_salary else None,
+                "domicile": c.domicile,
+                "pool_status": c.pool_status,
+                "ai_score": sc.get("ai_score"),
+                "ai_notes": sc.get("ai_notes", ""),
+            })
+
+    # Sort by ai_score descending
+    results.sort(key=lambda x: x["ai_score"] or 0, reverse=True)
+
+    return {
+        "position_id": str(position_id),
+        "candidates": results,
+        "message": f"Ditemukan {len(results)} kandidat rekomendasi dari {len(stage1_candidates)} kandidat stage 1",
+    }
+
+
+def _build_matching_prompt(
+    position_title: str,
+    position_requirement: str,
+    position_job_description: str,
+    salary_budget: float | None,
+    location: str | None,
+    required_skills: list[str],
+    min_experience_years: int,
+    candidate_summaries: list[dict],
+) -> str:
+    """Build prompt untuk LLM matching kandidat ke posisi."""
+    req_skills_str = ", ".join(required_skills) if required_skills else "Tidak ada skill wajib spesifik"
+    budget_str = f"Rp {salary_budget:,.0f}" if salary_budget else "Belum ditentukan"
+    loc_str = location or "Tidak spesifik"
+
+    cand_lines = []
+    for c in candidate_summaries:
+        skills_str = ", ".join(c["skills"]) if c["skills"] else "Tidak ada"
+        exp_str = f"{c['experience_years']} tahun"
+        salary_str = f"Rp {c['expected_salary']:,.0f}" if c['expected_salary'] else "Belum diisi"
+        cand_lines.append(
+            f"{c['index']+1}. ID: {c['candidate_id']}\n"
+            f"   Nama: {c['full_name']}\n"
+            f"   Skill: {skills_str}\n"
+            f"   Pengalaman: {exp_str}\n"
+            f"   Gaji diharapkan: {salary_str}\n"
+            f"   Domisili: {c['domicile'] or 'Belum diisi'}\n"
+            f"   Status Pool: {c['pool_status']}"
+        )
+
+    return f"""Anda adalah AI Recruiter yang menilai kecocokan kandidat untuk posisi tertentu.
+
+POSISI TARGET:
+- Judul: {position_title}
+- Requirement: {position_requirement or 'Tidak ada'}
+- Job Description: {position_job_description or 'Tidak ada'}
+- Budget Gaji: {budget_str}
+- Lokasi: {loc_str}
+- Skill Wajib: {req_skills_str}
+- Minimal Pengalaman: {min_experience_years} tahun
+
+KANDIDAT KANDIDAT:
+{chr(10).join(cand_lines)}
+
+TUGAS:
+Berikan skor kecocokan 1-100 untuk SETIAP kandidat di atas berdasarkan:
+1. Kecocokan skill dengan requirement posisi (bobot 40%)
+2. Relevansi pengalaman kerja (bobot 30%)
+3. Kecocokan gaji diharapkan dengan budget (bobot 15%)
+4. Kecocokan lokasi/domisili (bobot 10%)
+5. Bonus: Kandidat dari talent_pool mendapat +5 poin (sudah preseleksi HR)
+
+Aturan skor:
+- Skor < 40: Tidak cocok (skill/pengalaman tidak relevan)
+- Skor 40-60: Cukup cocok (ada gap skill/pengalaman)
+- Skor 60-80: Cocok (mayoritas requirement terpenuhi)
+- Skor > 80: Sangat cocok (lebih dari requirement, gaji dalam budget)
+
+Output HARUS berupa JSON object dengan format:
+{{
+  "candidates": [
+    {{
+      "candidate_id": "uuid-string",
+      "ai_score": 75,
+      "ai_notes": "Alasan singkat 1-2 kalimat Bahasa Indonesia",
+      "experience_years": 3.5
+    }}
+  ]
+}}
+
+Hanya kembalikan JSON object valid, tanpa teks tambahan, tanpa markdown."""
+
+
+async def _call_llm_matching(prompt: str) -> list[dict] | None:
+    """Panggil LLM untuk scoring kandidat. Return list of dict atau None jika gagal."""
+    from app.core.config import settings
+    import httpx
+    import json
+
+    if not settings.OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY tidak dikonfigurasi, skip LLM matching")
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.OPENAI_MODEL,
+                    "max_tokens": 1500,
+                    "temperature": 0.3,
+                    "messages": [
+                        {"role": "system", "content": "Anda adalah AI Recruiter yang menilai kecocokan kandidat. Output HARUS berupa JSON object valid dengan key \"candidates\"."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            resp.raise_for_status()
+
+        raw = resp.json()["choices"][0]["message"]["content"]
+        parsed = json.loads(raw)
+
+        # LLM might return {"candidates": [...]} or direct array
+        if isinstance(parsed, dict) and "candidates" in parsed:
+            return parsed["candidates"]
+        elif isinstance(parsed, list):
+            return parsed
+        else:
+            logger.warning("LLM matching return unexpected format: %s", type(parsed))
+            return None
+
+    except Exception as exc:
+        logger.exception("LLM matching gagal: %s", exc)
+        return None
+
+
+# ── Ekstraksi Kriteria Posisi dari Deskripsi (TASK-20.5) ─────────────────────
+
+POSITION_CRITERIA_SYSTEM_PROMPT = """\
+Kamu adalah analis lowongan kerja untuk sistem Talent Management (Altek).
+Tugasmu: baca teks deskripsi lowongan di bawah, lalu ekstrak kriteria terstruktur.
+
+Output HARUS berupa JSON dengan format persis:
+{
+  "salary_budget": 15000000,
+  "location": "Jakarta",
+  "required_skills": ["Python", "SQL"],
+  "min_experience_years": 3
+}
+
+Aturan:
+- salary_budget: angka budget gaji BULANAN dalam Rupiah (angka polos, tanpa titik/koma/"Rp").
+  Null jika nominal tidak disebut.
+- location: kota penempatan kerja. Null jika tidak disebut.
+- required_skills: array skill/teknologi yang diminta (maks 10). Array kosong jika tidak ada.
+- min_experience_years: angka minimal tahun pengalaman. Null jika tidak disebut.
+- Jangan mengarang nilai. Jika tidak ada di teks, gunakan null (atau array kosong).
+- Hanya keluarkan JSON valid, tanpa teks tambahan dan tanpa markdown.
+"""
+
+
+def _parse_number_id(raw: str) -> float:
+    """Parse angka gaya Indonesia ('15.000', '15000', '15,5') menjadi float."""
+    cleaned = re.sub(r"[^0-9.,]", "", raw or "")
+    if not cleaned:
+        return 0.0
+    # Pisahkan bagian desimal (koma dengan 1-3 digit di belakang) bila ada.
+    if "," in cleaned:
+        int_part, _, dec_part = cleaned.partition(".")
+        if len(dec_part) == 3:
+            cleaned = cleaned.replace(".", "").replace(",", "")
+        else:
+            cleaned = cleaned.replace(",", ".").replace(".", "")
+    else:
+        cleaned = cleaned.replace(".", "")
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+
+def _heuristic_position_criteria(text: str) -> dict[str, Any]:
+    """Fallback berbasis regex bila LLM tidak tersedia."""
+    lowered = text.lower()
+
+    budget: int | None = None
+    m = re.search(r"(?:rp\.?\s*)?(\d[\d.,]*)\s*(juta|jt|ribu)\b", lowered)
+    if m:
+        multiplier = 1_000_000 if m.group(2) in ("juta", "jt") else 1_000
+        budget = int(_parse_number_id(m.group(1)) * multiplier)
+    else:
+        m = re.search(r"(?:rp\.?\s*)(\d{1,3}(?:[.,]\d{3})+)", lowered)
+        if m:
+            budget = int(_parse_number_id(m.group(1)))
+
+    known_cities = (
+        "jakarta", "bandung", "surabaya", "medan", "semarang", "yogyakarta",
+        "jogja", "denpasar", "makassar", "balikpapan", "batam", "bekasi",
+        "tangerang", "depok", "bogor", "manado", "palembang", "pekanbaru",
+        "samarinda", "aceh",
+    )
+    location: str | None = None
+    for city in known_cities:
+        if city in lowered:
+            location = city.title()
+            break
+
+    min_exp: int | None = None
+    m = re.search(r"(\d{1,2})\s*(?:\+)?\s*tahun", lowered)
+    if m:
+        min_exp = int(m.group(1))
+
+    return {
+        "salary_budget": budget,
+        "location": location,
+        "required_skills": [],
+        "min_experience_years": min_exp,
+        "message": "Kriteria diekstrak dengan pola sederhana (AI tidak tersedia).",
+    }
+
+
+def _normalize_position_criteria(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalisasi payload LLM agar konsisten & aman dipakai form frontend."""
+    raw_budget = payload.get("salary_budget")
+    budget: int | None = None
+    if isinstance(raw_budget, (int, float)) and not isinstance(raw_budget, bool):
+        budget = int(raw_budget)
+    elif isinstance(raw_budget, str) and raw_budget.strip():
+        parsed = _parse_number_id(raw_budget)
+        budget = int(parsed) if parsed > 0 else None
+
+    raw_location = payload.get("location")
+    location = raw_location.strip() if isinstance(raw_location, str) and raw_location.strip() else None
+
+    raw_skills = payload.get("required_skills")
+    skills: list[str] = []
+    if isinstance(raw_skills, list):
+        for item in raw_skills:
+            if isinstance(item, str) and item.strip():
+                skills.append(item.strip())
+    elif isinstance(raw_skills, str) and raw_skills.strip():
+        skills = [s.strip() for s in raw_skills.split(",") if s.strip()]
+
+    # Dedup preserving order, limit 10 skill
+    deduped: list[str] = []
+    for skill in skills:
+        if skill.lower() not in [s.lower() for s in deduped]:
+            deduped.append(skill)
+    skills = deduped[:10]
+
+    raw_exp = payload.get("min_experience_years")
+    min_exp: int | None = None
+    if isinstance(raw_exp, (int, float)) and not isinstance(raw_exp, bool):
+        min_exp = max(0, int(raw_exp))
+    elif isinstance(raw_exp, str) and raw_exp.strip():
+        try:
+            min_exp = max(0, int(float(raw_exp)))
+        except ValueError:
+            min_exp = None
+
+    return {
+        "salary_budget": budget,
+        "location": location,
+        "required_skills": skills,
+        "min_experience_years": min_exp,
+        "message": "Kriteria berhasil diekstrak dari deskripsi lowongan.",
+    }
+
+
+def extract_position_criteria(text: str) -> dict[str, Any]:
+    """
+    Ekstrak budget gaji, lokasi, required skills, dan minimal pengalaman dari
+    teks deskripsi/requirement lowongan.
+
+    Mengembalikan dict:
+      { "salary_budget": int|None, "location": str|None,
+        "required_skills": list[str], "min_experience_years": int|None,
+        "message": str }
+    atau { "error": "llm_unavailable", "detail": ... } bila LLM gagal total.
+    """
+    cleaned = (text or "").strip()
+    if len(cleaned) < 20:
+        return {
+            "error": "input_too_short",
+            "detail": "Teks deskripsi terlalu pendek untuk diekstraksi.",
+        }
+
+    if not settings.OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY belum diset — fallback heuristik untuk ekstraksi kriteria posisi")
+        return _heuristic_position_criteria(cleaned)
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": POSITION_CRITERIA_SYSTEM_PROMPT},
+                {"role": "user", "content": cleaned[:8000]},
+            ],
+            temperature=0,
+            max_tokens=400,
+            response_format={"type": "json_object"},
+        )
+        raw = response.choices[0].message.content or "{}"
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("respons LLM bukan objek JSON")
+        return _normalize_position_criteria(parsed)
+    except Exception as exc:
+        logger.warning("Ekstraksi kriteria posisi via LLM gagal: %s — fallback heuristik", exc)
+        fallback = _heuristic_position_criteria(cleaned)
+        fallback["message"] = (
+            "AI tidak dapat memproses deskripsi, kriteria diekstrak dengan pola sederhana."
+        )
+        return fallback
 
 
 # ── execute_employee_filters ──────────────────────────────────────────────────

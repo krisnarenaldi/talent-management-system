@@ -6,8 +6,14 @@ TODO: Fase 3 — tambahkan Tesseract/PaddleOCR untuk CV scan/gambar.
 from __future__ import annotations
 
 import re
+from io import BytesIO
 
 import fitz  # PyMuPDF
+
+try:
+    from docx import Document as DocxDocument
+except ImportError:
+    DocxDocument = None
 
 
 def _clean_cv_text(text: str) -> str:
@@ -89,3 +95,24 @@ def extract_pdf_text(file_bytes: bytes) -> str:
 async def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Backward-compatible wrapper agar caller lama tetap berjalan."""
     return extract_pdf_text(file_bytes)
+
+
+def extract_docx_text(file_bytes: bytes) -> str:
+    """
+    Ekstrak teks dari file DOCX menggunakan python-docx.
+    """
+    if DocxDocument is None:
+        raise RuntimeError("python-docx belum terinstall. Jalankan: pip install python-docx")
+
+    if not file_bytes:
+        raise ValueError("File DOCX kosong")
+
+    with BytesIO(file_bytes) as bio:
+        doc = DocxDocument(bio)
+        texts = [para.text for para in doc.paragraphs if para.text.strip()]
+
+    if not texts:
+        raise ValueError("Tidak ada teks yang bisa diekstrak dari DOCX ini.")
+
+    raw = "\n".join(texts)
+    return _clean_cv_text(raw)

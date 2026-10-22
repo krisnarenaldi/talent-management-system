@@ -515,7 +515,7 @@ function ApplicationsPipeline() {
             <select
               value={statusFilter}
               onChange={handleFilterChange(setStatusFilter)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Semua</option>
               <option value="active">Aktif</option>
@@ -529,7 +529,7 @@ function ApplicationsPipeline() {
             <select
               value={stageFilter}
               onChange={handleFilterChange(setStageFilter)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Semua</option>
               {stageOptions.map((stage) => (
@@ -545,7 +545,7 @@ function ApplicationsPipeline() {
               type="date"
               value={startDate}
               onChange={handleFilterChange(setStartDate)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
           <div>
@@ -554,7 +554,7 @@ function ApplicationsPipeline() {
               type="date"
               value={endDate}
               onChange={handleFilterChange(setEndDate)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
         </div>

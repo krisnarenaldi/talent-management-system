@@ -15,26 +15,38 @@ import type { Client } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
+import { getClientPics } from "@/lib/clients";
+import { normalizePhone } from "@/lib/phone";
+
+const clientPicSchema = z.object({
+  name: z.string().trim().min(1, "Nama PIC wajib diisi").max(255, "Nama PIC maksimal 255 karakter"),
+  contact: z.string().trim().min(1, "Kontak PIC wajib diisi").regex(/^0\d{8,14}$/, "Nomor HP harus diawali 0 dan 9-15 digit"),
+});
 
 const clientCreateSchema = z.object({
-  name: z.string().min(1, "Nama klien wajib diisi"),
-  industry: z.string().optional(),
+  name: z.string().trim().min(1, "Nama klien wajib diisi").max(255, "Nama klien maksimal 255 karakter"),
+  industry: z.string().max(255, "Industri maksimal 255 karakter").optional(),
   pic_name: z.string().optional(),
   pic_contact: z.string().optional(),
+  pics: z.array(clientPicSchema).optional(),
 });
 
 const clientUpdateSchema = z
   .object({
-    name: z.string().min(1, "Nama klien wajib diisi").optional(),
-    industry: z.string().optional(),
+    name: z.string().trim().min(1, "Nama klien wajib diisi").max(255, "Nama klien maksimal 255 karakter").optional(),
+    industry: z.string().max(255, "Industri maksimal 255 karakter").optional(),
     pic_name: z.string().optional(),
     pic_contact: z.string().optional(),
+    pics: z.array(clientPicSchema).optional(),
     is_active: z.boolean().optional(),
   })
   .partial();
 
 type ClientCreateForm = z.infer<typeof clientCreateSchema>;
 type ClientUpdateForm = z.infer<typeof clientUpdateSchema>;
+
+/** Baris form PIC — kontak selalu string (kosong berarti belum diisi). */
+type PicRow = { name: string; contact: string };
 
 interface ClientsResponse {
   data: Client[];
@@ -115,6 +127,9 @@ export default function AdminClientsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["client"] });
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      queryClient.invalidateQueries({ queryKey: ["positions-by-client"] });
       setEditingClient(null);
       showToast("success", "Klien berhasil diperbarui.");
     },
@@ -296,14 +311,26 @@ export default function AdminClientsPage() {
                         {client.industry ?? "-"}
                       </td>
                       <td className="py-3 px-4 text-on-surface-variant">
-                        {client.pic_name
-                          ? client.pic_name.split(";").map((n, i) => <div key={i}>{n.trim()}</div>)
-                          : "-"}
+                        {getClientPics(client).length ? (
+                          <div className="space-y-0.5">
+                            {getClientPics(client).map((pic, i) => (
+                              <div key={`${pic.name}-${i}`}>{pic.name}</div>
+                            ))}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="py-3 px-4 text-on-surface-variant">
-                        {client.pic_contact
-                          ? client.pic_contact.split(";").map((c, i) => <div key={i}>{c.trim()}</div>)
-                          : "-"}
+                        {getClientPics(client).some((pic) => pic.contact) ? (
+                          <div className="space-y-0.5">
+                            {getClientPics(client).map((pic, i) => (
+                              <div key={`${pic.name}-${i}`}>{pic.contact ?? "-"}</div>
+                            ))}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         {client.is_active ? (
@@ -441,20 +468,15 @@ function ClientFormModal({
 
   useModalEscape(onClose, !isSubmitting);
 
-  const [pics, setPics] = useState<{ name: string; contact: string }[]>(() => {
-    if (client) {
-      const names = (client.pic_name || "").split(";").map((s) => s.trim()).filter(Boolean);
-      const contacts = (client.pic_contact || "").split(";").map((s) => s.trim()).filter(Boolean);
-      const maxLen = Math.max(names.length, contacts.length, 1);
-      return Array.from({ length: maxLen }, (_, i) => ({
-        name: names[i] || "",
-        contact: contacts[i] || "",
-      }));
+  const [pics, setPics] = useState<PicRow[]>(() => {
+    const existing = getClientPics(client);
+    if (existing.length) {
+      return existing.map((pic) => ({ name: pic.name, contact: pic.contact ?? "" }));
     }
     return [{ name: "", contact: "" }];
   });
 
-  const [picErrors, setPicErrors] = useState<{ contact?: string }[]>(() =>
+  const [picErrors, setPicErrors] = useState<{ name?: string; contact?: string }[]>(() =>
     Array.from({ length: pics.length }, () => ({}))
   );
 
@@ -469,23 +491,45 @@ function ClientFormModal({
   };
 
   const updatePic = (index: number, field: "name" | "contact", value: string) => {
-    const updatedPics = pics.map((p, i) => (i === index ? { ...p, [field]: value } : p));
+    const processedValue = field === "contact" ? normalizePhone(value) : value;
+    const updatedPics = pics.map((p, i) => (i === index ? { ...p, [field]: processedValue } : p));
     setPics(updatedPics);
+    if (field === "name") {
+      const trimmedLower = value.trim().toLowerCase();
+      const isDuplicate =
+        trimmedLower !== "" &&
+        updatedPics.some((p, i) => i !== index && p.name.trim().toLowerCase() === trimmedLower);
+      const isEmpty = value.trim() === "" && updatedPics[index].contact.trim() !== "";
+      setPicErrors((prev) =>
+        prev.map((e, i) =>
+          i === index
+            ? {
+                ...e,
+                name: isDuplicate
+                  ? "Nama PIC sudah digunakan pada baris lain"
+                  : isEmpty
+                    ? "Nama PIC wajib diisi"
+                    : undefined,
+              }
+            : e
+        )
+      );
+      return;
+    }
     if (field === "contact") {
-      const isValid = !value || /^\+?[\d\s\-()]{6,20}$/.test(value);
+      const isValid = !processedValue || /^0\d{8,14}$/.test(processedValue);
       if (!isValid) {
         setPicErrors((prev) =>
           prev.map((e, i) =>
-            i === index ? { ...e, contact: "Format nomor HP tidak valid" } : e
+            i === index ? { ...e, contact: "Nomor HP harus diawali 0 dan 9-15 digit" } : e
           )
         );
         return;
       }
       // Check for duplicates within this client
-      const trimmedLower = value.trim().toLowerCase();
       const isDuplicate =
-        trimmedLower !== "" &&
-        updatedPics.some((p, i) => i !== index && p.contact.trim().toLowerCase() === trimmedLower);
+        processedValue !== "" &&
+        updatedPics.some((p, i) => i !== index && p.contact === processedValue);
       setPicErrors((prev) =>
         prev.map((e, i) =>
           i === index
@@ -517,7 +561,7 @@ function ClientFormModal({
 
   const onSubmit = async (data: Record<string, unknown>) => {
     // Validate per-row PIC errors
-    if (picErrors.some((e) => e.contact)) return;
+    if (picErrors.some((e) => e.contact || e.name)) return;
 
     // Check for duplicate contacts within this client
     const contacts = pics.map((p) => p.contact.trim().toLowerCase()).filter(Boolean);
@@ -539,22 +583,48 @@ function ClientFormModal({
       return;
     }
 
-    // Kalau nama PIC diisi, kontak wajib diisi
+    // Check for duplicate PIC names within this client
+    const names = pics.map((p) => p.name.trim().toLowerCase()).filter(Boolean);
+    const hasDuplicateName = names.some((c, i) => names.indexOf(c) !== i);
+    if (hasDuplicateName) {
+      const seenNames = new Map<string, number>();
+      const newPicErrors = picErrors.map((e) => ({ ...e }));
+      names.forEach((c, i) => {
+        if (!c) return;
+        if (seenNames.has(c)) {
+          newPicErrors[i].name = "Nama PIC sudah digunakan pada baris lain";
+          const firstIdx = seenNames.get(c)!;
+          newPicErrors[firstIdx].name = "Nama PIC sudah digunakan pada baris lain";
+        } else {
+          seenNames.set(c, i);
+        }
+      });
+      setPicErrors(newPicErrors);
+      return;
+    }
+
+    // Nama PIC wajib diisi bila kontaknya diisi, dan sebaliknya.
     const newPicErrors = pics.map((p, i) => {
       const err = { ...picErrors[i] };
       if (p.name.trim() && !p.contact.trim()) {
         err.contact = "Kontak PIC tidak boleh kosong";
       }
+      if (!p.name.trim() && p.contact.trim()) {
+        err.name = "Nama PIC wajib diisi";
+      }
       return err;
     });
-    if (newPicErrors.some((e) => e.contact)) {
+    if (newPicErrors.some((e) => e.contact || e.name)) {
       setPicErrors(newPicErrors);
       return;
     }
 
-    const pic_name = pics.map((p) => p.name.trim()).filter(Boolean).join(";") || undefined;
-    const pic_contact = pics.map((p) => p.contact.trim()).filter(Boolean).join(";") || undefined;
-    const fullData = { ...data, pic_name, pic_contact };
+    // Baris PIC tanpa nama diabaikan (kontaknya tidak boleh menggantung).
+    const validPics = pics
+      .filter((p) => p.name.trim())
+      .map((p) => ({ name: p.name.trim(), contact: normalizePhone(p.contact) }));
+
+    const fullData = { ...data, pics: validPics };
 
     if (isCreating) {
       await onCreate(fullData as unknown as ClientCreateForm);
@@ -578,6 +648,7 @@ function ClientFormModal({
             <input
               type="text"
               placeholder="PT. Contoh Indonesia"
+              maxLength={255}
               {...register("name")}
               className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
             />
@@ -593,6 +664,7 @@ function ClientFormModal({
             <input
               type="text"
               placeholder="Banking / Financial"
+              maxLength={255}
               {...register("industry")}
               className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
             />
@@ -603,7 +675,12 @@ function ClientFormModal({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="block text-label-md text-on-surface">PIC</label>
+              <label className="block text-label-md text-on-surface">
+                PIC
+                <span className="text-on-surface-variant font-normal ml-1">
+                  (boleh lebih dari satu)
+                </span>
+              </label>
             </div>
             {pics.map((pic, index) => (
               <div key={index} className="flex gap-2 items-start">
@@ -611,15 +688,22 @@ function ClientFormModal({
                   <input
                     type="text"
                     placeholder="Nama PIC"
+                    maxLength={255}
                     value={pic.name}
                     onChange={(e) => updatePic(index, "name", e.target.value)}
-                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                    className={`w-full px-3 py-2 bg-surface border rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all ${
+                      picErrors[index]?.name ? "border-error" : "border-outline-variant"
+                    }`}
                   />
+                  {picErrors[index]?.name && (
+                    <p className="text-error text-xs">{picErrors[index].name}</p>
+                  )}
                 </div>
                 <div className="flex-1 space-y-1">
                   <input
                     type="text"
                     placeholder="Kontak PIC"
+                    maxLength={15}
                     value={pic.contact}
                     onChange={(e) => updatePic(index, "contact", e.target.value)}
                     className={`w-full px-3 py-2 bg-surface border rounded-lg text-body-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all ${
@@ -649,6 +733,9 @@ function ClientFormModal({
               <span className="material-symbols-outlined text-base">add</span>
               Tambah PIC
             </button>
+            <p className="text-xs text-on-surface-variant">
+              PIC ini menjadi pilihan penanggung jawab saat posisi dibuat.
+            </p>
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -713,7 +800,7 @@ function DeleteConfirmModal({
         <p className="text-body-sm text-on-surface-variant mb-6">
           Nonaktifkan klien{" "}
           <span className="font-medium text-on-surface">{client.name}</span>?
-          Pengguna yang dinonaktifkan tidak dapat masuk lagi.
+          Klien yang dinonaktifkan tidak dapat dipilih untuk posisi baru.
         </p>
         <div className="flex gap-3">
           <button

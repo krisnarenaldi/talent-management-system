@@ -9,6 +9,7 @@ import { useAuthStore } from "@/stores/auth.store";
 const SIDEBAR_NAV_ITEMS = [
   { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
   { href: "/candidates", icon: "group", label: "Database" },
+  { href: "/talent-pool", icon: "groups", label: "Talent Pool" },
   { href: "/applications", icon: "work", label: "Applications" },
   { href: "/employees", icon: "people", label: "Employees" },
   { href: "/blacklist", icon: "box", label: "Blacklist" },

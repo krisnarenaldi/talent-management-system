@@ -19,6 +19,83 @@
         "chatSessionId": "sess_d83b9e8e-5ee5-42e7-b19b-c300994c9e1a",
         "timestamp": 1788409629447
       }
+    ],
+    "Buat file migration Alembic baru di `backend/alembic/versions/`:": [
+      {
+        "executionId": "f31bc793-9146-4bc3-87a7-ccd0934b0e0d",
+        "chatSessionId": "sess_12a02987-3c84-4862-afba-cbe3f5317921",
+        "timestamp": 1792394366223
+      },
+      {
+        "executionId": "f31bc793-9146-4bc3-87a7-ccd0934b0e0d",
+        "chatSessionId": "sess_12a02987-3c84-4862-afba-cbe3f5317921",
+        "timestamp": 1792394435512
+      }
+    ],
+    "Uji coba eksekusi migrasi: `alembic upgrade head` dan pastikan rollback `alembic downgrade -1` berjalan bersih": [
+      {
+        "executionId": "0c78e0a3-69ea-47c1-93e1-74985f6c4146",
+        "chatSessionId": "sess_e4f3b09f-1ace-47e4-b176-594230bf5337",
+        "timestamp": 1792394918690
+      },
+      {
+        "executionId": "0c78e0a3-69ea-47c1-93e1-74985f6c4146",
+        "chatSessionId": "sess_e4f3b09f-1ace-47e4-b176-594230bf5337",
+        "timestamp": 1792398930407
+      }
+    ],
+    "Update model SQLAlchemy di `backend/app/models/candidate.py`:": [
+      {
+        "executionId": "bf3a53e1-e901-473a-bc14-d3eee7e9e645",
+        "chatSessionId": "sess_18c0c1bf-14cb-46f7-a3bc-84cc846eafb0",
+        "timestamp": 1792399011750
+      },
+      {
+        "executionId": "bf3a53e1-e901-473a-bc14-d3eee7e9e645",
+        "chatSessionId": "sess_18c0c1bf-14cb-46f7-a3bc-84cc846eafb0",
+        "timestamp": 1792399648516
+      }
+    ],
+    "Update `frontend/src/app/(dashboard)/candidates/page.tsx`:": [
+      {
+        "executionId": "eaa2b1b8-7661-4c39-835c-b667f891801a",
+        "chatSessionId": "sess_7ba83bf5-3f2e-41b1-b0b8-c771cead34c4",
+        "timestamp": 1792404991349
+      },
+      {
+        "executionId": "eaa2b1b8-7661-4c39-835c-b667f891801a",
+        "chatSessionId": "sess_7ba83bf5-3f2e-41b1-b0b8-c771cead34c4",
+        "timestamp": 1792405109094
+      }
+    ],
+    "Tambah modal konfirmasi \"Pindahkan ke Talent Pool\":": [
+      {
+        "executionId": "22698982-ef66-4767-8338-fde30ff90539",
+        "chatSessionId": "sess_a3be5680-a1d0-466c-a1a3-8b338c3cf5ce",
+        "timestamp": 1792405170023
+      },
+      {
+        "executionId": "b6496449-0237-4d5e-9551-fd52b47fbef3",
+        "chatSessionId": "sess_cf7f512f-f338-4ff3-9f24-0263801b7501",
+        "timestamp": 1792416826633
+      },
+      {
+        "executionId": "b6496449-0237-4d5e-9551-fd52b47fbef3",
+        "chatSessionId": "sess_cf7f512f-f338-4ff3-9f24-0263801b7501",
+        "timestamp": 1792416946566
+      }
+    ],
+    "Redesain halaman `frontend/src/app/(dashboard)/candidates/new/page.tsx`:": [
+      {
+        "executionId": "c81b715b-84d7-48e0-b433-a46ed28562ef",
+        "chatSessionId": "sess_8e9b0127-33ab-44fd-bbdc-6130245839d0",
+        "timestamp": 1792418350907
+      },
+      {
+        "executionId": "c81b715b-84d7-48e0-b433-a46ed28562ef",
+        "chatSessionId": "sess_8e9b0127-33ab-44fd-bbdc-6130245839d0",
+        "timestamp": 1792418496463
+      }
     ]
   }
 }

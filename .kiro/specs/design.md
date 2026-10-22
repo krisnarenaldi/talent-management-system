@@ -1,7 +1,7 @@
 # Design — Talent Management System (TMS)
-**Client:** Altek
-**Versi:** 1.0
-**Tanggal:** September 2026
+**Client:** Altek  
+**Versi:** 2.0 (Pasca-UAT Flow Revision)  
+**Tanggal:** Oktober 2026  
 
 ---
 
@@ -28,559 +28,400 @@
 │  port 8000  │                      └─────────────────┘
 └──────┬──────┘
        │
-       ├──▶ PostgreSQL (via PgBouncer)
+       ├──▶ PostgreSQL 16 (via PgBouncer)
+       │       Database relasional: candidates, applications, positions, users, etc.
        │
-       ├──▶ Redis (arq job queue)
-       │       enqueue CV parsing jobs, cron jobs
+       ├──▶ Redis 7 (arq job queue)
+       │       Broker antrean job: CV ingestion, AI position scoring, cron jobs
        │
-       ├──▶ arq Worker (same image as backend)
-       │       dequeue & process: PDF parse → LLM → save result
-       │       cron: database backup, contract expiry alert
+       ├──▶ arq Worker (Python runtime terisolasi)
+       │       dequeue & process: PDF text extract → LLM extract → LLM position score
+       │       cron: database backup, monitoring masa kontrak
        │
        ├──▶ Microsoft Graph API (OneDrive for Business)
-       │       upload/download dokumen kandidat & karyawan
+       │       Penyimpanan dokumen CV, ijazah, sertifikat, KTP
        │
-       └──▶ LLM API (Anthropic/OpenAI/Gemini)
-               ekstraksi CV, scoring, NL Search (Fase 3)
+       └──▶ LLM API (OpenAI / Gemini / Anthropic)
+               1. LLM Extract: ekstraksi profil terstruktur dari CV mentah
+               2. LLM Match: penilaian kecocokan posisi (skor 1-100 & evaluasi)
 ```
 
-### 1.2 Komponen & Tanggung Jawab
+### 1.2 Pembagian Peran Komponen
 
-| Komponen | Tanggung Jawab |
+| Komponen | Peran & Tanggung Jawab |
 |---|---|
-| **Next.js** | UI/UX, routing, server-side rendering halaman, form handling, auth session di browser |
-| **FastAPI** | REST API, business logic, RBAC enforcement, integrasi Graph API, enqueue arq job |
-| **PostgreSQL** | Penyimpanan data relasional (kandidat, aplikasi, karyawan, dll) |
-| **PgBouncer** | Connection pooling antara FastAPI/worker dan PostgreSQL |
-| **Redis** | Broker antrian job arq — menerima enqueue dari FastAPI, menyimpan job sampai diambil worker |
-| **arq Worker** | Async task worker (image sama dengan backend): dequeue job dari Redis → jalankan `process_cv_screening` in-process (tanpa HTTP round-trip), jalankan cron jobs |
-| **OneDrive for Business** | File storage dokumen (CV, KTP, KK, dll) via Microsoft Graph API |
-| **Nginx** | Reverse proxy, SSL termination (Let's Encrypt), routing /api vs / |
+| **Next.js** | Antarmuka pengguna (App Router), manajemen state (Zustand + React Query), validasi form (React Hook Form + Zod), proteksi rute & kondisional UI berbasis role (RBAC). |
+| **FastAPI** | REST API backend, penegakan RBAC di level middleware, validasi bisnis (Blacklist, Cooldown, Duplikasi), orkestrasi arq worker, dan integrasi OneDrive Graph API. |
+| **PostgreSQL** | Penyimpanan data relasional terpusat dengan integritas foreign key dan indeks teroptimasi. |
+| **arq Worker** | Pemrosesan tugas latar belakang (asynchronous) untuk ekstraksi teks PDF/DOCX dan pemanggilan model LLM tanpa memblokir request HTTP frontend. |
+| **Redis** | Broker antrean pesan berkecepatan tinggi untuk arq worker. |
+| **OneDrive API** | Object storage dokumen fisik, menjamin VPS lokal tidak kehabisan ruang disk. |
 
 ---
 
-## 2. Desain Database
+## 2. Desain Database & Skema Perubahan v2.0
 
-### 2.1 Entity Relationship (ringkas — detail di ERD-TMS.mermaid)
+### 2.1 Entity Relationship Diagram (ERD Ringkas)
 
-Entitas utama dan relasinya:
+```mermaid
+erDiagram
+    CLIENT ||--o{ POSITION : has
+    POSITION ||--o{ APPLICATION : targets
+    POSITION ||--o{ CLIENT_USER : assigns
 
+    CANDIDATE ||--o{ CANDIDATE_EDUCATION : contains
+    CANDIDATE ||--o{ CANDIDATE_EXPERIENCE : contains
+    CANDIDATE ||--o{ CANDIDATE_DOCUMENT : contains
+    CANDIDATE ||--o{ APPLICATION : applies
+    CANDIDATE ||--o{ BLACKLIST : flags
+
+    APPLICATION ||--o{ STAGE_HISTORY : tracks
+    APPLICATION ||--o| AI_SCREENING_RESULT : evaluates
+    APPLICATION ||--o| EMPLOYEE : graduates_to
+
+    EMPLOYEE ||--o{ EMPLOYEE_CONTRACT : signs
+    EMPLOYEE ||--o| EMPLOYEE_PAYROLL : receives
+    EMPLOYEE ||--o{ EMPLOYEE_DOCUMENT : stores
+
+    USER ||--o{ STAGE_HISTORY : updates
+    USER ||--o{ APPLICATION : recruits
 ```
-CANDIDATE ──< CANDIDATE_EDUCATION
-CANDIDATE ──< CANDIDATE_EXPERIENCE
-CANDIDATE ──< CANDIDATE_DOCUMENT
-CANDIDATE ──< GENERATED_CV
-CANDIDATE ──< BLACKLIST
-CANDIDATE ──< APPLICATION ──< STAGE_HISTORY
-                          ──o AI_SCREENING_RESULT
-                          ──o EMPLOYEE ──< EMPLOYEE_CONTRACT >── AGREEMENT_TYPE
-                                       ──o EMPLOYEE_PAYROLL
-                                       ──< EMPLOYEE_DOCUMENT
 
-CLIENT ──< POSITION ──< APPLICATION
+### 2.2 Penyesuaian Kolom Skema (Database Migration v2.0)
 
-USER (menangani APPLICATION, mengupdate STAGE_HISTORY, menandai BLACKLIST)
+Untuk mengakomodasi alur pasca-UAT tanpa memecah integritas relasi, dilakukan penambahan kolom pada tabel yang sudah ada:
 
-BLACKLIST_STATUS_TYPE ──< BLACKLIST
-AGREEMENT_TYPE ──< EMPLOYEE_CONTRACT
+#### A. Tabel `candidate` (Penambahan Status Talent Pool)
+```sql
+-- Penambahan enum dan kolom status pool
+CREATE TYPE pool_status_enum AS ENUM ('database', 'talent_pool', 'future_lead');
+
+ALTER TABLE candidate 
+    ADD COLUMN pool_status pool_status_enum DEFAULT 'database' NOT NULL,
+    ADD COLUMN talent_pool_reason VARCHAR(100) NULL, -- 'gaji_tidak_sesuai', 'kebutuhan_masa_depan', 'lainnya'
+    ADD COLUMN talent_pool_notes TEXT NULL,
+    ADD COLUMN talent_pool_updated_at TIMESTAMP WITH TIME ZONE NULL,
+    ADD COLUMN talent_pool_updated_by UUID REFERENCES "user"(id) ON DELETE SET NULL;
+
+CREATE INDEX idx_candidate_pool_status ON candidate(pool_status);
+CREATE INDEX idx_candidate_expected_salary ON candidate(expected_salary);
+CREATE INDEX idx_candidate_domicile ON candidate(domicile);
 ```
 
-### 2.2 Keputusan Desain Penting
+#### B. Tabel `application` (Asosiasi User Klien)
+```sql
+ALTER TABLE application
+    ADD COLUMN client_user_id UUID REFERENCES "user"(id) ON DELETE SET NULL,
+    ADD COLUMN client_user_name VARCHAR(255) NULL; -- nama PIC User dari sisi client (e.g., 'Joni', 'Ahmad')
+```
 
-| Keputusan | Alasan |
-|---|---|
-| `Candidate` terpisah dari `Application` | Satu kandidat bisa melamar ke banyak posisi/waktu berbeda tanpa duplikasi data pribadi |
-| `Stage_History` menyimpan setiap event (bukan hanya status terakhir) | Audit trail lengkap, history proses bisa dilihat kapan saja |
-| Dokumen sebagai baris di `Candidate_Document`/`Employee_Document` | Fleksibel menambah tipe dokumen baru tanpa migrasi skema |
-| `Employee` terpisah dari `Candidate` | Merepresentasikan status "sudah jadi karyawan"; rehire tetap tercatat sebagai Employee baru dengan relasi ke Candidate yang sama |
-| `Employee_Contract` terpisah | Riwayat perpanjangan kontrak tidak menimpa data lama |
-| `Employee_Payroll` terpisah | Kontrol akses lebih ketat (hanya Manager & Admin) tanpa mempengaruhi akses data karyawan umum |
-| Usia & masa kontrak tidak disimpan statis | Dihitung otomatis di layer aplikasi dari `birth_date` / `join_date` — selalu akurat |
-| `Blacklist_Status_Type` & `Agreement_Type` sebagai master data | Admin bisa tambah/nonaktifkan opsi baru tanpa deployment ulang |
-| File tidak disimpan di disk VPS | Semua file ke OneDrive via Graph API; disk lokal hanya untuk file sementara saat parsing |
+#### C. Tabel `position` (Spesifikasi Kriteria Posisi & User PIC Klien)
+```sql
+-- Menyimpan budget gaji maksimal, kota penempatan, dan daftar user PIC klien
+ALTER TABLE position
+    ADD COLUMN salary_budget NUMERIC(15, 2) NULL,        -- budget maksimal gaji posisi (contoh: 15000000.00)
+    ADD COLUMN location VARCHAR(255) NULL,               -- kota penempatan (contoh: 'Jakarta', 'Bandung')
+    ADD COLUMN client_user_names JSONB DEFAULT '[]'::jsonb; -- e.g. ["Joni", "Ahmad", "Siti"]
 
-### 2.3 Konvensi Penamaan
-- Tabel: `snake_case` huruf kecil (contoh: `candidate_document`)
-- Primary key: `id` bertipe `UUID` (default `gen_random_uuid()`)
-- Foreign key: `{tabel_referensi}_id` (contoh: `candidate_id`)
-- Timestamp: `created_at`, `updated_at` dengan default `NOW()`
-- Kolom boolean: prefix `is_` (contoh: `is_active`, `is_verified`)
+CREATE INDEX idx_position_salary_budget ON position(salary_budget);
+CREATE INDEX idx_position_location ON position(location);
+```
 
 ---
 
-## 3. Desain API (FastAPI)
+## 3. Desain API (FastAPI) & RBAC Enforcement
 
-### 3.1 URL Structure
+### 3.1 Struktur Endpoint Baru & Modifikasi
 
 ```
-/api/v1/auth/          → login, logout, refresh token
-/api/v1/users/         → CRUD user (Admin only)
-/api/v1/clients/       → CRUD Client (Admin)
-/api/v1/positions/     → CRUD Position (Admin)
-/api/v1/candidates/    → CRUD Candidate, duplikat check, blacklist check
-/api/v1/candidates/{id}/documents/    → upload/list/delete dokumen kandidat
-/api/v1/candidates/{id}/education/    → CRUD pendidikan
-/api/v1/candidates/{id}/experience/   → CRUD pengalaman kerja
-/api/v1/applications/                 → CRUD Application
-/api/v1/applications/{id}/stages/     → update tahapan, lihat history
-/api/v1/applications/{id}/cv/         → generate CV standar (Fase 2)
-/api/v1/blacklist/                    → CRUD blacklist
-/api/v1/blacklist-status-types/       → CRUD master data status blacklist (Admin)
-/api/v1/employees/                    → CRUD Employee
-/api/v1/employees/{id}/contracts/     → CRUD kontrak karyawan
-/api/v1/employees/{id}/payroll/       → get/update payroll (Manager+Admin only)
-/api/v1/employees/{id}/documents/     → upload/list dokumen karyawan
-/api/v1/agreement-types/              → CRUD Agreement Type (Admin)
-/api/v1/export/candidates/            → export Excel kandidat
-/api/v1/export/pipeline/              → export Excel pipeline
-/api/v1/analytics/                    → data dashboard (Fase 4)
-/api/v1/ai/extract/                   → trigger ekstraksi AI (Fase 3)
-/api/v1/ai/search/                    → Natural Language Search (Manager only, Fase 3)
-/api/v1/ai/screening/{application_id} → hasil AI screening (Fase 3)
+/api/v1/candidates/
+  ├── POST   /bulk-upload          → Upload batch CV langsung ke database umum (tanpa posisi)
+  ├── POST   /bulk-assign          → Bulk assign kandidat terpilih ke suatu lowongan aktif
+  ├── PATCH  /{id}/talent-pool     → Update status pool kandidat (database ↔ talent_pool)
+  └── ... (CRUD reguler)
+
+/api/v1/positions/
+  ├── POST   /{id}/recommend-candidates → Two-Stage Matching (SQL Filter + LLM Scoring)
+  └── ... (CRUD reguler)
+
+/api/v1/applications/
+  ├── POST   /                     → Pembuatan lamaran individual / batch
+  └── ... (Pipeline & Stage History)
 ```
 
-### 3.2 Autentikasi & Otorisasi
+### 3.2 Spesifikasi Kontrak API Utama
 
-- **JWT**: access token (15 menit) + refresh token (7 hari), disimpan di httpOnly cookie
-- **RBAC Middleware** di FastAPI: setiap endpoint mendefinisikan `allowed_roles`
-- Contoh dependency FastAPI:
-  ```python
-  # Contoh penggunaan di endpoint
-  @router.get("/ai/search")
-  async def nl_search(query: str, user: User = Depends(require_role("manager"))):
-      ...
+#### 1. Ingestion CV Massal ke Database (`POST /api/v1/candidates/bulk-upload`)
+* **Akses:** HR, Manager, Admin.
+* **Content-Type:** `multipart/form-data`.
+* **Payload:** `files: list[UploadFile]`, `source_channel: str` (opsional: e.g., 'LinkedIn', 'Glints').
+* **Alur:**
+  1. Validasi file (PDF/DOCX, max 5 MB).
+  2. Upload fisik ke OneDrive folder `candidates/raw_cv/`.
+  3. Buat record `ai_screening_result` dengan status `menunggu_ekstraksi`.
+  4. Enqueue job arq: `enqueue_job("process_cv_ingestion", screening_id)`.
+  5. Return response langsung (non-blocking HTTP).
+
+#### 2. Bulk Assign Kandidat ke Posisi (`POST /api/v1/candidates/bulk-assign`)
+* **Akses:** HR, Manager, Admin.
+* **Request Body:**
+  ```json
+  {
+    "candidate_ids": ["uuid-1", "uuid-2"],
+    "position_id": "uuid-pos-backend",
+    "client_user_name": "Ahmad",
+    "run_ai_screening": false
+  }
   ```
-- Payroll endpoint: `require_role(["manager", "admin"])`
-- Natural Language Search: `require_role("manager")`
+* **Aturan Khusus RBAC (Toggle AI Score):**
+  ```python
+  @router.post("/bulk-assign")
+  async def bulk_assign_candidates(
+      payload: BulkAssignRequest,
+      current_user: User = Depends(get_current_user),
+      db: Session = Depends(get_db)
+  ):
+      # Role HR dilarang keras memicu background AI screening saat assign
+      run_screening = payload.run_ai_screening
+      if current_user.role == "hr":
+          run_screening = False  # Hard override di level API
 
-### 3.3 Response Format Standar
+      # Validasi Blacklist & Cooldown untuk setiap candidate_id
+      # Buat Application per kandidat (stage: 'Dijadwalkan_Interview')
+      # Jika run_screening == True: enqueue job scoring AI per kandidat
+  ```
 
-```json
-{
-  "success": true,
-  "data": { ... },
-  "message": "OK",
-  "meta": {
-    "page": 1,
-    "per_page": 20,
-    "total": 150
+#### 3. Two-Stage Matching Rekomendasi AI (`POST /api/v1/positions/{id}/recommend-candidates`)
+* **Akses:** HR, Manager, Admin.
+* **Request Body:**
+  ```json
+  {
+    "source": "talent_pool",  // 'talent_pool' | 'database' | 'all'
+    "client_user_name": "Ahmad",
+    "limit": 15
   }
-}
-```
-
-Error response:
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CANDIDATE_DUPLICATE_SUSPECTED",
-    "message": "Kandidat dengan email ini sudah ada dan mungkin duplikat.",
-    "detail": { "existing_candidate_id": "uuid-..." }
+  ```
+* **Respons:**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "candidate_id": "uuid-1",
+        "full_name": "Rahmat Surahmat",
+        "ai_score": 92.5,
+        "match_reason": "Keahlian Golang dan microservices sangat relevan dengan kebutuhan backend Pinhome.",
+        "expected_salary": 14000000,
+        "current_pool": "talent_pool",
+        "is_blacklisted": false
+      }
+    ],
+    "meta": {
+      "total_scanned_in_db": 1250,
+      "passed_sql_filter": 32,
+      "evaluated_by_ai": 15
+    }
   }
-}
+  ```
+
+---
+
+## 4. Alur Proses Kunci & Arsitektur Efisiensi Token
+
+### 4.1 Alur Ingestion CV Massal ke Database (Tanpa Posisi)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Recruiter as HR / Admin
+    participant UI as Next.js (/candidates/new)
+    participant API as FastAPI Backend
+    participant Storage as OneDrive API
+    participant Queue as Redis (arq)
+    participant Worker as arq Worker
+    participant LLM as LLM Model Extract
+
+    Recruiter->>UI: Drop 20 File CV (PDF/DOCX)
+    UI->>API: POST /api/v1/candidates/bulk-upload
+    API->>Storage: Simpan file fisik
+    API->>Queue: Enqueue "process_cv_ingestion" per file
+    API-->>UI: 202 Accepted (Batch ID)
+    
+    par Async Processing di Worker
+        Queue->>Worker: Dequeue Job
+        Worker->>Worker: Ekstrak teks (PyMuPDF / OCR)
+        Worker->>LLM: Ekstraksi field JSON (Nama, Kontak, Skill, Exp, Edu)
+        LLM-->>Worker: JSON terstruktur
+        Worker->>Worker: Insert ke tabel candidate, education, experience
+        Worker->>Worker: Update status screening = 'selesai'
+    end
+
+    UI->>API: Polling status batch
+    API-->>UI: Semua kandidat berhasil tersimpan ke Database
+```
+
+### 4.2 Arsitektur Two-Stage Matching (Penyelamat Biaya Token)
+
+```mermaid
+flowchart TD
+    Start([HR klik 'Cari Rekomendasi' di /applications/new]) --> InputParams[Ambil Posisi, User Client, & Sumber]
+    
+    subgraph Tahap 1: SQL Hard Filter di PostgreSQL (0 Token - <10ms)
+        InputParams --> SQLFilter["Query PostgreSQL:
+        - Saring Sumber (pool_status)
+        - Saring Budget Gaji (expected_salary <= budget)
+        - Exclude Kandidat Blacklist Aktif
+        - Exclude Kandidat Cooldown (<6 bulan ditolak di posisi ini)"]
+        SQLFilter --> PoolFiltered["Tersaring 20 - 40 Kandidat Potensial"]
+    end
+    
+    subgraph Tahap 2: AI Scoring Terfokus (Hemat Token)
+        PoolFiltered --> RankTopK["Ambil Top 10 - 15 Kandidat Paling Relevan"]
+        RankTopK --> CallLLM["Kirim ringkasan profil Top 15 + Requirement Posisi ke LLM"]
+        CallLLM --> LLMResult["LLM menghasilkan Skor 1-100 dan Justifikasi Singkat (~15k Token)"]
+    end
+    
+    LLMResult --> RenderUI[Tampilkan Tabel Rekomendasi di UI]
+    RenderUI --> HRCheck[HR Centang Kandidat Pilihan]
+    HRCheck --> SubmitPipeline[Klik 'Masukkan ke Pipeline Lamaran']
+    SubmitPipeline --> Done([Kandidat Masuk ke Tahap 'Dijadwalkan Interview'])
 ```
 
 ---
 
-## 4. Alur Proses Kunci
+## 5. Desain Frontend (Next.js) & Role-Based UI
 
-### 4.1 Upload CV & Async Parsing (Fase 3)
-
-```
-[HR Upload CV (bulk)]
-      │
-      ▼
-[Next.js → POST /api/v1/applications/bulk-upload-cv]
-      │
-      ▼
-[FastAPI]
-  1. Validasi file (tipe, ukuran)
-  2. Upload setiap file ke OneDrive via Graph API
-  3. Buat record ai_screening_result (status: menunggu_screening_ai)
-  4. Enqueue arq job: redis_pool.enqueue_job("process_cv_screening", screening_result_id)
-  5. Return 200 immediately — tidak tunggu proses selesai
-      │
-      ▼ (via Redis broker)
-[arq Worker: process_cv_screening(ctx, screening_result_id)]
-  1. Ambil record ai_screening_result dari DB
-  2. Download file dari OneDrive (drive_item_id)
-  3. Ekstrak teks:
-     - PDF berbasis teks → PyMuPDF/pdfplumber
-     - PDF scan → Tesseract/PaddleOCR
-  4. Validasi teks (< 20 karakter → error)
-  5. Ambil ai_scoring_config dari tabel Position
-  6. Kirim teks + config ke LLM → dapatkan JSON (nama, pendidikan, pengalaman, skill, skor)
-  7. Simpan hasil ke ai_screening_result (status: siap_review)
-  8. Hapus file sementara dari disk
-  9. Buat notifikasi batch (satu notif per batch, bukan per file)
-  ↳ On error: set status "error", simpan pesan error ke ai_notes, commit DB
-      │
-      ▼
-[HR membuka UI Review Ekstraksi AI]
-  - Lihat hasil ekstraksi (nama, pendidikan, pengalaman, skill)
-  - Edit/koreksi jika ada yang salah
-  - Klik "Simpan" → data tersimpan final ke Candidate
-```
-
-> **Perubahan dari desain awal:** Alur sebelumnya melewati n8n sebagai HTTP orchestrator (FastAPI → n8n webhook → `/internal/parse-cv` → n8n → LLM API → n8n → `/internal/ai/extraction-result`), menghasilkan 4 HTTP round-trip. Migrasi ke arq menghilangkan seluruh hop eksternal — semua langkah dijalankan sebagai pemanggilan fungsi Python in-process di dalam worker container, dalam satu trust boundary yang sama dengan FastAPI.
-
-### 4.2 Blacklist Check saat Input Kandidat Baru
+### 5.1 Penyesuaian Navigasi & Halaman
 
 ```
-[HR input data kandidat baru]
-      │
-      ▼
-[FastAPI: POST /api/v1/candidates/]
-  1. Cek duplikat: email & phone di tabel Candidate
-     - Keduanya cocok → tampilkan info kandidat yang ada, tanya apakah tetap buat baru
-     - Salah satu cocok → buat baru + flag `possible_duplicate = true`
-     - Tidak ada → lanjut normal
-  2. Cek blacklist: email / phone / identity_no di tabel Blacklist
-     - Ada match → return 200 dengan flag `blacklist_warning = true` + detail blacklist
-     - HR/Manager tetap bisa input (warning, bukan hard block)
-  3. Simpan Candidate baru
+/candidates                     → Database umum (Tabel semua kandidat + Checkbox multi-select)
+/candidates/new                 → Bulk Upload CV langsung ke Database (Dropzone tanpa posisi)
+/talent-pool                    → Tampilan khusus kandidat berstatus Talent Pool (re-use tabel)
+/applications                   → Pipeline lamaran aktif (Board & List)
+/applications/new               → Pusat Sourcing & Rekomendasi AI (Posisi + User Klien + Sumber)
 ```
 
-### 4.3 Auto-Create Employee dari Application Existing
+### 5.2 Antarmuka Halaman `/candidates` & Bulk Action
+
+* **Kolom Aksi & Talent Pool:**
+  * Di setiap baris tabel terdapat badge status/toggle cepat untuk mengubah status kandidat menjadi `Talent Pool`.
+  * Saat diklik, muncul modal ringkas meminta alasan: `Gaji Tidak Sesuai`, `Kebutuhan Masa Depan`, atau `Lainnya`.
+* **Aksi Massal (Floating Action Bar saat Checkbox Terpilih):**
+  * Ketika 1 atau lebih baris dicentang, muncul bar aksi:
+    * `[ Pindahkan ke Talent Pool ]`
+    * `[ Assign ke Lowongan ]`
+
+### 5.3 Spesifikasi Modal "Assign ke Lowongan" & RBAC Toggle
+
+Saat tombol `[ Assign ke Lowongan ]` diklik, modal konfirmasi muncul:
 
 ```
-[HR update tahapan Application ke "Existing"]
-      │
-      ▼
-[FastAPI: PATCH /api/v1/applications/{id}/stages/]
-  1. Simpan event ke Stage_History
-  2. Update Application.current_stage = "Existing", status = "hired"
-  3. Cek apakah Employee dengan application_id ini sudah ada
-     - Sudah ada → skip (idempotent)
-     - Belum ada → buat Employee record baru:
-         full_name, identity_no, phone_number ← dari Candidate
-         application_id, candidate_id ← dari Application
-         employee_status = "aktif"
-  4. Return response dengan employee_id baru
-      │
-      ▼
-[HR melengkapi data Employee]
-  - Buka halaman detail Employee (tab Data Pribadi / Kontrak / Payroll / Dokumen)
-  - Isi data yang belum ada (email kantor, penempatan, NIP, kontrak, dll)
+┌────────────────────────────────────────────────────────────────────────┐
+│  Assign Kandidat ke Lowongan                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│  Kandidat Terpilih (3 orang):                                          │
+│  • Rahmat Surahmat (AI Engineer)                                       │
+│  • Krisna Renaldi (Data Analyst)                                       │
+│  • Hermawan (Mobile Developer)                                         │
+│                                                                        │
+│  Pilih Posisi / Lowongan Aktif:                                        │
+│  [ Backend Engineer - Pinhome                                      ▼ ] │
+│                                                                        │
+│  User PIC Client (Pewawancara):                                        │
+│  [ Ahmad (Tech Lead)                                               ▼ ] │
+│                                                                        │
+│  ────────────────────────────────────────────────────────────────────  │
+│  {/* CONDITIONAL RENDER: HANYA MUNCUL JIKA ROLE === 'ADMIN' | 'MANAGER' */}
+│  [✓] Jalankan AI Screening (Hitung skor kecocokan CV)                  │
+│      ℹ️ AI akan menganalisis kecocokan CV kandidat di latar belakang   │
+│         dan memperbarui skor di pipeline lamaran.                      │
+│                                                                        │
+│  {/* JIKA ROLE === 'HR': Toggle di atas sama sekali tidak dirender */} │
+│                                                                        │
+│                         [ Batal ]  [ Submit / Masukkan ke Pipeline ]   │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.4 Natural Language Search (Fase 3)
+#### Aturan Kondisional Komponen (Frontend React):
+```tsx
+const { user } = useAuthStore();
+const canToggleAIScreening = user?.role === "admin" || user?.role === "manager";
+
+// Di dalam render modal:
+{canToggleAIScreening && (
+  <div className="flex items-start gap-2 pt-2 border-t border-gray-200">
+    <input
+      type="checkbox"
+      id="toggle-ai"
+      checked={runAIScreening}
+      onChange={(e) => setRunAIScreening(e.target.checked)}
+      className="mt-1 h-4 w-4 rounded text-violet-600 focus:ring-violet-500"
+    />
+    <label htmlFor="toggle-ai" className="text-xs text-gray-700">
+      <span className="font-semibold block text-gray-900">Jalankan AI Screening</span>
+      Hitung skor kecocokan CV kandidat secara otomatis di latar belakang.
+    </label>
+  </div>
+)}
+```
+
+### 5.4 Antarmuka Halaman `/applications/new` (Pusat Sourcing)
+
+Halaman ini mengimplementasikan tata letak sesuai kebutuhan klien (Screenshot `application_sumber.png` & `application_user.png`):
 
 ```
-[Manager input query: "Backend Developer Laravel 3 tahun pernah pimpin tim"]
-      │
-      ▼
-[FastAPI: POST /api/v1/ai/search/]
-  1. Validasi role = Manager
-  2. Kirim query + skema field yang tersedia ke LLM API
-     Prompt sistem: "Terjemahkan query ke filter JSON menggunakan field berikut: ..."
-  3. LLM return JSON filter:
-     {
-       "position_title_contains": "Backend Developer",
-       "skills_include": ["Laravel"],
-       "experience_years_min": 3,
-       "had_leadership_role": true
-     }
-  4. FastAPI terjemahkan JSON filter → SQL query (aman, tidak pakai raw SQL dari LLM)
-  5. Eksekusi query, return daftar kandidat
-  6. Sertakan `filters_applied` di response untuk transparansi
+┌────────────────────────────────────────────────────────────────────────┐
+│  Tambah Lamaran & Rekomendasi AI                                       │
+├────────────────────────────────────────────────────────────────────────┤
+│  Posisi yang Dilamar *                                                 │
+│  [ Backend Engineer - Pinhome                                      ▼ ] │
+│                                                                        │
+│  User Klien (PIC Pewawancara)                                          │
+│  [ Joni (Engineering Manager)                                      ▼ ] │
+│                                                                        │
+│  Sumber Pencarian                                                      │
+│  [ Talent Pool                                                     ▼ ] │
+│  (Pilihan: 'Semua', 'Talent Pool', 'Database')                         │
+│                                                                        │
+│                [ 🔍 Cari & Screening Rekomendasi AI ]                  │
+├────────────────────────────────────────────────────────────────────────┤
+│  Hasil Rekomendasi AI (Top Kandidat Paling Cocok):                     │
+│                                                                        │
+│  [✓] Centang Semua                                                     │
+│  ┌───┬───────────────────┬──────────┬────────────────────────────────┐ │
+│  │[✓]│ Nama Kandidat     │ AI Match │ Rangkuman Kecocokan AI         │ │
+│  ├───┼───────────────────┼──────────┼────────────────────────────────┤ │
+│  │[✓]│ Rahmat Surahmat   │   92%    │ Mahir Go, Microservices, 4 thn │ │
+│  │[✓]│ Krisna Renaldi    │   85%    │ Kuat di SQL, Data, Python      │ │
+│  │[ ]│ Hermawan          │   58%    │ Mobile dev, Go masih basic     │ │
+│  └───┴───────────────────┴──────────┴────────────────────────────────┘ │
+│                                                                        │
+│                     [ Masukkan 2 Kandidat Terpilih ke Pipeline ]       │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Desain Frontend (Next.js)
+## 6. Desain Keamanan & Kontrol Biaya (Cost Control)
 
-### 5.1 Struktur Halaman
-
-```
-/login                          → halaman login
-/dashboard                      → ringkasan metrik (semua role)
-
-/candidates                     → daftar kandidat (search, filter)
-/candidates/new                 → form tambah kandidat
-/candidates/[id]                → detail kandidat (tab: Profil / Dokumen / Lamaran / Riwayat)
-/candidates/[id]/edit           → edit data kandidat
-
-/applications                   → daftar semua lamaran (pipeline view)
-/applications/[id]              → detail lamaran + update tahapan
-/applications/[id]/cv           → preview & generate CV standar (Fase 2)
-
-/employees                      → daftar karyawan aktif
-/employees/[id]                 → detail karyawan (tab: Data Pribadi / Kontrak / Payroll / Dokumen)
-/employees/[id]/edit            → edit data karyawan
-
-/blacklist                      → daftar blacklist
-/blacklist/new                  → form tambah blacklist
-
-/analytics                      → dashboard analytics (Fase 4)
-
-/search                         → Natural Language Search (Manager only, Fase 3)
-
-/admin/users                    → kelola user
-/admin/clients                  → kelola client
-/admin/positions                → kelola posisi
-/admin/blacklist-status-types   → kelola jenis status blacklist
-/admin/agreement-types          → kelola jenis perjanjian
-/admin/cv-templates             → kelola template CV
-
-/settings                       → pengaturan akun
-```
-
-### 5.2 Komponen UI Utama
-
-| Komponen | Deskripsi |
+| Aspek | Kebijakan & Penegakan Teknis |
 |---|---|
-| `PipelineBoard` | Kanban/list view pipeline rekrutmen per Application |
-| `StageUpdateForm` | Form dinamis berdasarkan tahapan (field berbeda per tahap) |
-| `CandidateForm` | Form multi-section: Data Pribadi / Pendidikan / Pengalaman |
-| `DocumentUploader` | Drag-and-drop upload dengan progress indicator, preview dokumen |
-| `DuplicateWarningBanner` | Banner kuning saat kandidat terdeteksi mungkin duplikat |
-| `BlacklistWarningModal` | Modal merah saat kandidat match blacklist, dengan detail alasan |
-| `EmployeeTabView` | Tab: Data Pribadi / Kontrak / Payroll / Dokumen |
-| `AIExtractionReview` | Side-by-side: hasil AI vs form input; HR bisa edit sebelum simpan |
-| `NLSearchBar` | Input teks + tampilkan filter yang dipakai AI (Manager only) |
-| `ExportButton` | Trigger export Excel dengan pilihan filter |
-| `DataTable` | Tabel data dengan pagination, sorting, filter kolom |
-
-### 5.3 State Management & Data Fetching
-
-- **Server Components** (Next.js App Router) untuk data fetching halaman utama
-- **React Query (TanStack Query)** untuk client-side data fetching, caching, dan mutation
-- **Zustand** untuk global UI state (sidebar open/close, notifikasi, dll)
-- **React Hook Form + Zod** untuk form validation
-- Tidak ada Redux — terlalu berat untuk skala aplikasi ini
-
-### 5.4 Auth Flow di Frontend
-
-```
-Login → POST /api/v1/auth/login
-     ← Set httpOnly cookie: access_token, refresh_token
-
-Setiap request → Next.js middleware cek cookie
-  - Token valid → lanjut
-  - Token expired → auto-refresh via /api/v1/auth/refresh
-  - Refresh expired → redirect ke /login
-
-Route protection: Next.js middleware + server component check
-Role-based UI: komponen/menu hanya ditampilkan jika role sesuai
-(tapi enforcement tetap di backend — UI bersifat UX saja)
-```
+| **Pencegahan Token Leak** | Hard filter SQL wajib dieksekusi sebelum payload masuk ke LLM API. Maksimal 15 kandidat yang dikirim ke LLM per permintaan pencarian. |
+| **RBAC Enforcement Ganda** | Jika role `hr` mencoba memanggil API `POST /bulk-assign` dengan payload `run_ai_screening: true` (misal via modifikasi request DevTools), FastAPI secara otomatis mematikan flag tersebut menjadi `false`. |
+| **Pencegahan Duplikasi Lamaran** | Validasi `UNIQUE (candidate_id, position_id, status='active')` mencegah satu kandidat memiliki 2 lamaran aktif sekaligus pada posisi yang sama. |
+| **Cooldown & Blacklist Check** | Kandidat blacklist atau dalam masa cooldown (ditolak < 6 bulan pada posisi serupa) dieliminasi dari rekomendasi AI dan memunculkan pop-up konfirmasi ganda jika di-assign manual. |
 
 ---
 
-## 6. Desain Async Processing (arq + Redis)
+## 7. Rencana Kerja & Migrasi
 
-> **Catatan arsitektur:** Desain awal (v1.0) menggunakan n8n sebagai async orchestrator antara FastAPI dan pipeline CV parsing. Setelah evaluasi, n8n digantikan dengan arq + Redis karena: (1) seluruh alur hanya memanggil service milik sendiri — tidak ada integrasi SaaS pihak ketiga yang menjadi nilai tambah n8n; (2) 4 HTTP round-trip diganti 1 pemanggilan fungsi in-process, menghilangkan 1 network hop dan 1 service yang perlu dijaga uptime-nya; (3) error handling & retry lebih matang di ekosistem Python (tenacity, pytest, logging konsisten); (4) overhead operasional n8n (setup, shared secret, JSON workflow di git) tidak sebanding untuk pipeline yang sifatnya linear.
-
-### 6.1 Komponen Async
-
-| Komponen | Peran |
-|---|---|
-| **Redis** | Broker antrian job (image `redis:7-alpine`). FastAPI enqueue job, worker dequeue dan jalankan |
-| **arq Worker** | Proses terpisah (`arq app.worker.WorkerSettings`), image sama dengan backend. Menjalankan task functions dan cron jobs |
-| **`app/worker.py`** | Mendefinisikan `WorkerSettings`: daftar `functions`, `cron_jobs`, `redis_settings`, `max_jobs`, `job_timeout` |
-| **`services/cv_pipeline.py`** | Implementasi `process_cv_screening(ctx, screening_result_id)` — menggantikan seluruh 8 node n8n |
-| **`services/ops_jobs.py`** | Implementasi `backup_database(ctx)` dan `check_contract_expiry(ctx)` — menggantikan n8n cron workflows |
-| **`app/core/arq_pool.py`** | Helper `get_redis_pool()` — return ArqRedis pool, dipakai di endpoint `bulk-upload-cv` |
-
-### 6.2 Alur Enqueue dari FastAPI ke Worker
-
-```
-FastAPI (bulk-upload-cv)
-  └─▶ redis_pool.enqueue_job("process_cv_screening", screening_result_id)
-           │
-           ▼ (via Redis broker)
-      arq Worker
-        └─▶ process_cv_screening(ctx, screening_result_id)
-              ├─ download OneDrive file          [fungsi Python]
-              ├─ extract_text(raw_file)          [fungsi Python]
-              ├─ get ai_scoring_config from DB   [SQLAlchemy]
-              ├─ call_llm(text, config)          [fungsi Python]
-              ├─ save result to DB               [SQLAlchemy commit]
-              └─ create_batch_notification(...)  [fungsi Python]
-```
-
-Tidak ada HTTP keluar dari worker ke FastAPI. Semua operasi adalah pemanggilan fungsi atau query DB langsung, dalam trust boundary container yang sama.
-
-### 6.3 Cron Jobs di Worker
-
-```python
-# app/worker.py
-class WorkerSettings:
-    functions = [process_cv_screening]
-    cron_jobs = [
-        cron(backup_database,      hour=2, minute=0),  # harian 02.00 WIB
-        cron(check_contract_expiry, hour=8, minute=0), # harian 08.00 WIB
-    ]
-    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
-    max_jobs = 10
-    job_timeout = 300  # detik, per CV
-```
-
-### 6.4 Variabel Environment yang Berubah
-
-| Sebelumnya (n8n) | Sekarang (arq) |
-|---|---|
-| `N8N_WEBHOOK_URL=...` | `REDIS_URL=redis://redis:6379/0` |
-| `N8N_ENCRYPTION_KEY=...` | *(dihapus)* |
-| `N8N_INTERNAL_SECRET=...` | *(dihapus)* |
-
-> **File historis n8n:** `n8n/workflows/cv-parser.json` dan `n8n/README.md` diarsipkan di `n8n/archive/` sebagai referensi historis sampai migrasi tervalidasi di production.
-
----
-
-## 7. Desain Keamanan
-
-| Aspek | Implementasi |
-|---|---|
-| **Autentikasi** | JWT httpOnly cookie, bukan localStorage (mencegah XSS) |
-| **Otorisasi** | RBAC di FastAPI dependency injection, bukan hanya di UI |
-| **File upload** | Validasi tipe MIME & ukuran di FastAPI sebelum dikirim ke OneDrive |
-| **SQL Injection** | SQLAlchemy ORM / parameterized queries — tidak ada raw SQL dari input user |
-| **AI ↔ DB** | LLM hanya menghasilkan filter JSON terstruktur, bukan raw SQL (lihat FR-09.2) |
-| **Internal API** | `/internal/*` dilindungi shared secret, diblock Nginx dari akses luar |
-| **Payroll data** | Endpoint payroll hanya bisa diakses role Manager & Admin |
-| **Dokumen sensitif** | Akses via pre-authenticated URL (sementara, kedaluwarsa otomatis), bukan URL permanen |
-| **Environment secrets** | Semua credential (DB password, Graph API secret, LLM API key) di `.env`, tidak pernah di-commit ke git |
-| **CORS** | FastAPI CORS dibatasi ke domain frontend saja |
-
----
-
-## 8. Struktur Folder Project
-
-```
-Talent Management System/
-├── frontend/                   # Next.js App
-│   ├── src/
-│   │   ├── app/                # App Router pages & layouts
-│   │   │   ├── (auth)/
-│   │   │   │   └── login/
-│   │   │   ├── (dashboard)/
-│   │   │   │   ├── dashboard/
-│   │   │   │   ├── candidates/
-│   │   │   │   ├── applications/
-│   │   │   │   ├── employees/
-│   │   │   │   ├── blacklist/
-│   │   │   │   ├── analytics/
-│   │   │   │   ├── search/
-│   │   │   │   └── admin/
-│   │   │   ├── layout.tsx
-│   │   │   └── globals.css
-│   │   ├── components/
-│   │   │   ├── ui/             # Komponen dasar (Button, Input, Table, Modal, dll)
-│   │   │   ├── candidates/     # Komponen spesifik kandidat
-│   │   │   ├── applications/   # Komponen pipeline & tahapan
-│   │   │   ├── employees/      # Komponen karyawan
-│   │   │   └── shared/         # Komponen lintas modul (DataTable, DocumentUploader, dll)
-│   │   ├── lib/
-│   │   │   ├── api.ts          # Axios/fetch wrapper ke FastAPI
-│   │   │   ├── auth.ts         # Auth helpers
-│   │   │   └── utils.ts
-│   │   ├── hooks/              # Custom React hooks
-│   │   ├── stores/             # Zustand stores
-│   │   ├── types/              # TypeScript type definitions
-│   │   └── middleware.ts       # Next.js route protection middleware
-│   ├── public/
-│   ├── .env.local
-│   ├── next.config.ts
-│   ├── tailwind.config.ts
-│   ├── tsconfig.json
-│   └── package.json
-│
-├── backend/                    # FastAPI App
-│   ├── app/
-│   │   ├── main.py             # Entry point, CORS, router registration
-│   │   ├── core/
-│   │   │   ├── config.py       # Settings dari environment variables
-│   │   │   ├── security.py     # JWT, password hashing
-│   │   │   └── dependencies.py # FastAPI dependencies (get_db, require_role, dll)
-│   │   ├── models/             # SQLAlchemy ORM models
-│   │   │   ├── candidate.py
-│   │   │   ├── application.py
-│   │   │   ├── employee.py
-│   │   │   ├── user.py
-│   │   │   └── ...
-│   │   ├── schemas/            # Pydantic schemas (request/response)
-│   │   │   ├── candidate.py
-│   │   │   ├── application.py
-│   │   │   └── ...
-│   │   ├── routers/            # FastAPI routers per modul
-│   │   │   ├── auth.py
-│   │   │   ├── candidates.py
-│   │   │   ├── applications.py
-│   │   │   ├── employees.py
-│   │   │   ├── blacklist.py
-│   │   │   ├── export.py
-│   │   │   ├── ai.py
-│   │   │   ├── analytics.py
-│   │   │   ├── admin.py
-│   │   │   └── internal.py     # Endpoint untuk n8n callback (dilindungi shared secret)
-│   │   ├── services/           # Business logic layer
-│   │   │   ├── candidate_service.py
-│   │   │   ├── application_service.py
-│   │   │   ├── employee_service.py
-│   │   │   ├── blacklist_service.py
-│   │   │   ├── onedrive_service.py   # Microsoft Graph API integration
-│   │   │   ├── n8n_service.py        # Trigger n8n webhooks
-│   │   │   ├── ai_service.py         # LLM API integration (Fase 3)
-│   │   │   └── export_service.py     # Excel export
-│   │   └── db/
-│   │       ├── database.py     # SQLAlchemy engine & session
-│   │       └── migrations/     # Alembic migration files
-│   ├── alembic.ini
-│   ├── requirements.txt
-│   ├── .env
-│   └── Dockerfile
-│
-├── docs/
-│   ├── PRD-Talent-Management-System.md
-│   ├── ERD-TMS.mermaid
-│   └── ...
-│
-├── .kiro/
-│   └── specs/
-│       ├── requirements.md
-│       ├── design.md           ← file ini
-│       └── tasks.md
-│
-├── docker-compose.yml          # Orchestrasi semua service
-├── nginx.conf                  # Konfigurasi reverse proxy
-└── .env.example                # Template environment variables
-```
-
----
-
-## 9. Docker Compose Service Layout
-
-```yaml
-# Gambaran services (detail di docker-compose.yml)
-services:
-  postgres:       # PostgreSQL 16
-  pgbouncer:      # Connection pooling
-  backend:        # FastAPI (Dockerfile di backend/)
-  frontend:       # Next.js (Dockerfile di frontend/)
-  redis:          # Redis 7-alpine — broker arq job queue
-  worker:         # arq worker (image sama dengan backend, command: arq app.worker.WorkerSettings)
-  nginx:          # Reverse proxy
-
-volumes:
-  postgres_data:  # Data PostgreSQL
-  redis_data:     # Persistensi Redis (RDB snapshot)
-
-# File dokumen TIDAK disimpan di volume lokal
-# → semua ke OneDrive via Graph API
-
-# Catatan: service n8n dan volume n8n_data dihapus sejak migrasi ke arq (lihat Bagian 6)
-```
-
----
-
-## 10. Keputusan Teknis yang Perlu Dikonfirmasi Sebelum Mulai Coding
-
-| # | Keputusan | Default jika tidak dikonfirmasi |
-|---|---|---|
-| 1 | Model LLM yang dipakai (Claude Haiku / Sonnet / GPT / Gemini)? | Claude Haiku 4.5 (paling murah) |
-| 2 | Template CV standar Altek (format/layout)? | Dibuat placeholder dulu di Fase 2 |
-| 3 | Nama domain / subdomain untuk deployment? | Bisa pakai IP sementara saat development |
-| 4 | Admin M365 untuk registrasi aplikasi di Microsoft Entra? | Ditunda, gunakan local storage sementara di Fase 1 |
-| 5 | Channel notifikasi (email/WhatsApp/Slack)? | Tidak diimplementasi dulu di Fase 1 |
+1. **Sprint 1 — Backend DB & Ingestion:**
+   - Tambah migrasi kolom `pool_status`, `talent_pool_reason`, `client_user_name`.
+   - Implementasi endpoint `POST /api/v1/candidates/bulk-upload` (ekstraksi tanpa scoring posisi).
+2. **Sprint 2 — Frontend Sourcing & Talent Pool:**
+   - Tambah menu "Talent Pool" di sidebar.
+   - Tambah Checkbox multi-select dan Modal Assign di tabel `/candidates` dengan kontrol RBAC toggle.
+   - Refactor `/applications/new` menjadi form sourcing Two-Stage Matching.
+3. **Sprint 3 — UAT & Validasi Token:**
+   - Pengujian beban bulk upload 20 CV PDF.
+   - Verifikasi isolasi toggle AI antara role HR vs Admin/Manager.

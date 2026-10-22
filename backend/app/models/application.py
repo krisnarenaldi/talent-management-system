@@ -56,12 +56,15 @@ class Application(Base):
         nullable=False,
     )
     cv_submitted_to_pm_date = Column(Date)
+    client_user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True)
+    client_user_name = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     candidate = relationship("Candidate", back_populates="applications")
     position = relationship("Position", backref="applications")
     recruiter = relationship("User", foreign_keys=[recruiter_id])
+    client_user = relationship("User", foreign_keys=[client_user_id])
     stage_histories = relationship("StageHistory", back_populates="application", cascade="all, delete-orphan")
     ai_screening_result = relationship("AIScreeningResult", back_populates="application", uselist=False)
 
@@ -80,6 +83,12 @@ class Application(Base):
     @property
     def recruiter_name(self) -> str | None:
         return self.recruiter.name if self.recruiter else None
+
+    @property
+    def client_user_display_name(self) -> str | None:
+        if self.client_user_name:
+            return self.client_user_name
+        return self.client_user.name if self.client_user else None
 
     @property
     def stage_history(self) -> list:
@@ -178,6 +187,7 @@ class AIScreeningResult(Base):
     source_channel = Column(String(100), nullable=True)  # LinkedIn/Glints/Email/dll — sumber kandidat
     ai_score = Column(Float, nullable=True)
     ai_notes = Column(Text, nullable=True)
+    extracted_data = Column(Text, nullable=True)
     extracted_json = Column(JSONB(), nullable=True)
     status = Column(String(50), nullable=True, index=True)  # menunggu_screening_ai / sedang_diproses / siap_review / sudah_direview / error
     reviewed_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)

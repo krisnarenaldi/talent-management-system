@@ -18,14 +18,20 @@ export interface User {
   created_at: string;
   updated_at: string;
 }
-
 // --- Client ---
+
+export interface ClientPic {
+  name: string;
+  contact: string | null;
+}
+
 export interface Client {
   id: string;
   name: string;
   industry: string | null;
   pic_name: string | null;
   pic_contact: string | null;
+  pics: ClientPic[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -68,6 +74,27 @@ export interface PositionByClient {
   client_name: string;
   total_positions: number;
   last_created_at: string | null;
+}
+
+// --- AI Sourcing & Matching (Two-Stage Matching) ---
+export type CandidateSource = "all" | "talent_pool" | "database";
+
+export interface RecommendCandidate {
+  candidate_id: string;
+  full_name: string;
+  skills: string[];
+  experience_years: number;
+  expected_salary: number | null;
+  domicile: string | null;
+  pool_status: string;
+  ai_score: number | null;
+  ai_notes: string | null;
+}
+
+export interface RecommendCandidatesResponse {
+  position_id: string;
+  candidates: RecommendCandidate[];
+  message: string;
 }
 
 // --- Master data ---
@@ -125,6 +152,11 @@ export interface Candidate {
   completeness_status: CompletenessStatus;
   contact_status: ContactStatus;
   possible_duplicate: boolean;
+  pool_status?: "database" | "talent_pool" | "future_lead" | string;
+  talent_pool?: boolean | number;
+  is_talent_pool?: boolean;
+  talent_pool_reason?: string | null;
+  talent_pool_notes?: string | null;
   notes?: string;
   skills?: string[];
   is_blacklisted?: boolean;

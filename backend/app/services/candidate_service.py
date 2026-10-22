@@ -1,48 +1,10 @@
 """Business logic untuk manajemen kandidat."""
-import re
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
+from app.core.phone_utils import normalize_phone, phone_variants
 from app.models.blacklist import Blacklist, BlacklistStatusType
 from app.models.candidate import Candidate
-
-
-def normalize_phone(phone: str | None) -> str | None:
-    """
-    Normalise phone number:
-    - Remove all spaces and hyphens.
-    - If number starts with +62 (Indonesian country code), replace with 08.
-    - Foreign country codes (+xx other than +62) are left as-is after
-      stripping internal spaces/hyphens.
-    """
-    if not phone:
-        return phone
-    normalized = re.sub(r"[\s\-]", "", phone.strip())
-    if normalized.startswith("+62"):
-        normalized = "0" + normalized[3:]
-    return normalized
-
-
-def _phone_variants(phone: str | None) -> list[str]:
-    """
-    Return all known storage variants for a phone number so that queries can
-    match even when old records were stored with a different format.
-
-    Examples:
-      "08118842060"   → ["08118842060", "+628118842060"]
-      "+62 811-8842"  → ["08118842",    "+628118842"]   (after normalisation)
-      "+1-650-5551234"→ ["+16505551234"]                (foreign — only one variant)
-    """
-    if not phone:
-        return []
-    norm = normalize_phone(phone)
-    if norm is None:
-        return []
-    variants: list[str] = [norm]
-    # If the normalised form starts with 0, also include the +62 variant
-    if norm.startswith("0"):
-        variants.append("+62" + norm[1:])
-    return variants
 
 
 def check_duplicate(
@@ -64,7 +26,7 @@ def check_duplicate(
     if email:
         existing = db.query(Candidate).filter(Candidate.email == email).first()
     if not existing and phone:
-        variants = _phone_variants(phone)
+        variants = phone_variants(phone)
         if variants:
             existing = (
                 db.query(Candidate)
@@ -119,7 +81,7 @@ def check_blacklist(db: Session, email: str | None, phone: str | None, identity_
         _collect(db.query(Candidate).filter(Candidate.email == email).all())
 
     if phone:
-        variants = _phone_variants(phone)
+        variants = phone_variants(phone)
         if variants:
             _collect(
                 db.query(Candidate).filter(Candidate.phone.in_(variants)).all()

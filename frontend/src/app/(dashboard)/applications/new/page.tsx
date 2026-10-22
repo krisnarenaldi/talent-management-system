@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,20 +9,35 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
+import { positionsApi } from "@/lib/api/positions";
 import { useToastStore } from "@/stores/toast.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { getErrorMessage } from "@/lib/errors";
-import type { Candidate, Position, SourceChannel } from "@/types";
+import type {
+  Candidate,
+  CandidateSource,
+  Position,
+  RecommendCandidate,
+  RecommendCandidatesResponse,
+  SourceChannel,
+} from "@/types";
 import { useModalEscape } from "@/hooks/useModalEscape";
 
 const formSchema = z.object({
   candidate_id: z.string().min(1, "Pilih kandidat terlebih dahulu"),
   position_id: z.string().min(1, "Pilih posisi terlebih dahulu"),
   recruiter_id: z.string().optional(),
+  client_user_name: z.string().optional(),
   current_stage: z.string().default("Dijadwalkan_Interview"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+const POOL_STATUS_LABELS: Record<string, string> = {
+  talent_pool: "Talent Pool",
+  database: "Database",
+  future_lead: "Future Lead",
+};
 
 export default function NewApplicationPage() {
   const router = useRouter();
@@ -41,6 +56,12 @@ export default function NewApplicationPage() {
   const [positionSearch, setPositionSearch] = useState("");
   const [showPositionDropdown, setShowPositionDropdown] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+
+  // ── Pusat Sourcing (TASK-21.1) ────────────────────────────────────────────
+  const [clientUserName, setClientUserName] = useState("");
+  const [candidateSource, setCandidateSource] = useState<CandidateSource>("all");
+  const [recommendations, setRecommendations] = useState<RecommendCandidate[]>([]);
+  const [recommendMessage, setRecommendMessage] = useState("");
 
   // CV bulk upload state
   const [cvFiles, setCvFiles] = useState<File[]>([]);
@@ -95,19 +116,25 @@ export default function NewApplicationPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: positions = [] } = useQuery({
-    queryKey: ["positions-search", positionSearch],
-    queryFn: async () => {
-      if (!positionSearch.trim()) return [];
-      const response = await api.get("/api/v1/positions", {
-        params: { search: positionSearch, is_active: true },
-      });
-      return response.data as Position[];
-    },
-    enabled: positionSearch.length >= 2,
+  const { data: activePositions = [], isLoading: loadingPositions } = useQuery({
+    queryKey: ["active-positions"],
+    queryFn: positionsApi.listActive,
     staleTime: 5 * 60 * 1000,
   });
 
+  // Filter di sisi klien agar dropdown tetap terisi walau kolom pencarian kosong.
+  const filteredPositions = useMemo(() => {
+    const term = positionSearch.trim().toLowerCase();
+    if (!term) return activePositions;
+    return activePositions.filter(
+      (pos) =>
+        pos.title.toLowerCase().includes(term) ||
+        (pos.client_name ?? "").toLowerCase().includes(term)
+    );
+  }, [activePositions, positionSearch]);
+
+  // Daftar PIC User Klien mengikuti posisi yang dipilih (master data posisi).
+  const clientUserOptions = selectedPosition?.client_user_names ?? [];
   const { data: uploadPositions = [] } = useQuery({
     queryKey: ["positions-upload-search", uploadPositionSearch],
     queryFn: async () => {
@@ -270,6 +297,140 @@ export default function NewApplicationPage() {
     setValue("position_id", position.id);
     setPositionSearch(position.title);
     setShowPositionDropdown(false);
+    // PIC User Klien sudah ditentukan pada posisi — PIC pertama langsung dipakai
+    // bila posisi hanya punya satu PIC.
+    const pics = position.client_user_names ?? [];
+    const nextPic = pics.length === 1 ? pics[0] : "";
+    setClientUserName(nextPic);
+    setValue("client_user_name", nextPic);
+    // Rekomendasi lama tidak lagi relevan untuk posisi baru.
+    setRecommendations([]);
+    setRecommendMessage("");
+  };
+
+  // ── AI Sourcing: Two-Stage Matching (TASK-21.1) ───────────────────────────
+  const recommendMutation = useMutation({
+    mutationFn: async ({ positionId, source, pic }: { positionId: string; source: CandidateSource; pic?: string }) => {
+      const response = await api.post(`/api/v1/positions/${positionId}/recommend-candidates`, {
+        source,
+        client_user_name: pic || undefined,
+      });
+      return response.data as RecommendCandidatesResponse;
+    },
+    onSuccess: (data) => {
+      setRecommendations(data.candidates ?? []);
+      setRecommendMessage(data.message ?? "");
+    },
+    onError: (err) => {
+      setRecommendations([]);
+      setRecommendMessage("");
+      showToast("error", getErrorMessage(err, "Gagal mencari rekomendasi kandidat."));
+    },
+  });
+
+  const handleRecommend = () => {
+    if (!selectedPosition) {
+      showToast("error", "Pilih posisi terlebih dahulu.");
+      return;
+    }
+    recommendMutation.mutate({
+      positionId: selectedPosition.id,
+      source: candidateSource,
+      pic: clientUserName || undefined,
+    });
+  };
+
+  // ── Hasil Rekomendasi AI & Bulk Pipeline Insert (TASK-21.2) ────────────────
+  const [selectedRecommendIds, setSelectedRecommendIds] = useState<Set<string>>(new Set());
+  const [runAIScreening, setRunAIScreening] = useState(false);
+
+  // Toggle AI Screening hanya boleh dilihat/diatur oleh Admin & Manager (FR-03.10).
+  const canToggleAIScreening = currentUser
+    ? ["admin", "manager"].includes(currentUser.role?.split(".").pop()?.toLowerCase() ?? "")
+    : false;
+
+  // Reset pilihan setiap kali rekomendasi baru dimuat.
+  useEffect(() => {
+    setSelectedRecommendIds(new Set());
+  }, [recommendations]);
+
+  const toggleRecommend = (candidateId: string) => {
+    setSelectedRecommendIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) {
+        next.delete(candidateId);
+      } else {
+        next.add(candidateId);
+      }
+      return next;
+    });
+  };
+
+  const allRecommendationsSelected =
+    recommendations.length > 0 && selectedRecommendIds.size === recommendations.length;
+
+  const toggleSelectAllRecommendations = () => {
+    setSelectedRecommendIds((prev) =>
+      prev.size === recommendations.length ? new Set() : new Set(recommendations.map((c) => c.candidate_id))
+    );
+  };
+
+  const bulkAssignMutation = useMutation({
+    mutationFn: async (payload: {
+      candidate_ids: string[];
+      position_id: string;
+      client_user_name?: string;
+      run_ai_screening: boolean;
+    }) => {
+      const response = await api.post("/api/v1/candidates/bulk-assign", payload);
+      return response.data as {
+        success_count: number;
+        skipped_count: number;
+        skipped_details: { candidate_id: string; reason: string }[];
+        message: string;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+
+      const skipped = data.skipped_details ?? [];
+      if (skipped.length > 0) {
+        showToast(
+          "warning",
+          `${data.success_count} kandidat masuk pipeline, ${skipped.length} dilewati: ${skipped
+            .map((s) => s.reason)
+            .join("; ")}`
+        );
+      } else {
+        showToast(
+          "success",
+          `${data.success_count} kandidat berhasil dimasukkan ke pipeline lamaran.`
+        );
+      }
+      router.push("/applications");
+    },
+    onError: (err: unknown) => {
+      showToast("error", getErrorMessage(err, "Gagal memasukkan kandidat ke pipeline lamaran."));
+    },
+  });
+
+  const handleInsertToPipeline = () => {
+    if (!selectedPosition) {
+      showToast("error", "Pilih posisi terlebih dahulu.");
+      return;
+    }
+    if (selectedRecommendIds.size === 0) {
+      showToast("error", "Pilih minimal satu kandidat rekomendasi.");
+      return;
+    }
+    bulkAssignMutation.mutate({
+      candidate_ids: Array.from(selectedRecommendIds),
+      position_id: selectedPosition.id,
+      client_user_name: clientUserName || undefined,
+      // Role HR tidak boleh memicu AI screening (dijamin backend juga).
+      run_ai_screening: canToggleAIScreening && runAIScreening,
+    });
   };
 
   const onSubmit = (values: FormValues) => {
@@ -313,10 +474,285 @@ export default function NewApplicationPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/applications" className="text-sm font-medium text-primary-600 hover:underline">
+        <Link href="/applications" className="text-sm font-medium text-primary hover:underline">
           ← Kembali ke pipeline
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-gray-900">Tambah Lamaran</h1>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Tambah Lamaran & Rekomendasi AI</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Pusat sourcing: pilih posisi, tentukan PIC pewawancara dari sisi klien, lalu gunakan AI untuk
+          merekomendasikan kandidat yang paling cocok.
+        </p>
+      </div>
+
+      {/* ── Pusat Sourcing & Rekomendasi AI (TASK-21.1) ──────────────────── */}
+      <div className="rounded-xl border border-blue-200 bg-white p-5 shadow-sm space-y-4">
+        <div className="flex items-center gap-2">
+          <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <h2 className="text-lg font-semibold text-gray-900">Pusat Sourcing</h2>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Posisi yang Dilamar — Autocomplete */}
+          <div className="relative" ref={positionRef}>
+            <label htmlFor="sourcing_position_id" className="mb-1 block text-sm font-medium text-gray-700">
+              Posisi yang Dilamar <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="sourcing_position_id"
+              type="text"
+              value={positionSearch}
+              onChange={(e) => {
+                setPositionSearch(e.target.value);
+                setShowPositionDropdown(true);
+                if (e.target.value.length < 2) {
+                  setSelectedPosition(null);
+                  setValue("position_id", "");
+                  setClientUserName("");
+                  setValue("client_user_name", "");
+                }
+              }}
+              onFocus={() => setShowPositionDropdown(true)}
+              placeholder="Cari posisi yang dilamar..."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            {showPositionDropdown && filteredPositions.length > 0 && (
+              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
+                {filteredPositions.map((pos) => (
+                  <button
+                    key={pos.id}
+                    type="button"
+                    onClick={() => handleSelectPosition(pos)}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                  >
+                    <p className="font-medium text-gray-900">{pos.title}</p>
+                    <p className="text-xs text-gray-500">{pos.client_name || "-"}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            {showPositionDropdown && filteredPositions.length === 0 && (
+              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg py-3 text-center text-sm text-gray-500">
+                {loadingPositions ? "Memuat posisi..." : "Tidak ditemukan"}
+              </div>
+            )}
+          </div>
+
+          {/* Sumber Kandidat */}
+          <div>
+            <label htmlFor="sourcing_candidate_source" className="mb-1 block text-sm font-medium text-gray-700">
+              Sumber Kandidat
+            </label>
+            <select
+              id="sourcing_candidate_source"
+              value={candidateSource}
+              onChange={(e) => setCandidateSource(e.target.value as CandidateSource)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+            >
+              <option value="all">Semua (Talent Pool + Database)</option>
+              <option value="talent_pool">Talent Pool</option>
+              <option value="database">Database</option>
+            </select>
+          </div>
+        </div>
+
+        {selectedPosition && (
+          <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
+            <p className="font-medium text-blue-900">{selectedPosition.title}</p>
+            <p className="text-blue-700 text-xs mt-1">
+              Client: {selectedPosition.client_name || "-"}
+              {selectedPosition.location ? ` • Lokasi: ${selectedPosition.location}` : ""}
+              {selectedPosition.salary_budget != null
+                ? ` • Budget: Rp ${Number(selectedPosition.salary_budget).toLocaleString("id-ID")}`
+                : ""}
+            </p>
+            {clientUserOptions.length > 0 && (
+              <p className="text-blue-700 text-xs mt-1">
+                PIC Klien: {clientUserOptions.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleRecommend}
+            disabled={!selectedPosition || recommendMutation.isPending}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 transition-colors"
+          >
+            {recommendMutation.isPending ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Mencari Rekomendasi...
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Cari & Rekomendasikan Kandidat
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Hasil Rekomendasi AI — tabel interaktif (TASK-21.2) */}
+        {(recommendations.length > 0 || recommendMessage) && (
+          <div className="space-y-4 border-t border-gray-200 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-base font-semibold text-gray-900">
+                Hasil Rekomendasi AI
+                {recommendations.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({recommendations.length} kandidat)
+                  </span>
+                )}
+              </h3>
+              {recommendMessage && <p className="text-sm text-gray-500">{recommendMessage}</p>}
+            </div>
+
+            {recommendations.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                Tidak ada kandidat yang direkomendasikan. Coba ubah filter sumber kandidat atau posisi.
+              </p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+                      <tr>
+                        <th className="w-10 px-3 py-2.5">
+                          <input
+                            type="checkbox"
+                            checked={allRecommendationsSelected}
+                            onChange={toggleSelectAllRecommendations}
+                            aria-label="Pilih Semua Rekomendasi"
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-medium">Kandidat</th>
+                        <th className="px-3 py-2.5 text-left font-medium">Skor AI</th>
+                        <th className="px-3 py-2.5 text-left font-medium">Ringkasan Kecocokan AI</th>
+                        <th className="px-3 py-2.5 text-left font-medium">Status Pool Asal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {recommendations.map((rec) => (
+                        <tr key={rec.candidate_id} className="hover:bg-gray-50">
+                          <td className="px-3 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedRecommendIds.has(rec.candidate_id)}
+                              onChange={() => toggleRecommend(rec.candidate_id)}
+                              aria-label={`Pilih ${rec.full_name}`}
+                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-3 py-3">
+                            <p className="font-medium text-gray-900">{rec.full_name}</p>
+                            <p className="text-xs text-gray-500">
+                              {rec.domicile ?? "Domisili belum diisi"} • {rec.experience_years ?? 0} tahun
+                              • {rec.skills?.length ? rec.skills.slice(0, 4).join(", ") : "Skill belum diisi"}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3">
+                            {rec.ai_score == null ? (
+                              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                                —
+                              </span>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  rec.ai_score >= 80
+                                    ? "bg-green-100 text-green-700"
+                                    : rec.ai_score >= 60
+                                      ? "bg-yellow-100 text-yellow-700"
+                                      : "bg-red-100 text-red-700"
+                                }`}
+                              >
+                                {rec.ai_score}%
+                              </span>
+                            )}
+                          </td>
+                          <td className="max-w-md px-3 py-3 text-gray-600">
+                            {rec.ai_notes || "Tidak ada ringkasan dari AI."}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                                rec.pool_status === "talent_pool"
+                                  ? "bg-violet-100 text-violet-700"
+                                  : rec.pool_status === "future_lead"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {POOL_STATUS_LABELS[rec.pool_status] ?? rec.pool_status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
+                  <p className="text-sm text-gray-600">
+                    {selectedRecommendIds.size} dari {recommendations.length} kandidat dipilih
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    {canToggleAIScreening && (
+                      <label className="flex items-start gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={runAIScreening}
+                          onChange={(e) => setRunAIScreening(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>
+                          <span className="font-medium text-gray-900">Jalankan AI Screening</span>
+                          <span className="block text-xs text-gray-500">
+                            Hitung skor kecocokan CV di latar belakang.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleInsertToPipeline}
+                      disabled={selectedRecommendIds.size === 0 || bulkAssignMutation.isPending}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 transition-colors"
+                    >
+                      {bulkAssignMutation.isPending ? (
+                        <>
+                          <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                          Memproses...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                          Masukkan Kandidat Terpilih ke Pipeline Lamaran
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Upload CV untuk AI Screening ────────────────────────────── */}
@@ -337,10 +773,11 @@ export default function NewApplicationPage() {
         </p>
         {/* Pilih posisi untuk upload */}
         <div className="relative" ref={uploadPositionRef}>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Posisi yang Dilamar <span className="text-red-500">*</span>
+          <label htmlFor="upload_position_id" className="mb-1 block text-sm font-medium text-gray-700">
+            Posisi untuk Screening CV <span className="text-red-500">*</span>
           </label>
           <input
+            id="upload_position_id"
             type="text"
             value={uploadPositionSearch}
             onChange={(e) => {
@@ -563,7 +1000,7 @@ export default function NewApplicationPage() {
               }}
               onFocus={() => setShowCandidateDropdown(true)}
               placeholder="Ketik nama kandidat..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
             {errors.candidate_id && (
               <p className="mt-1 text-xs text-red-600">{errors.candidate_id.message}</p>
@@ -621,60 +1058,29 @@ export default function NewApplicationPage() {
           )}
         </div>
 
-        {/* Position Selection */}
+        {/* Posisi Lamaran — memakai pilihan dari Pusat Sourcing di atas */}
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Pilih Posisi</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Posisi Lamaran</h2>
 
-          <div className="relative" ref={positionRef}>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Judul Posisi <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={positionSearch}
-              onChange={(e) => {
-                setPositionSearch(e.target.value);
-                setShowPositionDropdown(true);
-                if (e.target.value.length < 2) setSelectedPosition(null);
-              }}
-              onFocus={() => setShowPositionDropdown(true)}
-              placeholder="Ketik judul posisi..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
-            />
-            {errors.position_id && (
-              <p className="mt-1 text-xs text-red-600">{errors.position_id.message}</p>
-            )}
-
-            {showPositionDropdown && positions.length > 0 && (
-              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
-                {positions.map((pos) => (
-                  <button
-                    key={pos.id}
-                    type="button"
-                    onClick={() => handleSelectPosition(pos)}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                  >
-                    <p className="font-medium text-gray-900">{pos.title}</p>
-                    <p className="text-xs text-gray-500">{pos.client_name || "-"}</p>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {showPositionDropdown && positions.length === 0 && positionSearch.length >= 2 && (
-              <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg py-3 text-center text-sm text-gray-500">
-                Tidak ditemukan
-              </div>
-            )}
-          </div>
-
-          {selectedPosition && (
+          {selectedPosition ? (
             <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
               <p className="font-medium text-blue-900">{selectedPosition.title}</p>
               <p className="text-blue-700 text-xs mt-1">
                 Client: {selectedPosition.client_name || "-"}  •  {selectedPosition.employment_type || "Full-time"}
               </p>
+              {clientUserOptions.length > 0 && (
+                <p className="text-blue-700 text-xs mt-1">
+                  PIC Klien: {clientUserOptions.join(", ")}
+                </p>
+              )}
             </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+              Belum ada posisi dipilih. Tentukan &quot;Posisi yang Dilamar&quot; pada Pusat Sourcing di atas.
+            </p>
+          )}
+          {errors.position_id && (
+            <p className="mt-1 text-xs text-red-600">{errors.position_id.message}</p>
           )}
         </div>
 

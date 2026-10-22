@@ -375,7 +375,7 @@ export default function CandidateForm({
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Link href={candidateId ? `/candidates/${candidateId}` : "/candidates"} className="text-sm font-medium text-primary-600 hover:underline">
+          <Link href={candidateId ? `/candidates/${candidateId}` : "/candidates"} className="text-sm font-medium text-primary hover:underline">
             ← Kembali ke Detail
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">
@@ -407,7 +407,7 @@ export default function CandidateForm({
                   <label className="mb-1 block text-sm font-medium text-gray-700">URL Foto Profil</label>
                   <input
                     {...form.register("photo_url")}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
                     placeholder="https://contoh.com/foto.jpg"
                   />
                   <p className="mt-1 text-xs text-gray-500">
@@ -420,7 +420,7 @@ export default function CandidateForm({
               <label className="mb-1 block text-sm font-medium text-gray-700">Nama lengkap</label>
               <input
                 {...form.register("full_name")}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
                 placeholder="Nama lengkap"
               />
               {form.formState.errors.full_name && (
@@ -430,32 +430,32 @@ export default function CandidateForm({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-              <input {...form.register("email")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("email")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">No. HP</label>
-              <input {...form.register("phone")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("phone")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">NIK</label>
-              <input {...form.register("identity_no")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("identity_no")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Tempat Lahir</label>
-              <input {...form.register("birth_place")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("birth_place")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal Lahir</label>
-              <input {...form.register("birth_date")} type="date" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("birth_date")} type="date" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Jenis Kelamin</label>
-              <select {...form.register("gender")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
+              <select {...form.register("gender")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary">
                 <option value="">Pilih</option>
                 <option value="Laki-laki">Laki-laki</option>
                 <option value="Perempuan">Perempuan</option>
@@ -464,7 +464,7 @@ export default function CandidateForm({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Golongan Darah</label>
-              <select {...form.register("blood_type")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
+              <select {...form.register("blood_type")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary">
                 <option value="">Pilih</option>
                 <option value="A">A</option>
                 <option value="B">B</option>
@@ -475,7 +475,7 @@ export default function CandidateForm({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Status Perkawinan</label>
-              <select {...form.register("marital_status")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
+              <select {...form.register("marital_status")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary">
                 <option value="">Pilih</option>
                 <option value="Belum Menikah">Belum Menikah</option>
                 <option value="Menikah">Menikah</option>
@@ -486,12 +486,12 @@ export default function CandidateForm({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Domisili</label>
-              <input {...form.register("domicile")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("domicile")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Sumber</label>
-              <select {...form.register("source_channel")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500">
+              <select {...form.register("source_channel")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary">
                 <option value="">Pilih sumber</option>
                 {sourceChannels.map((ch) => (
                   <option key={ch.id} value={ch.label}>{ch.label}</option>
@@ -501,22 +501,22 @@ export default function CandidateForm({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Gaji saat ini</label>
-              <input {...form.register("current_salary")} type="number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("current_salary")} type="number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Gaji yang diharapkan</label>
-              <input {...form.register("expected_salary")} type="number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("expected_salary")} type="number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Notice period (hari)</label>
-              <input {...form.register("notice_period_days")} type="number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <input {...form.register("notice_period_days")} type="number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
 
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-medium text-gray-700">Catatan</label>
-              <textarea {...form.register("notes")} rows={4} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+              <textarea {...form.register("notes")} rows={4} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
             </div>
           </div>
         </div>
@@ -614,23 +614,23 @@ export default function CandidateForm({
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Institusi</label>
-                    <input {...form.register(`education.${index}.institution`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <input {...form.register(`education.${index}.institution`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Jurusan</label>
-                    <input {...form.register(`education.${index}.major`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <input {...form.register(`education.${index}.major`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Tahun lulus</label>
-                    <input type="number" {...form.register(`education.${index}.graduation_year`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <input type="number" {...form.register(`education.${index}.graduation_year`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
 
                   {index === 0 && (
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">IPK</label>
-                      <input type="number" step="0.01" {...form.register(`education.${index}.gpa`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                      <input type="number" step="0.01" {...form.register(`education.${index}.gpa`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                     </div>
                   )}
                 </div>
@@ -670,27 +670,27 @@ export default function CandidateForm({
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Nama perusahaan</label>
-                    <input {...form.register(`experience.${index}.company_name`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <input {...form.register(`experience.${index}.company_name`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Posisi</label>
-                    <input {...form.register(`experience.${index}.job_title`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <input {...form.register(`experience.${index}.job_title`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Awal</label>
-                    <input type="date" {...form.register(`experience.${index}.start_date`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <input type="date" {...form.register(`experience.${index}.start_date`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Akhir</label>
-                    <input type="date" {...form.register(`experience.${index}.end_date`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <input type="date" {...form.register(`experience.${index}.end_date`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
 
                   <div className="md:col-span-2">
                     <label className="mb-1 block text-sm font-medium text-gray-700">Deskripsi</label>
-                    <textarea rows={4} {...form.register(`experience.${index}.description`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500" />
+                    <textarea rows={4} {...form.register(`experience.${index}.description`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
                 </div>
               </div>

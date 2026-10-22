@@ -488,60 +488,58 @@
 ### TASK-19: Backend Services & API Endpoints (v2.0)
 
 #### TASK-19.1: Ingestion CV Massal Mandiri ke Database (FR-03.7)
-- [x] Buat endpoint `POST /api/v1/candidates/bulk-upload`:
-  - [x] Menerima `files: list[UploadFile]` dan opsional `source_channel: str`
-  - [x] Validasi format file (PDF/DOCX) dan ukuran ($\le 5\text{ MB}$)
-  - [x] Upload file fisik ke OneDrive via `onedrive_service` (folder: `candidates/raw_cv/`)
-  - [x] Simpan record di `ai_screening_result` dengan status `menunggu_ekstraksi` (tanpa `position_id`)
-  - [x] Enqueue arq background job: `redis_pool.enqueue_job("process_cv_ingestion", screening_result_id)`
-  - [x] Return HTTP 202 Accepted dengan daftar ID screening yang dibuat
-- [x] Implementasi worker task `process_cv_ingestion` di `backend/app/services/cv_pipeline.py`:
-  - [x] Download file fisik & ekstrak teks mentah (PyMuPDF / DOCX / OCR)
-  - [x] Panggil model ekstraksi LLM (`_call_llm_extract`) tanpa memanggil `_call_llm_screen`
-  - [x] **Cek duplikat** berdasarkan email, phone, NIK KTP (`candidate_service.check_duplicate`) → status `duplikat`
-  - [x] **Cek blacklist** aktif (`candidate_service.check_blacklist`) → status `blacklisted`
-  - [x] Simpan profil ke tabel `candidate`, `candidate_education`, `candidate_experience`, `candidate_document`
-  - [x] Tandai status `selesai` (atau `error` / `duplikat` / `blacklisted` jika gagal)
+- [ ] Buat endpoint `POST /api/v1/candidates/bulk-upload`:
+  - Menerima `files: list[UploadFile]` dan opsional `source_channel: str`
+  - Validasi format file (PDF/DOCX) dan ukuran ($\le 5\text{ MB}$)
+  - Upload file fisik ke OneDrive via `onedrive_service` (folder: `candidates/raw_cv/`)
+  - Simpan record di `ai_screening_result` dengan status `menunggu_ekstraksi` (tanpa `position_id`)
+  - Enqueue arq background job: `redis_pool.enqueue_job("process_cv_ingestion", screening_result_id)`
+  - Return HTTP 202 Accepted dengan daftar ID screening yang dibuat
+- [ ] Implementasi worker task `process_cv_ingestion` di `backend/app/services/cv_pipeline.py`:
+  - Download file fisik & ekstrak teks mentah (PyMuPDF / OCR)
+  - Panggil model ekstraksi LLM (`_call_llm_extract`) tanpa memanggil `_call_llm_screen`
+  - Simpan profil ke tabel `candidate`, `candidate_education`, `candidate_experience`, `candidate_document`
+  - Tandai status `selesai` (atau `error` jika teks $< 20$ karakter / gagal)
 
 #### TASK-19.2: Endpoint Status Talent Pool (FR-03.8)
-- [x] Implementasi `PATCH /api/v1/candidates/{id}/talent-pool`:
-  - [x] Validasi role (HR, Manager, Admin)
-  - [x] Update kolom `pool_status`, `talent_pool_reason`, `talent_pool_notes`, `talent_pool_updated_at`, `talent_pool_updated_by = current_user.id`
-  - [x] Return data candidate terupdate
-- [x] Update query filter di `GET /api/v1/candidates/`:
-  - [x] Tambah query parameter `pool_status` (`database` | `talent_pool` | `all`)
-  - [x] Pastikan pagination dan filter search tetap berfungsi akurat
+- [ ] Implementasi `PATCH /api/v1/candidates/{id}/talent-pool`:
+  - Validasi role (HR, Manager, Admin)
+  - Update kolom `pool_status`, `talent_pool_reason`, `talent_pool_notes`, `talent_pool_updated_at`, `talent_pool_updated_by = current_user.id`
+  - Return data candidate terupdate
+- [ ] Update query filter di `GET /api/v1/candidates/`:
+  - Tambah query parameter `pool_status` (`database` | `talent_pool` | `all`)
+  - Pastikan pagination dan filter search tetap berfungsi akurat
 
 #### TASK-19.3: Endpoint Bulk Assign ke Lowongan & RBAC AI Score (FR-03.10)
-- [x] Implementasi `POST /api/v1/candidates/bulk-assign`:
-  - [x] Input: `candidate_ids: list[UUID]`, `position_id: UUID`, `client_user_name: Optional[str]`, `run_ai_screening: bool = False`
-  - [x] **Enforce RBAC Toggle:**
-    - [x] Jika `current_user.role == "hr"`, paksa `run_ai_screening = False` (mencegah bypass API client)
-  - [x] Validasi integritas per kandidat:
-    - [x] Cek status Blacklist aktif $\rightarrow$ error/warning jika tidak lolos
-    - [x] Cek Cooldown (kandidat ditolak pada posisi yang sama dalam 6 bulan terakhir)
-    - [x] Cek Application aktif yang sudah ada (cegah duplikasi)
-  - [x] Buat baris `Application` untuk setiap kandidat terpilih (current_stage: `'Dijadwalkan_Interview'`)
-  - [x] Catat log riwayat awal di `Stage_History`
-  - [x] Jika `run_ai_screening == True` (hanya Admin/Manager):
-    - [x] Enqueue job `process_position_matching` ke arq worker untuk menghitung AI score secara asinkron
-  - [x] Return rekap hasil assign (jumlah sukses, kandidat dilewati, dll)
+- [ ] Implementasi `POST /api/v1/candidates/bulk-assign`:
+  - Input: `candidate_ids: list[UUID]`, `position_id: UUID`, `client_user_name: Optional[str]`, `run_ai_screening: bool = False`
+  - **Enforce RBAC Toggle:**
+    - Jika `current_user.role == "hr"`, paksa `run_ai_screening = False` (mencegah bypass API client)
+  - Validasi integritas per kandidat:
+    - Cek status Blacklist aktif $\rightarrow$ error/warning jika tidak lolos
+    - Cek Cooldown (kandidat ditolak pada posisi yang sama dalam 6 bulan terakhir)
+    - Cek Application aktif yang sudah ada (cegah duplikasi)
+  - Buat baris `Application` untuk setiap kandidat terpilih (current_stage: `'Dijadwalkan_Interview'`)
+  - Catat log riwayat awal di `Stage_History`
+  - Jika `run_ai_screening == True` (hanya Admin/Manager):
+    - Enqueue job `process_position_matching` ke arq worker untuk menghitung AI score secara asinkron
+  - Return rekap hasil assign (jumlah sukses, kandidat dilewati, dll)
 
 #### TASK-19.4: Two-Stage Matching Engine untuk Sourcing (FR-08.2)
-- [x] Buat fungsi service `recommend_candidates_for_position()` di `backend/app/services/ai_service.py`:
-  - [x] **Tahap 1 (SQL Database Filter - 0 Token):**
-    - [x] Query kandidat aktif berdasarkan sumber (`pool_status`)
-    - [x] Saring `expected_salary <= position.salary_budget` (atau gaji belum diisi)
-    - [x] Exclude kandidat blacklist aktif dan cooldown posisi
-    - [x] Batasi hasil ke maksimal 30–50 kandidat
-  - [x] **Tahap 2 (LLM Focused Scoring - Hemat Biaya Token):**
-    - [x] Ambil Top 10–15 kandidat terbaik
-    - [x] Susun prompt ringkas: Requirement posisi vs Ringkasan Profil (Nama, Skill, Lama Exp)
-    - [x] Panggil LLM untuk menghasilkan Skor 1–100 dan alasan singkat
-  - [x] Return daftar kandidat rekomendasi terurut berdasarkan skor tertinggi
-- [x] Buat endpoint `POST /api/v1/positions/{id}/recommend-candidates`:
-  - [x] Menerima `source` (`talent_pool` | `database` | `all`) dan `client_user_name`
-  - [x] Panggil service matching di atas dan kembalikan response JSON terstruktur
+- [ ] Buat fungsi service `recommend_candidates_for_position()` di `backend/app/services/ai_service.py`:
+  - **Tahap 1 (SQL Database Filter - 0 Token):**
+    - Query kandidat aktif berdasarkan sumber (`pool_status`)
+    - Saring `expected_salary <= position.salary_budget` (atau gaji belum diisi)
+    - Exclude kandidat blacklist aktif dan cooldown posisi
+    - Batasi hasil ke maksimal 30–50 kandidat
+  - **Tahap 2 (LLM Focused Scoring - Hemat Biaya Token):**
+    - Ambil Top 10–15 kandidat terbaik
+    - Susun prompt ringkas: Requirement posisi vs Ringkasan Profil (Nama, Skill, Lama Exp)
+    - Panggil LLM untuk menghasilkan Skor 1–100 dan alasan singkat
+  - Return daftar kandidat rekomendasi terurut berdasarkan skor tertinggi
+- [ ] Buat endpoint `POST /api/v1/positions/{id}/recommend-candidates`:
+  - Menerima `source` (`talent_pool` | `database` | `all`) dan `client_user_name`
+  - Panggil service matching di atas dan kembalikan response JSON terstruktur
 
 ---
 
@@ -549,43 +547,43 @@
 
 #### TASK-20.1: Checkbox Multi-Select & Action Bar di `/candidates` (FR-03.10)
 - [x] Update `frontend/src/app/(dashboard)/candidates/page.tsx`:
-  - Tambah state `selectedCandidateIds: Set<string>`
-  - Tambah checkbox di header tabel ("Select All on Page") dan di setiap baris tabel
-  - Floating / Header Bulk Action Bar saat ada baris terpilih:
-    - Menampilkan jumlah kandidat terpilih (contoh: *"3 kandidat dipilih"*)
-    - Tombol `[ Pindahkan ke Talent Pool ]`
-    - Tombol `[ Assign ke Lowongan ]`
-    - Tombol `[ Batal Pilihan ]`
+  - [x] Tambah state `selectedCandidateIds: Set<string>`
+  - [x] Tambah checkbox di header tabel ("Select All on Page") dan di setiap baris tabel
+  - [x] Floating / Header Bulk Action Bar saat ada baris terpilih:
+    - [x] Menampilkan jumlah kandidat terpilih (contoh: *"3 kandidat dipilih"*)
+    - [x] Tombol `[ Pindahkan ke Talent Pool ]`
+    - [x] Tombol `[ Assign ke Lowongan ]`
+    - [x] Tombol `[ Batal Pilihan ]`
 - [x] Tambah modal konfirmasi "Pindahkan ke Talent Pool":
-  - Pilihan radio alasan: *Gaji Tidak Sesuai*, *Kebutuhan Masa Depan*, *Lainnya*
-  - Input textarea untuk catatan tambahan
-  - Panggil `PATCH /api/v1/candidates/{id}/talent-pool`
+  - [x] Pilihan radio alasan: *Gaji Tidak Sesuai*, *Kebutuhan Masa Depan*, *Lainnya*
+  - [x] Input textarea untuk catatan tambahan
+  - [x] Panggil `PATCH /api/v1/candidates/{id}/talent-pool`
 
 #### TASK-20.2: Modal "Assign ke Lowongan" dengan RBAC Toggle (FR-03.10)
 - [x] Buat komponen modal `BulkAssignModal.tsx`:
-  - Daftar ringkas nama kandidat terpilih
-  - Dropdown pencarian Posisi Aktif
-  - Dropdown PIC User Klien (sesuai client dari posisi yang dipilih)
-  - **Role-Based Conditional Render untuk Toggle AI:**
-    - Cek `const { user } = useAuthStore()`
-    - Jika `user?.role === 'admin' || user?.role === 'manager'`:
-      - Tampilkan checkbox toggle: `[✓] Jalankan AI Screening (Hitung skor kecocokan)`
-      - Penjelasan singkat: *"AI akan menganalisis kecocokan CV di latar belakang"*
-    - Jika `user?.role === 'hr'`:
-      - Toggle **TIDAK DIRENDER / DISEMBUNYIKAN**
-  - Alert dialog jika ada kandidat terpilih yang terkena Blacklist atau Cooldown
-  - Integrasi mutasi React Query ke `POST /api/v1/candidates/bulk-assign`
-  - Notifikasi toast sukses dan invalidate query `candidates` / `applications`
+  - [x] Daftar ringkas nama kandidat terpilih
+  - [x] Dropdown pencarian Posisi Aktif
+  - [x] Dropdown PIC User Klien (sesuai client dari posisi yang dipilih)
+  - [x] **Role-Based Conditional Render untuk Toggle AI:**
+    - [x] Cek `const { user } = useAuthStore()`
+    - [x] Jika `user?.role === 'admin' || user?.role === 'manager'`:
+      - [x] Tampilkan checkbox toggle: `[✓] Jalankan AI Screening (Hitung skor kecocokan)`
+      - [x] Penjelasan singkat: *"AI akan menganalisis kecocokan CV di latar belakang"*
+    - [x] Jika `user?.role === 'hr'`:
+      - [x] Toggle **TIDAK DIRENDER / DISEMBUNYIKAN**
+  - [x] Alert dialog jika ada kandidat terpilih yang terkena Blacklist atau Cooldown
+  - [x] Integrasi mutasi React Query ke `POST /api/v1/candidates/bulk-assign`
+  - [x] Notifikasi toast sukses dan invalidate query `candidates` / `applications`
 
 #### TASK-20.3: Halaman `/candidates/new` — Ingestion CV Massal Mandiri (FR-03.7)
 - [x] Redesain halaman `frontend/src/app/(dashboard)/candidates/new/page.tsx`:
-  - Hapus dropdown "Posisi yang Dilamar" dan dropdown "Sumber" dari form upload CV
-  - Tampilkan area Dropzone drag-and-drop multi-file CV (PDF/DOCX, max 20 file)
-  - Dropdown opsional: "Channel Asal" (LinkedIn, Glints, Jobstreet, dll)
-  - Tombol aksi: `[ Upload & Ekstrak CV ]`
-  - Progress bar / status indicator untuk batch upload
-  - Daftar hasil ekstraksi: badge sukses, indikator sedang diproses, dan peringatan jika dokumen gagal dibaca
-  - Tautan *"Input Manual"* bagi CV yang gagal diparse
+  - [x] Hapus dropdown "Posisi yang Dilamar" dan dropdown "Sumber" dari form upload CV
+  - [x] Tampilkan area Dropzone drag-and-drop multi-file CV (PDF/DOCX, max 20 file)
+  - [x] Dropdown opsional: "Channel Asal" (LinkedIn, Glints, Jobstreet, dll)
+  - [x] Tombol aksi: `[ Upload & Ekstrak CV ]`
+  - [x] Progress bar / status indicator untuk batch upload
+  - [x] Daftar hasil ekstraksi: badge sukses, indikator sedang diproses, dan peringatan jika dokumen gagal dibaca
+  - [x] Tautan *"Input Manual"* bagi CV yang gagal diparse
 
 #### TASK-20.4: Navigasi & Halaman Dedicated `/talent-pool` (FR-03.9)
 - [x] Tambah link menu **"Talent Pool"** di sidebar navigasi `frontend/src/components/Sidebar.tsx`
@@ -595,33 +593,47 @@
   - Tetap menyediakan filter lengkap: Domisili, Pendidikan, Pengalaman, Rentang Gaji, Pencarian Nama
 
 #### TASK-20.5: Form Master Data Posisi Terstruktur (/admin/positions)
-- [ ] Update form tambah/edit posisi di `frontend/src/app/(dashboard)/admin/positions/[clientId]/page.tsx`:
-  - Tambah input field: **Budget Gaji Maksimal** (`salary_budget`: format Rupiah / Number)
-  - Tambah input field: **Lokasi / Kota Penempatan** (`location`: text input, misal "Jakarta", "Bandung")
-  - Tambah input multi-tag: **PIC User Klien** (`client_user_names`: list nama user, misal ["Joni", "Ahmad"])
-  - (Opsional): Tombol helper *"Ekstrak Kriteria dari Deskripsi (AI)"* untuk meng-auto-fill budget, lokasi, dan required skills dari teks lowongan sekali klik saat pembuatan posisi.
+- [x] Update form tambah/edit posisi di `frontend/src/app/(dashboard)/admin/positions/[clientId]/page.tsx`:
+  - [x] Tambah input field: **Budget Gaji Maksimal** (`salary_budget`: format Rupiah / Number)
+  - [x] Tambah input field: **Lokasi / Kota Penempatan** (`location`: text input, misal "Jakarta", "Bandung")
+  - [x] Tambah input multi-tag: **PIC User Klien** (`client_user_names`: list nama user, misal ["Joni", "Ahmad"])
+  - [x] (Opsional): Tombol helper *"Ekstrak Kriteria dari Deskripsi (AI)"* untuk meng-auto-fill budget, lokasi, dan required skills dari teks lowongan sekali klik saat pembuatan posisi.
+    - [x] Backend: `POST /api/v1/positions/extract-criteria` (Admin + Manager) → `ai_service.extract_position_criteria()` dengan fallback heuristik bila LLM tidak tersedia
+    - [x] Frontend: auto-fill `salary_budget`, `location`, `ai_required_skills`, `ai_min_experience_years` ke form posisi
+  - [x] Komponen baru: `frontend/src/components/shared/TagInput.tsx` (multi-tag), `frontend/src/components/shared/RupiahInput.tsx` + `frontend/src/lib/currency.ts` (format/parse Rupiah)
+  - [x] Tabel posisi menampilkan kolom Budget Gaji, Lokasi, dan PIC Klien
 
 ---
 
 ### TASK-21: Frontend `/applications/new` Refactor (Sourcing Center v2.0)
 
 #### TASK-21.1: Refactor UI Sourcing Center (FR-08.1)
-- [ ] Update `frontend/src/app/(dashboard)/applications/new/page.tsx`:
-  - Bagian atas: Form pemilihan lowongan:
-    - Input pencarian: **Posisi yang Dilamar** (Autocomplete / Searchable Dropdown)
-    - Dropdown: **User Klien** (daftar PIC user dari client pemilik posisi, misal: "Joni", "Ahmad")
-    - Dropdown: **Sumber Kandidat** (pilihan: *"Talent Pool"*, *"Database"*, *"Semua"*)
-  - Tombol utama: `[ 🔍 Cari & Rekomendasikan Kandidat ]` dengan loading spinner state
+- [x] Update `frontend/src/app/(dashboard)/applications/new/page.tsx`:
+  - [x] Bagian atas: Form pemilihan lowongan:
+    - [x] Input pencarian: **Posisi yang Dilamar** (Autocomplete / Searchable Dropdown)
+    - [x] Dropdown: **User Klien** (daftar PIC user dari client pemilik posisi, misal: "Joni", "Ahmad")
+    - [x] Dropdown: **Sumber Kandidat** (pilihan: *"Talent Pool"*, *"Database"*, *"Semua"*)
+  - [x] Tombol utama: `[ 🔍 Cari & Rekomendasikan Kandidat ]` dengan loading spinner state
+  - [x] Form lamaran manual memakai ulang posisi yang dipilih di Pusat Sourcing (single source of truth)
+  - [x] Tipe `CandidateSource` / `RecommendCandidate` / `RecommendCandidatesResponse` ditambahkan di `frontend/src/types/index.ts`
+  - [x] Fix backend: prompt Two-Stage Matching diminta sebagai JSON object (`{"candidates": [...]}`) agar konsisten dengan `response_format: json_object` OpenAI
 
 #### TASK-21.2: Hasil Rekomendasi AI & Bulk Pipeline Insert (FR-08.3)
-- [ ] Integrasi mutation React Query ke endpoint `POST /api/v1/positions/{id}/recommend-candidates`
-- [ ] Tampilkan tabel interaktif di bawah form:
-  - Header dengan checkbox "Pilih Semua Rekomendasi"
-  - Kolom: Checkbox, Nama Kandidat, Badge Skor AI (Hijau $\ge 80$, Kuning $60-79$, Merah $<60$), Rangkuman Alasan Kecocokan AI, Status Pool Asal
-  - Tombol aksi bawah: `[ Masukkan Kandidat Terpilih ke Pipeline Lamaran ]`
-- [ ] Handler submit:
-  - Panggil `POST /api/v1/candidates/bulk-assign` untuk kandidat yang dicentang
-  - Redirect ke halaman pipeline `/applications` dengan toast sukses
+- [x] Integrasi mutation React Query ke endpoint `POST /api/v1/positions/{id}/recommend-candidates`
+- [x] Tampilkan tabel interaktif di bawah form:
+  - [x] Header dengan checkbox "Pilih Semua Rekomendasi"
+  - [x] Kolom: Checkbox, Nama Kandidat, Badge Skor AI (Hijau $\ge 80$, Kuning $60-79$, Merah $<60$), Rangkuman Alasan Kecocokan AI, Status Pool Asal
+  - [x] Tombol aksi bawah: `[ Masukkan Kandidat Terpilih ke Pipeline Lamaran ]`
+- [x] Handler submit:
+  - [x] Panggil `POST /api/v1/candidates/bulk-assign` untuk kandidat yang dicentang
+  - [x] Redirect ke halaman pipeline `/applications` dengan toast sukses
+- [x] Tambahan:
+  - [x] Badge skor: hijau $\ge 80$ / kuning 60–79 / merah $<60$ / abu-abu bila LLM gagal
+  - [x] Label status pool: `Talent Pool` / `Database` / `Future Lead`
+  - [x] Tombol "Pilih Semua Rekomendasi" + counter "N dari M kandidat dipilih"
+  - [x] Toggle "Jalankan AI Screening" hanya untuk Admin/Manager (hidden untuk HR, FR-03.10) — default non-aktif agar hemat token
+  - [x] Toast warning menampilkan alasan kandidat yang dilewati (blacklist/cooldown/duplikat)
+  - [x] Test: `frontend/src/app/(dashboard)/applications/new/sourcing-center.test.tsx` (10 test)
 
 ---
 

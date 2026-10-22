@@ -1,24 +1,47 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import Link from "next/link";
 import api from "@/lib/api";
-import type { PositionByClient } from "@/types";
+import type { AgreementType, Client, PositionByClient } from "@/types";
 import { useAuthStore } from "@/stores/auth.store";
+import { useToastStore } from "@/stores/toast.store";
+import { getErrorMessage } from "@/lib/errors";
+import {
+  PositionFormModal,
+  type PositionCreateForm,
+} from "@/components/positions/PositionFormModal";
 
 async function fetchPositionsByClient(): Promise<PositionByClient[]> {
   const response = await api.get("/api/v1/positions/by-client");
   return response.data;
 }
 
+async function fetchClients(): Promise<Client[]> {
+  const response = await api.get("/api/v1/clients?is_active=true");
+  const data = response.data;
+  return Array.isArray(data) ? data : data?.data ?? [];
+}
+
+async function fetchAgreementTypes(): Promise<AgreementType[]> {
+  const response = await api.get("/api/v1/admin/agreement-types", {
+    params: { is_active: true },
+  });
+  return response.data;
+}
+
 export default function AdminPositionsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isRole = useAuthStore((state) => state.isRole);
   const { user } = useAuthStore();
+  const showToast = useToastStore((state) => state.showToast);
+
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const authorized = !!user && isRole("admin", "hr", "manager");
 
@@ -31,6 +54,35 @@ export default function AdminPositionsPage() {
     queryKey: ["positions-by-client"],
     queryFn: fetchPositionsByClient,
     enabled: authorized,
+  });
+
+  const { data: clients = [] } = useQuery<Client[]>({
+    queryKey: ["clients", "active"],
+    queryFn: fetchClients,
+    enabled: authorized,
+  });
+
+  const { data: agreementTypes = [] } = useQuery<AgreementType[]>({
+    queryKey: ["agreement-types", "active"],
+    queryFn: fetchAgreementTypes,
+    enabled: authorized,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: PositionCreateForm) =>
+      api.post("/api/v1/positions", payload).then((res) => res.data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["positions-by-client"] });
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      setShowAddModal(false);
+      showToast("success", "Posisi berhasil ditambahkan.");
+      if (variables.client_id) {
+        router.push(`/admin/positions/${variables.client_id}`);
+      }
+    },
+    onError: (err: unknown) => {
+      showToast("error", getErrorMessage(err, "Gagal menambahkan posisi."));
+    },
   });
 
   useEffect(() => {
@@ -87,6 +139,16 @@ export default function AdminPositionsPage() {
               Daftar klien dan jumlah posisi
             </p>
           </div>
+          {isRole("admin", "manager") && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center gap-2 text-body-md shadow-sm"
+            >
+              <span className="material-symbols-outlined text-lg">add</span>
+              Tambah Posisi
+            </button>
+          )}
         </div>
 
         {/* Table */}
@@ -150,6 +212,20 @@ export default function AdminPositionsPage() {
             <span>Total: {rows.length} klien</span>
           </div>
         </div>
+
+        {/* Add Modal */}
+        {showAddModal && (
+          <PositionFormModal
+            position={null}
+            agreementTypes={agreementTypes}
+            clients={clients}
+            onClose={() => setShowAddModal(false)}
+            onCreate={createMutation.mutateAsync}
+            onUpdate={async () => {}}
+            isCreatingPending={createMutation.isPending}
+            isUpdatingPending={false}
+          />
+        )}
       </div>
     </div>
   );

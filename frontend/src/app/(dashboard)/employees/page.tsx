@@ -55,7 +55,7 @@ export default function EmployeesPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -71,7 +71,7 @@ export default function EmployeesPage() {
               value={placementFilter}
               onChange={(e) => setPlacementFilter(e.target.value)}
               placeholder="Cari penempatan…"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
 
@@ -82,7 +82,7 @@ export default function EmployeesPage() {
             <select
               value={expiryDays}
               onChange={(e) => setExpiryDays(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Semua</option>
               <option value="7">7 hari</option>

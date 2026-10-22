@@ -63,6 +63,8 @@ class ApplicationCreate(BaseModel):
     candidate_id: str
     position_id: str
     recruiter_id: str | None = None
+    client_user_id: str | None = None
+    client_user_name: str | None = None
     current_stage: str = "Dijadwalkan_Interview"
     force_blacklisted: bool = False
     force_cooldown: bool = False
@@ -70,6 +72,8 @@ class ApplicationCreate(BaseModel):
 
 class ApplicationUpdate(BaseModel):
     recruiter_id: str | None = None
+    client_user_id: str | None = None
+    client_user_name: str | None = None
     cv_submitted_to_pm_date: date | None = None
 
 
@@ -90,6 +94,8 @@ class ApplicationResponse(BaseModel):
     client_name: str | None
     recruiter_id: AutoStrUUID | None
     recruiter_name: str | None
+    client_user_id: AutoStrUUID | None = None
+    client_user_name: str | None = None
     current_stage: str
     status: str
     last_result: str | None = None

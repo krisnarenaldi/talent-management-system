@@ -1,0 +1,27 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "id": "onCreateResult-before-subrequests",
+      "severity": "medium",
+      "confirmed": true,
+      "summary": "onCreateResult fires before education/experience sub-requests complete",
+      "detail": "In CandidateForm.tsx, onCreateResult is called immediately after POST /api/v1/candidates resolves (lines 279-281), before the education/experience PUT/POST loops run (lines 295-350). If the user navigates away via the DuplicateWarningBanner or BlacklistWarningModal, any unsaved education/experience data is abandoned. Fix: move the onCreateResult call to after the sub-request loops complete, alongside the showToast('success') call at line 352."
+    },
+    {
+      "id": "statusbadge-upload-label",
+      "severity": "low",
+      "confirmed": true,
+      "summary": "StatusBadge 'uploading' label reads 'Sedang diupload' instead of planned 'Terkirim — AI sedang memproses'",
+      "detail": "The fix plan specified the uploading badge should communicate post-upload async AI processing. The implementation uses 'Sedang diupload' (accurate during HTTP transfer) and transitions immediately to 'Berhasil diekstrak' on success — never showing the AI-processing state. Non-blocking cosmetic divergence from the plan."
+    },
+    {
+      "id": "blacklist-modal-no-focus-trap",
+      "severity": "low",
+      "confirmed": true,
+      "summary": "BlacklistWarningModal has no focus trap",
+      "detail": "The modal sets role=dialog and aria-modal=true but does not move focus on open or trap it inside. Keyboard users can tab through background content while the modal is visible. Non-blocking for current usage."
+    }
+  ],
+  "reviewDoc": "/Users/krisnarenaldi/Documents/Projects/freelance/Talent Management System/.agents/tasks/task-20-fix-review.md"
+}
