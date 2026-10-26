@@ -373,6 +373,11 @@ async def bulk_upload_candidates(
     screening_ids: list[str] = []
     errors: list[str] = []
 
+    # Satu batch_id UUID untuk seluruh sesi upload ini —
+    # digunakan oleh notifikasi agar hanya menghitung CV dalam batch ini saja.
+    import uuid as _uuid
+    batch_id = _uuid.uuid4()
+
     for file in files:
         try:
             # Validate extension
@@ -402,6 +407,7 @@ async def bulk_upload_candidates(
                 candidate_id=None,
                 position_id=None,
                 uploaded_by=current_user.id,
+                batch_id=batch_id,
                 cv_file_url=result.get("file_url"),
                 cv_drive_item_id=result.get("drive_item_id"),
                 source_channel=source_channel,

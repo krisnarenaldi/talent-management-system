@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
 import { useToastStore } from "@/stores/toast.store";
@@ -117,7 +117,11 @@ export default function CandidateForm({
   const [initialEducation, setInitialEducation] = useState<CandidateEducation[]>([]);
   const [initialExperience, setInitialExperience] = useState<CandidateExperience[]>([]);
   const [skillInput, setSkillInput] = useState("");
-  const [sourceChannels, setSourceChannels] = useState<SourceChannel[]>([]);
+  const [pendingSourceChannel, setPendingSourceChannel] = useState<string | null>(null);
+  const { data: sourceChannels = [] } = useQuery<SourceChannel[]>({
+    queryKey: ["source-channels-active"],
+    queryFn: () => settingsApi.listSourceChannels({ is_active: true }),
+  });
   const skillInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CandidateFormValues>({
@@ -164,10 +168,6 @@ export default function CandidateForm({
   });
 
   useEffect(() => {
-    settingsApi.listSourceChannels({ is_active: true }).then(setSourceChannels).catch(() => {});
-  }, []);
-
-  useEffect(() => {
     if (mode !== "edit" || !candidateId) return;
 
     const loadCandidate = async () => {
@@ -181,6 +181,8 @@ export default function CandidateForm({
 
         setInitialEducation(educations);
         setInitialExperience(experiences);
+        // Simpan source_channel kandidat — akan di-sync ke form setelah sourceChannels tersedia
+        setPendingSourceChannel(candidate.source_channel || "");
         form.reset({
           full_name: candidate.full_name || "",
           email: candidate.email || "",
@@ -231,6 +233,14 @@ export default function CandidateForm({
 
     loadCandidate();
   }, [candidateId, form, mode, showToast]);
+
+  // Sync source_channel ke form setelah sourceChannels selesai di-fetch.
+  // Diperlukan karena form.reset() bisa dipanggil sebelum options tersedia,
+  // sehingga browser tidak bisa match value ke option dan fallback ke default.
+  useEffect(() => {
+    if (pendingSourceChannel === null || sourceChannels.length === 0) return;
+    form.setValue("source_channel", pendingSourceChannel, { shouldDirty: false });
+  }, [pendingSourceChannel, sourceChannels, form]);
 
   const handleSubmitForm = async (values: CandidateFormValues) => {
     setIsSubmitting(true);
@@ -466,7 +476,7 @@ export default function CandidateForm({
               <label className="mb-1 block text-sm font-medium text-gray-700">Golongan Darah</label>
               <select {...form.register("blood_type")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary">
                 <option value="">Pilih</option>
-                <option value="A">A</option>
+                <option value="A" selected>A</option>
                 <option value="B">B</option>
                 <option value="AB">AB</option>
                 <option value="O">O</option>
@@ -478,7 +488,7 @@ export default function CandidateForm({
               <select {...form.register("marital_status")} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary">
                 <option value="">Pilih</option>
                 <option value="Belum Menikah">Belum Menikah</option>
-                <option value="Menikah">Menikah</option>
+                <option value="Menikah" selected>Menikah</option>
                 <option value="Cerai Hidup">Cerai Hidup</option>
                 <option value="Cerai Mati">Cerai Mati</option>
               </select>

@@ -48,6 +48,7 @@ export default function BlacklistPage() {
     onSuccess: (response, id) => {
       queryClient.invalidateQueries({ queryKey: ["blacklist"] });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
       const blacklistItem = response as Blacklist;
       const rejectedCount = blacklistItem.rejected_application_count || 0;
       if (rejectedCount > 0) {
@@ -63,6 +64,7 @@ export default function BlacklistPage() {
     mutationFn: (id: string) => blacklistApi.revoke(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["blacklist"] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
       showToast("success", "Blacklist berhasil dicabut.");
     },
     onError: (err) => showToast("error", getErrorMessage(err, "Gagal mencabut blacklist.")),

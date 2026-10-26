@@ -32,6 +32,7 @@ from app.models.position import Position
 from app.services import candidate_service
 from app.services.cv_parser import extract_pdf_text, extract_docx_text
 from app.services.onedrive_service import onedrive_service
+from app.core.phone_utils import normalize_phone as _normalize_phone
 
 logger = logging.getLogger("cv_pipeline")
 
@@ -338,40 +339,45 @@ def _create_batch_notification(db: Any, uploaded_by: Any, position_id: Any) -> N
     db.add(notif)
 
 
-def _create_candidate_ingestion_notification(db: Any, uploaded_by: Any) -> None:
+def _create_candidate_ingestion_notification(db: Any, uploaded_by: Any, batch_id: Any) -> None:
     """
     Buat satu notifikasi ringkasan ke uploader ketika semua file CV kandidat (tanpa posisi)
     dalam batch upload selesai diproses oleh worker.
-    """
-    from datetime import datetime as dt, timedelta
 
-    # Periksa apakah masih ada CV kandidat (position_id is None) yang sedang diproses untuk uploader ini
+    Menggunakan batch_id untuk memastikan hitungan CV hanya mencakup batch saat ini,
+    bukan batch-batch sebelumnya yang terjadi dalam rentang waktu yang sama.
+    """
+    if not batch_id:
+        # Fallback: batch_id tidak ada (data lama sebelum migrasi) — skip notifikasi
+        logger.warning(
+            "_create_candidate_ingestion_notification: batch_id kosong untuk uploaded_by=%s, skip.",
+            uploaded_by,
+        )
+        return
+
+    # Periksa apakah masih ada CV dalam BATCH INI yang belum selesai diproses
     pending = (
         db.query(AIScreeningResult)
         .filter(
-            AIScreeningResult.uploaded_by == uploaded_by,
-            AIScreeningResult.position_id.is_(None),
+            AIScreeningResult.batch_id == batch_id,
             AIScreeningResult.status.in_(["menunggu_ekstraksi", "sedang_diproses"]),
         )
         .count()
     )
 
     if pending > 0:
-        # Masih ada file yang sedang berjalan di batch
+        # Masih ada file dalam batch ini yang sedang berjalan — tunggu
         return
 
-    # Ambil hasil pemrosesan 30 menit terakhir agar merefleksikan batch terkini
-    since = dt.now(timezone.utc) - timedelta(minutes=30)
-    recent_query = db.query(AIScreeningResult).filter(
-        AIScreeningResult.uploaded_by == uploaded_by,
-        AIScreeningResult.position_id.is_(None),
-        AIScreeningResult.updated_at >= since,
+    # Hitung hasil berdasarkan batch_id (akurat, terisolasi per sesi upload)
+    batch_query = db.query(AIScreeningResult).filter(
+        AIScreeningResult.batch_id == batch_id,
     )
 
-    success_count = recent_query.filter(AIScreeningResult.status == "selesai").count()
-    duplicate_count = recent_query.filter(AIScreeningResult.status == "duplikat").count()
-    blacklisted_count = recent_query.filter(AIScreeningResult.status == "blacklisted").count()
-    error_count = recent_query.filter(AIScreeningResult.status == "error").count()
+    success_count = batch_query.filter(AIScreeningResult.status == "selesai").count()
+    duplicate_count = batch_query.filter(AIScreeningResult.status == "duplikat").count()
+    blacklisted_count = batch_query.filter(AIScreeningResult.status == "blacklisted").count()
+    error_count = batch_query.filter(AIScreeningResult.status == "error").count()
 
     total_batch = success_count + duplicate_count + blacklisted_count + error_count
     if total_batch == 0:
@@ -382,18 +388,14 @@ def _create_candidate_ingestion_notification(db: Any, uploaded_by: Any) -> None:
     if success_count > 0:
         parts.append(f"{success_count} CV baru ditambahkan")
     if duplicate_count > 0:
-        parts.append(f"{duplicate_count} duplikat terdeteksi")
+        parts.append(f"{duplicate_count} duplikat terdeteksi & data kandidat diperbarui")
     if blacklisted_count > 0:
         parts.append(f"{blacklisted_count} terindikasi blacklist")
     if error_count > 0:
         parts.append(f"{error_count} gagal diekstrak")
 
-    if error_count > 0:
-        msg = "Ekstraksi CV selesai: " + ", ".join(parts) + "."
-        link = "/candidates/pending-review"
-    else:
-        msg = "Ekstraksi CV selesai: " + ", ".join(parts) + "."
-        link = "/candidates"
+    link = "/candidates/pending-review" if error_count > 0 else "/candidates"
+    msg = "Ekstraksi CV selesai: " + ", ".join(parts) + "."
 
     notif = Notification(
         user_id=uploaded_by,
@@ -574,6 +576,10 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
             # Step 4 — Call LLM: ekstraksi data CV (LLM_MODEL_EXTRACT)
             extracted = await _call_llm_extract(cv_text_stripped, was_truncated)
 
+            # Normalisasi nomor HP agar format seragam (08xxx, digit-only)
+            if extracted.get("telepon"):
+                extracted["telepon"] = _normalize_phone(extracted["telepon"]) or None
+
             # Step 5 — Cek duplikat berdasarkan email, phone, NIK
             dup = candidate_service.check_duplicate(
                 db,
@@ -742,10 +748,12 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
             result.ai_notes = str(exc)
             db.commit()
 
-        # Step 8 — Notifikasi batch ingestion jika seluruh batch telah selesai diproses
-        if result.uploaded_by:
-            _create_candidate_ingestion_notification(db, result.uploaded_by)
-            db.commit()
+        finally:
+            # Step 8 — Notifikasi batch ingestion selalu dijalankan, termasuk untuk
+            # kasus duplikat dan blacklisted yang sebelumnya memanggil return lebih awal.
+            if result.uploaded_by:
+                _create_candidate_ingestion_notification(db, result.uploaded_by, result.batch_id)
+                db.commit()
 
     finally:
         db.close()

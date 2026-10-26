@@ -42,6 +42,25 @@ def list_notifications(
     )
 
 
+@router.patch("/read-all", response_model=list[NotificationResponse])
+def mark_all_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tandai semua notifikasi user sebagai sudah dibaca."""
+    db.query(Notification).filter(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False,
+    ).update({"is_read": True})
+    db.commit()
+    return (
+        db.query(Notification)
+        .filter(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+
+
 @router.patch("/{notification_id}/read", response_model=NotificationResponse)
 def mark_read(
     notification_id: str,
@@ -60,25 +79,6 @@ def mark_read(
     db.commit()
     db.refresh(notif)
     return notif
-
-
-@router.patch("/read-all", response_model=list[NotificationResponse])
-def mark_all_read(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Tandai semua notifikasi user sebagai sudah dibaca."""
-    db.query(Notification).filter(
-        Notification.user_id == current_user.id,
-        Notification.is_read == False,
-    ).update({"is_read": True})
-    db.commit()
-    return (
-        db.query(Notification)
-        .filter(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
-        .all()
-    )
 
 
 @router.delete("/clear-all", status_code=204)

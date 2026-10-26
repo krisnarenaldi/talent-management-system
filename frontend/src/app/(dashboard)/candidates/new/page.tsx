@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
 import { useToastStore } from "@/stores/toast.store";
@@ -52,6 +52,7 @@ function StatusBadge({ status }: { status: FileUploadStatus["status"] }) {
 
 export default function BulkCVUploadPage() {
   const showToast = useToastStore((s) => s.showToast);
+  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([]);
@@ -149,6 +150,17 @@ export default function BulkCVUploadPage() {
       // Mark all as done (API is async — actual per-file status comes from screening IDs)
       setFileStatuses((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
       showToast("success", data.message || "CV berhasil diupload dan sedang diproses.");
+
+      // Segera refetch notifikasi supaya bell tidak tertinggal 30 detik polling.
+      // Notifikasi batch muncul setelah worker selesai, jadi kita poll lebih sering
+      // selama ~10 menit (20x tiap 30 detik) sampai notifikasi muncul di DB.
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      let attempts = 0;
+      const pollId = setInterval(() => {
+        attempts++;
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        if (attempts >= 20) clearInterval(pollId);
+      }, 30_000);
     },
     onError: (error) => {
       setUploadProgress(0);
@@ -189,37 +201,39 @@ export default function BulkCVUploadPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-sm font-semibold text-gray-700">File CV (PDF / DOCX)</h2>
 
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label="Area drag-and-drop untuk upload CV"
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
-          onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
-          className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 transition-colors ${
-            dragActive
-              ? "border-primary bg-primary/5"
-              : "border-gray-300 bg-gray-50 hover:border-primary/80 hover:bg-primary/5"
-          }`}
-        >
-          <span className="material-symbols-outlined text-4xl text-gray-400">upload_file</span>
-          <p className="text-sm font-medium text-gray-700">
-            Seret file ke sini, atau <span className="text-primary">pilih file</span>
-          </p>
-          <p className="text-xs text-gray-400">
-            PDF / DOCX · Maks. {MAX_FILES} file · Maks. 5 MB per file
-          </p>
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept={ACCEPTED_EXT}
-            className="hidden"
-            onChange={handleFileInput}
-          />
-        </div>
+        {!hasUploaded && (
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Area drag-and-drop untuk upload CV"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current?.click()}
+            onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+            className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 transition-colors ${
+              dragActive
+                ? "border-primary bg-primary/5"
+                : "border-gray-300 bg-gray-50 hover:border-primary/80 hover:bg-primary/5"
+            }`}
+          >
+            <span className="material-symbols-outlined text-4xl text-gray-400">upload_file</span>
+            <p className="text-sm font-medium text-gray-700">
+              Seret file ke sini, atau <span className="text-primary">pilih file</span>
+            </p>
+            <p className="text-xs text-gray-400">
+              PDF / DOCX · Maks. {MAX_FILES} file · Maks. 5 MB per file
+            </p>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept={ACCEPTED_EXT}
+              className="hidden"
+              onChange={handleFileInput}
+            />
+          </div>
+        )}
 
         {/* ── File list ── */}
         {fileStatuses.length > 0 && (

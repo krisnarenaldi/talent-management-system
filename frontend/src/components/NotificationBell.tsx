@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
@@ -23,6 +24,7 @@ async function fetchNotifications() {
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
 
   const { data: notifications = [], isLoading } = useQuery({
@@ -98,20 +100,23 @@ export default function NotificationBell() {
                   <div
                     key={notif.id}
                     title={notif.message}
-                    onClick={() => {
-                      // Optimistic update: mark as read in cache immediately, no refetch after
+                    onClick={async () => {
+                      // Tandai sebagai dibaca terlebih dahulu (await agar tidak dibatalkan navigasi)
                       if (!notif.is_read) {
+                        // Optimistic update di cache
                         queryClient.setQueryData<NotificationData[]>(["notifications"], (old = []) =>
                           old.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
                         );
-                        api.patch(`/api/v1/notifications/${notif.id}/read`, {}).catch(() => {
+                        // Tunggu request selesai sebelum navigasi
+                        await api.patch(`/api/v1/notifications/${notif.id}/read`, {}).catch(() => {
                           // Revert on failure
                           queryClient.invalidateQueries({ queryKey: ["notifications"] });
                         });
                       }
                       setOpen(false);
                       if (notif.link && notif.link !== "#") {
-                        window.location.href = notif.link;
+                        // Gunakan client-side router agar request tidak dibatalkan browser
+                        router.push(notif.link);
                       }
                     }}
                     className={`flex items-start gap-3 px-4 py-3 hover:bg-surface-container-highest transition-colors cursor-pointer ${

@@ -182,6 +182,9 @@ class AIScreeningResult(Base):
     candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidate.id", ondelete="SET NULL"), nullable=True, index=True)
     position_id = Column(UUID(as_uuid=True), ForeignKey("position.id", ondelete="SET NULL"), nullable=True, index=True)
     uploaded_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    # batch_id: mengelompokkan CV yang diupload dalam satu sesi bulk-upload.
+    # Diisi di endpoint /bulk-upload; NULL untuk CV yang di-attach via lamaran posisi.
+    batch_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     cv_file_url = Column(String(2048), nullable=True)
     cv_drive_item_id = Column(String(500), nullable=True)
     source_channel = Column(String(100), nullable=True)  # LinkedIn/Glints/Email/dll — sumber kandidat

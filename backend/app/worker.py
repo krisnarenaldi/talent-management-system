@@ -41,7 +41,10 @@ class WorkerSettings:
     max_jobs = 10
     job_timeout = 300   # 5 menit per CV — sesuaikan jika rata-rata lebih lama
 
-    # ── Retry on worker crash (bukan retry on task error) ────────────────────
-    # Jika worker restart saat job sedang berjalan, arq tidak otomatis re-enqueue.
-    # Gunakan health check di docker-compose untuk restart otomatis.
+    # ── Retry policy ─────────────────────────────────────────────────────────
+    # Semua task pipeline sudah menangani error secara internal (set status="error",
+    # commit ke DB, kirim notifikasi). Retry arq tidak memberi manfaat dan hanya
+    # menambah noise di log — set max_tries=1 agar setiap job dijalankan sekali saja.
+    max_tries = 1
+
     keep_result = 86400  # simpan hasil job 24 jam di Redis (untuk observability)
