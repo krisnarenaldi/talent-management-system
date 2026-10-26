@@ -5,7 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { X, Users } from "lucide-react";
+import { useModalEscape } from "@/hooks/useModalEscape";
+import { Users } from "lucide-react";
 import { useToastStore } from "@/stores/toast.store";
 import api from "@/lib/api";
 
@@ -31,8 +32,8 @@ export interface TalentPoolModalProps {
 }
 
 const REASON_OPTIONS: Array<{ value: TalentPoolFormValues["reason"]; label: string }> = [
-  { value: "gaji_tidak_sesuai", label: "Gaji Tidak Sesuai" },
-  { value: "kebutuhan_masa_depan", label: "Kebutuhan Masa Depan" },
+  { value: "gaji_tidak_sesuai", label: "Gaji tidak sesuai" },
+  { value: "kebutuhan_masa_depan", label: "Kebutuhan masa depan" },
   { value: "lainnya", label: "Lainnya" },
 ];
 
@@ -97,109 +98,100 @@ export default function TalentPoolModal({
     },
   });
 
+  // Close modal on Escape key
+  useModalEscape(onClose, isOpen && !mutation.isPending);
+
   if (!isOpen) return null;
 
   return (
-    /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
       onClick={onClose}
     >
-      {/* Panel — stop click propagation so backdrop click doesn't bubble */}
       <div
-        className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors"
           aria-label="Tutup modal"
         >
-          <X className="h-5 w-5" />
+          <span className="material-symbols-outlined text-2xl">close</span>
         </button>
 
         {/* Header */}
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-center gap-3 mb-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
             <Users className="h-5 w-5 text-emerald-600" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Pindahkan ke Talent Pool</h2>
-            <p className="text-sm text-gray-500">{candidateName}</p>
+            <h2 className="text-xl font-semibold text-on-surface">Pindahkan ke Talent Pool</h2>
+            <p className="text-sm text-on-surface-variant">1 kandidat akan dipindahkan ke Talent Pool.</p>
+            <p className="text-sm font-medium text-on-surface mt-1">{candidateName}</p>
           </div>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit((values) => mutation.mutate(values))} noValidate>
-          {/* Reason radio group */}
-          <fieldset className="mb-4">
-            <legend className="mb-2 block text-sm font-medium text-gray-700">
-              Alasan <span className="text-red-500">*</span>
-            </legend>
-            <div className="space-y-2">
+          <div className="mb-4">
+            <label className="block text-label-md text-on-surface mb-1.5">
+              Alasan <span className="text-error">*</span>
+            </label>
+            <select
+              {...register("reason")}
+              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+            >
               {REASON_OPTIONS.map(({ value, label }) => (
-                <label
-                  key={value}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 px-4 py-3 text-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 has-[:checked]:border-emerald-400 has-[:checked]:bg-emerald-50"
-                >
-                  <input
-                    type="radio"
-                    value={value}
-                    {...register("reason")}
-                    className="h-4 w-4 accent-emerald-600 cursor-pointer"
-                  />
-                  <span className="font-medium text-gray-800">{label}</span>
-                </label>
+                <option key={value} value={value}>
+                  {label}
+                </option>
               ))}
-            </div>
+            </select>
             {errors.reason && (
-              <p className="mt-1.5 text-xs text-red-600">{errors.reason.message}</p>
+              <p className="text-error text-xs mt-1">{errors.reason.message}</p>
             )}
-          </fieldset>
+          </div>
 
           {/* Notes textarea */}
           <div className="mb-6">
-            <label htmlFor="talent-pool-notes" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Catatan tambahan{" "}
-              <span className="text-xs font-normal text-gray-400">(opsional)</span>
+            <label htmlFor="talent-pool-notes" className="block text-label-md text-on-surface mb-1.5">
+              Catatan (opsional)
             </label>
             <textarea
               id="talent-pool-notes"
               {...register("notes")}
               rows={3}
-              placeholder="Tambahkan catatan untuk kandidat ini..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-colors focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 resize-none"
+              placeholder="Tambahkan catatan..."
+              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
             />
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
               disabled={mutation.isPending}
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              className="flex-1 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-medium hover:bg-surface-container-highest transition-colors disabled:opacity-50"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-wait"
             >
               {mutation.isPending ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Memproses...
-                </>
+                <span className="material-symbols-outlined text-lg animate-spin">
+                  progress_activity
+                </span>
               ) : (
-                <>
-                  <Users className="h-4 w-4" />
-                  Pindahkan
-                </>
+                <span className="material-symbols-outlined text-lg">check</span>
               )}
+              Konfirmasi
             </button>
           </div>
         </form>

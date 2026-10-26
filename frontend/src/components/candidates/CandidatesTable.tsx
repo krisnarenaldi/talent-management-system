@@ -11,6 +11,7 @@ import { useExport } from "@/hooks/useExport";
 import ExportButton from "@/components/ExportButton";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
+import { useModalEscape } from "@/hooks/useModalEscape";
 import TalentPoolModal from "@/components/candidates/TalentPoolModal";
 import BulkAssignModal from "@/components/candidates/BulkAssignModal";
 
@@ -154,6 +155,9 @@ export default function CandidatesTable({
 
   // Talent Pool bulk mutation state
   const [isUpdatingTalentPool, setIsUpdatingTalentPool] = useState(false);
+
+  // Close bulk modal on Escape
+  useModalEscape(() => setShowTalentPoolModal(false), showTalentPoolModal && !isUpdatingTalentPool);
 
   const handleBulkTalentPool = () => {
     if (selectedCandidateIds.size === 0) return;
@@ -384,16 +388,28 @@ export default function CandidatesTable({
 
       {/* Talent Pool Modal */}
       {showTalentPoolModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="mb-4 text-lg font-bold text-gray-900">
-              Pindahkan ke Talent Pool
-            </h2>
-            <p className="mb-4 text-sm text-gray-600">
-              {selectedCandidateIds.size} kandidat akan dipindahkan ke Talent Pool.
-            </p>
-            <div className="mb-3">
-              <label className="mb-1 block text-sm font-medium text-gray-700">Alasan</label>
+        <div 
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowTalentPoolModal(false)}
+        >
+          <div 
+            className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                <Users className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-on-surface">Pindahkan ke Talent Pool</h2>
+                <p className="text-sm text-on-surface-variant">{selectedCandidateIds.size} kandidat akan dipindahkan ke Talent Pool.</p>
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-label-md text-on-surface mb-1.5">
+                Alasan <span className="text-error">*</span>
+              </label>
               <select
                 value={talentPoolReason}
                 onChange={(e) =>
@@ -401,34 +417,39 @@ export default function CandidatesTable({
                     e.target.value as "gaji_tidak_sesuai" | "kebutuhan_masa_depan" | "lainnya"
                   )
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
               >
                 <option value="gaji_tidak_sesuai">Gaji tidak sesuai</option>
                 <option value="kebutuhan_masa_depan">Kebutuhan masa depan</option>
                 <option value="lainnya">Lainnya</option>
               </select>
             </div>
-            <div className="mb-5">
-              <label className="mb-1 block text-sm font-medium text-gray-700">Catatan (opsional)</label>
+            
+            <div className="mb-6">
+              <label className="block text-label-md text-on-surface mb-1.5">
+                Catatan (opsional)
+              </label>
               <textarea
                 value={talentPoolNotes}
                 onChange={(e) => setTalentPoolNotes(e.target.value)}
                 rows={3}
                 placeholder="Tambahkan catatan..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
               />
             </div>
-            <div className="flex justify-end gap-3">
+            
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setShowTalentPoolModal(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={isUpdatingTalentPool}
+                className="flex-1 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-medium hover:bg-surface-container-highest transition-colors disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 onClick={handleConfirmTalentPool}
                 disabled={isUpdatingTalentPool}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-wait"
               >
                 {isUpdatingTalentPool ? "Memproses..." : "Konfirmasi"}
               </button>
