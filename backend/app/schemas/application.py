@@ -78,8 +78,12 @@ class ApplicationUpdate(BaseModel):
 
 
 class AIScreeningInfo(BaseModel):
+    id: str | None = None
     ai_score: float | None = None
+    score: float | None = None
     ai_screening_status: str | None = None
+    notes: str | None = None
+    extracted_summary: dict | None = None
 
     class Config:
         from_attributes = True

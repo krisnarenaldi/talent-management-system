@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -110,6 +110,10 @@ export default function CandidateForm({
   preventNavigationOnCreate?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromSource = searchParams?.get("from");
+  const isFromTalentPool = fromSource === "talent-pool";
+
   const queryClient = useQueryClient();
   const showToast = useToastStore((state) => state.showToast);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -368,7 +372,11 @@ export default function CandidateForm({
           onCreateResult({ candidateId: targetId, isBlacklisted, isDuplicate });
         }
       } else {
-        router.push(`/candidates/${targetId}`);
+        router.push(
+          isFromTalentPool
+            ? `/candidates/${targetId}?from=talent-pool`
+            : `/candidates/${targetId}`
+        );
       }
     } catch (error) {
       showToast("error", getErrorMessage(error, "Gagal menyimpan data kandidat."));
@@ -385,8 +393,19 @@ export default function CandidateForm({
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Link href={candidateId ? `/candidates/${candidateId}` : "/candidates"} className="text-sm font-medium text-primary hover:underline">
-            ← Kembali ke Detail
+          <Link
+            href={
+              candidateId
+                ? isFromTalentPool
+                  ? `/candidates/${candidateId}?from=talent-pool`
+                  : `/candidates/${candidateId}`
+                : isFromTalentPool
+                ? "/talent-pool"
+                : "/candidates"
+            }
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            ← Kembali ke {candidateId ? "Detail" : isFromTalentPool ? "Talent Pool" : "Kandidat"}
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">
             {mode === "create" ? "Tambah Kandidat" : "Edit Kandidat"}

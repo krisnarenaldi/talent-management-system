@@ -80,7 +80,7 @@ export default function BulkAssignModal({
 
   // Fetch active positions for dropdown
   const { data: positions = [], isLoading: loadingPositions } = useQuery({
-    queryKey: ["active-positions"],
+    queryKey: ["positions", "active"],
     queryFn: positionsApi.listActive,
     staleTime: 5 * 60 * 1000,
   });
@@ -133,6 +133,7 @@ export default function BulkAssignModal({
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["candidates"] });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-active-positions"] });
 
       const skipped = data.skipped_details ?? [];
       if (skipped.length > 0) {

@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -94,6 +95,10 @@ export default function CandidateCVPage({
 }) {
   const { id } = use(params);
   const trimmedId = id.trim();
+  const searchParams = useSearchParams();
+  const fromSource = searchParams?.get("from");
+  const isFromTalentPool = fromSource === "talent-pool";
+
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuthStore();
   const showToast = useToastStore((s) => s.showToast);
@@ -198,11 +203,21 @@ export default function CandidateCVPage({
     <div className="mx-auto max-w-4xl space-y-6 p-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/candidates" className="hover:text-slate-700 hover:underline">
-          Kandidat
+        <Link
+          href={isFromTalentPool ? "/talent-pool" : "/candidates"}
+          className="hover:text-slate-700 hover:underline"
+        >
+          {isFromTalentPool ? "Talent Pool" : "Kandidat"}
         </Link>
         <span>/</span>
-        <Link href={`/candidates/${trimmedId}`} className="hover:text-slate-700 hover:underline">
+        <Link
+          href={
+            isFromTalentPool
+              ? `/candidates/${trimmedId}?from=talent-pool`
+              : `/candidates/${trimmedId}`
+          }
+          className="hover:text-slate-700 hover:underline"
+        >
           {candidate.full_name}
         </Link>
         <span>/</span>

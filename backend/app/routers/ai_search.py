@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_role
+from app.models.app_setting import AppSetting
 from app.models.notification import Notification
 from app.models.openai_usage_log import OpenAIUsageLog
 from app.models.user import User
@@ -64,9 +65,6 @@ def _check_rate_limit(user_id: str) -> None:
 _PRICE_INPUT_PER_M  = 0.150   # $0.150 / 1M input tokens
 _PRICE_OUTPUT_PER_M = 0.600   # $0.600 / 1M output tokens
 
-# Budget threshold — bisa override lewat env jika perlu (hardcode cukup untuk sekarang)
-_BUDGET_USD = 20.0
-
 # Threshold levels: (fraction, label_for_dedup)
 _ALERT_LEVELS = [
     (0.90, "90pct"),
@@ -81,6 +79,20 @@ def _estimate_cost_usd(prompt_tokens: int, completion_tokens: int) -> float:
     )
 
 
+_BUDGET_KEY = "openai_budget_usd"
+
+
+def _get_budget_usd(db: Session) -> float:
+    """Baca budget dari DB; fallback ke nilai di config/.env jika belum pernah diset."""
+    row = db.query(AppSetting).filter(AppSetting.key == _BUDGET_KEY).first()
+    if row:
+        try:
+            return float(row.value)
+        except ValueError:
+            pass
+    return settings.OPENAI_BUDGET_USD
+
+
 # ── Budget alert logic ────────────────────────────────────────────────────────
 
 def _maybe_send_budget_alerts(db: Session) -> None:
@@ -88,6 +100,8 @@ def _maybe_send_budget_alerts(db: Session) -> None:
     Hitung total estimasi biaya all-time. Jika menyentuh threshold (75% / 90%),
     kirim notifikasi ke semua manager+admin — maksimal 1x per threshold per hari.
     """
+    budget_usd = _get_budget_usd(db)
+
     # Agregasi total token all-time
     row = db.query(
         func.coalesce(func.sum(OpenAIUsageLog.prompt_tokens), 0),
@@ -96,7 +110,7 @@ def _maybe_send_budget_alerts(db: Session) -> None:
     total_prompt, total_completion = int(row[0]), int(row[1])
     total_cost = _estimate_cost_usd(total_prompt, total_completion)
 
-    pct = total_cost / _BUDGET_USD if _BUDGET_USD > 0 else 0.0
+    pct = total_cost / budget_usd if budget_usd > 0 else 0.0
 
     for threshold, level_key in _ALERT_LEVELS:
         if pct < threshold:
@@ -127,7 +141,7 @@ def _maybe_send_budget_alerts(db: Session) -> None:
 
         pct_display = int(threshold * 100)
         cost_display = f"${total_cost:.2f}"
-        budget_display = f"${_BUDGET_USD:.0f}"
+        budget_display = f"${budget_usd:.0f}"
         message = (
             f"⚠️ Penggunaan OpenAI telah mencapai {pct_display}% dari budget "
             f"({cost_display} dari {budget_display}). Segera top up kredit OpenAI."
@@ -176,9 +190,10 @@ class AIUsageResponse(BaseModel):
     total_total_tokens: int
     total_cost_usd: float
 
-    # Budget info
+    # Budget / saldo info
     budget_usd: float
     budget_used_pct: float   # 0–100
+    remaining_usd: float     # sisa saldo = budget_usd - total_cost_usd
 
 
 # ── Endpoint: Natural Language Search ────────────────────────────────────────
@@ -302,6 +317,9 @@ def get_ai_usage(
     m_cost = _estimate_cost_usd(m_prompt, m_completion)
     t_cost = _estimate_cost_usd(t_prompt, t_completion)
 
+    budget_usd = _get_budget_usd(db)
+    remaining = max(budget_usd - t_cost, 0.0)
+
     return AIUsageResponse(
         month_prompt_tokens=m_prompt,
         month_completion_tokens=m_completion,
@@ -311,6 +329,7 @@ def get_ai_usage(
         total_completion_tokens=t_completion,
         total_total_tokens=t_prompt + t_completion,
         total_cost_usd=round(t_cost, 6),
-        budget_usd=_BUDGET_USD,
-        budget_used_pct=round(min(t_cost / _BUDGET_USD * 100, 100), 2) if _BUDGET_USD > 0 else 0.0,
+        budget_usd=budget_usd,
+        budget_used_pct=round(min(t_cost / budget_usd * 100, 100), 2) if budget_usd > 0 else 0.0,
+        remaining_usd=round(remaining, 6),
     )

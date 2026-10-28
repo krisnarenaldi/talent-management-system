@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Menutup modal saat user menekan tombol Escape.
@@ -6,16 +6,19 @@ import { useEffect } from "react";
  * @param enabled - (opsional) nonaktifkan hook saat aksi sedang berjalan (isPending/isSubmitting)
  */
 export function useModalEscape(onClose: () => void, enabled = true) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!enabled) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, enabled]);
+  }, [enabled]);
 }

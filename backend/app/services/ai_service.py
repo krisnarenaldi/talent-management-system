@@ -641,9 +641,12 @@ async def recommend_candidates_for_position(
             )
         )
 
-    # Filter location jika position.location diisi
-    if position.location:
-        q = q.filter(Candidate.domicile.ilike(f"%{position.location}%"))
+    # Exclude kandidat yang sedang memiliki lamaran aktif pada posisi yang sama
+    active_app_subq = sa_select(Application.candidate_id).where(
+        Application.position_id == position_id,
+        Application.status == "active",
+    )
+    q = q.filter(Candidate.id.not_in(active_app_subq))
 
     # Cooldown: exclude kandidat yang ditolak pada posisi sama dalam 6 bulan terakhir
     six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
@@ -654,8 +657,49 @@ async def recommend_candidates_for_position(
     )
     q = q.filter(Candidate.id.not_in(rejected_subq))
 
+    # Pengurutan Prioritas (Tiered Ranking) di Tahap 1:
+    # Jangan hard-filter lokasi agar kandidat luar kota (Bandung, Semarang, dll)
+    # tidak tereliminasi dan tetap berkesempatan masuk jika relevan.
+    # Namun bila posisi memiliki lokasi (misal Jakarta / Jabodetabek), berikan prioritas
+    # teratas untuk kandidat lokasi sekitar, disusul kandidat lainnya.
+    order_clauses = []
+    if position.location:
+        from sqlalchemy import case
+        loc_str = position.location.strip()
+        loc_lower = loc_str.lower()
+        jabotabek_keywords = ["jakarta", "bogor", "depok", "tangerang", "bekasi"]
+        
+        if any(j in loc_lower for j in jabotabek_keywords):
+            # Posisi di area Jabodetabek:
+            # Tier 1: Cocok persis kata kunci lokasi (misal Jakarta)
+            # Tier 2: Berada di area Jabodetabek lainnya (Bogor, Depok, Tangerang, Bekasi)
+            # Tier 3: Domisili belum terisi (NULL / kosong)
+            # Tier 4: Domisili di luar kota (Bandung, Semarang, dll - tetap punya peluang kuota)
+            order_clauses.append(
+                case(
+                    (Candidate.domicile.ilike(f"%{loc_str}%"), 1),
+                    (or_(*[Candidate.domicile.ilike(f"%{c}%") for c in jabotabek_keywords]), 2),
+                    (or_(Candidate.domicile == None, Candidate.domicile == ""), 3),
+                    else_=4,
+                )
+            )
+        else:
+            # Posisi di kota non-Jabodetabek (misal Surabaya, Bandung, Bali):
+            # Tier 1: Cocok dengan kota posisi
+            # Tier 2: Domisili belum terisi
+            # Tier 3: Kota lainnya
+            order_clauses.append(
+                case(
+                    (Candidate.domicile.ilike(f"%{loc_str}%"), 1),
+                    (or_(Candidate.domicile == None, Candidate.domicile == ""), 2),
+                    else_=3,
+                )
+            )
+
+    order_clauses.append(Candidate.created_at.desc())
+
     # Batasi hasil stage 1
-    stage1_candidates = q.order_by(Candidate.created_at.desc()).limit(limit_stage1).all()
+    stage1_candidates = q.order_by(*order_clauses).limit(limit_stage1).all()
 
     if not stage1_candidates:
         return {"position_id": str(position_id), "candidates": [], "message": "Tidak ada kandidat yang cocok di stage 1"}

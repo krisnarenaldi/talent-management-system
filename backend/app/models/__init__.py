@@ -12,3 +12,4 @@ from app.models.employee_leave import EmployeeLeave
 from app.models.generated_cv import GeneratedCV
 from app.models.refresh_token import RefreshToken
 from app.models.openai_usage_log import OpenAIUsageLog
+from app.models.app_setting import AppSetting

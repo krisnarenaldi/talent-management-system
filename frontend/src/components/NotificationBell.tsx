@@ -115,6 +115,13 @@ export default function NotificationBell() {
                       }
                       setOpen(false);
                       if (notif.link && notif.link !== "#") {
+                        // Jika navigasi mengarah ke kandidat atau aplikasi, invalidate cache agar data terbaru langsung tampil tanpa refresh browser
+                        if (notif.link.startsWith("/candidates")) {
+                          queryClient.invalidateQueries({ queryKey: ["candidates"] });
+                          queryClient.invalidateQueries({ queryKey: ["candidate-pending-reviews"] });
+                        } else if (notif.link.startsWith("/applications")) {
+                          queryClient.invalidateQueries({ queryKey: ["applications"] });
+                        }
                         // Gunakan client-side router agar request tidak dibatalkan browser
                         router.push(notif.link);
                       }

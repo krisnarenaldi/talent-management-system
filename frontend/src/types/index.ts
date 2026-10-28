@@ -224,6 +224,7 @@ export interface Application {
   ai_score?: number | null;
   ai_screening_status?: string | null;
   ai_screening?: {
+    id?: string;
     ai_score?: number | null;
     ai_screening_status?: string | null;
     score?: number | null;
@@ -514,6 +515,7 @@ export interface AIUsageStats {
   total_cost_usd: number;
   budget_usd: number;
   budget_used_pct: number;
+  remaining_usd: number;
 }
 
 // --- AI Screening ---

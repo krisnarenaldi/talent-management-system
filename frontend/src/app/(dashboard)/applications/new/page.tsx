@@ -117,7 +117,7 @@ export default function NewApplicationPage() {
   });
 
   const { data: activePositions = [], isLoading: loadingPositions } = useQuery({
-    queryKey: ["active-positions"],
+    queryKey: ["positions", "active"],
     queryFn: positionsApi.listActive,
     staleTime: 5 * 60 * 1000,
   });
@@ -161,7 +161,8 @@ export default function NewApplicationPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
-      queryClient.invalidateQueries({ queryKey: ["pending-review"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-active-positions"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-reviews"] });
       const msg = `${data.total_files} CV berhasil diupload. Proses AI screening berjalan di background — notifikasi akan muncul saat selesai.`;
       showToast("success", msg);
       setLastUploadResult(data);
@@ -248,6 +249,7 @@ export default function NewApplicationPage() {
       api.post("/api/v1/applications", payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-active-positions"] });
       showToast("success", "Lamaran berhasil dibuat.");
       router.push(`/applications/${response.data.id}`);
     },
@@ -393,6 +395,7 @@ export default function NewApplicationPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["candidates"] });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-active-positions"] });
 
       const skipped = data.skipped_details ?? [];
       if (skipped.length > 0) {
@@ -636,7 +639,11 @@ export default function NewApplicationPage() {
                           />
                         </th>
                         <th className="px-3 py-2.5 text-left font-medium">Kandidat</th>
-                        <th className="px-3 py-2.5 text-left font-medium">Skor AI</th>
+                        <th className="px-3 py-2.5 text-left font-medium">
+                          <span title="Skor kecocokan profil awal berdasarkan skill, pengalaman, domisili, dan ekspektasi gaji">
+                            Skor Kecocokan
+                          </span>
+                        </th>
                         <th className="px-3 py-2.5 text-left font-medium">Ringkasan Kecocokan AI</th>
                         <th className="px-3 py-2.5 text-left font-medium">Status Pool Asal</th>
                       </tr>
@@ -756,6 +763,7 @@ export default function NewApplicationPage() {
       </div>
 
       {/* ── Upload CV untuk AI Screening ────────────────────────────── */}
+      {false && canToggleAIScreening && (
       <div className="rounded-xl border border-violet-200 bg-violet-50/30 p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
           <svg className="h-5 w-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -817,8 +825,8 @@ export default function NewApplicationPage() {
 
         {selectedUploadPosition && (
           <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-3 text-sm">
-            <p className="font-medium text-violet-900">{selectedUploadPosition.title}</p>
-            <p className="text-violet-700 text-xs mt-1">Client: {selectedUploadPosition.client_name || "-"}</p>
+            <p className="font-medium text-violet-900">{selectedUploadPosition?.title}</p>
+            <p className="text-violet-700 text-xs mt-1">Client: {selectedUploadPosition?.client_name || "-"}</p>
           </div>
         )}
 
@@ -848,9 +856,9 @@ export default function NewApplicationPage() {
             </div>
             <div className="text-sm text-green-800 space-y-1">
               <p>
-                <span className="font-medium">{lastUploadResult.total_files} CV</span> untuk posisi{" "}
-                <span className="font-medium">{lastUploadResult.position_title || lastUploadResult.created_screening_result_ids.length + " kandidat"}</span>
-                {lastUploadResult.client_name && ` (Client: ${lastUploadResult.client_name})`}
+                <span className="font-medium">{lastUploadResult?.total_files} CV</span> untuk posisi{" "}
+                <span className="font-medium">{lastUploadResult?.position_title || (lastUploadResult?.created_screening_result_ids?.length ?? 0) + " kandidat"}</span>
+                {lastUploadResult?.client_name && ` (Client: ${lastUploadResult?.client_name})`}
               </p>
               <p className="text-xs text-green-700">
                 ✅ CV berhasil diproses. Silakan buka <strong>Pending Review</strong> untuk melihat hasil screening AI.
@@ -979,6 +987,16 @@ export default function NewApplicationPage() {
             </div>
           </>
         )}
+      </div>
+      )}
+
+      {/* ── Divider: Tambah Lamaran Manual ───────────────────────────────── */}
+      <div className="relative flex items-center gap-4">
+        <div className="flex-1 border-t border-gray-200" />
+        <span className="shrink-0 rounded-full border border-gray-200 bg-white px-4 py-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
+          Atau tambah lamaran manual
+        </span>
+        <div className="flex-1 border-t border-gray-200" />
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-16">

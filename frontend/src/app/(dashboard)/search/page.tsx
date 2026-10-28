@@ -358,7 +358,12 @@ function UsageBox({ usage }: { usage: AIUsageStats | null }) {
 
   const barFill = isDanger ? "bg-red-500" : isWarning ? "bg-amber-400" : "bg-emerald-400";
 
-  const tooltip = `Bulan ini: $${usage.month_cost_usd.toFixed(4)} · All-time: $${usage.total_cost_usd.toFixed(4)} dari $${usage.budget_usd.toFixed(0)}`;
+  const tooltip = [
+    `Bulan ini: $${usage.month_cost_usd.toFixed(4)}`,
+    `Total terpakai: $${usage.total_cost_usd.toFixed(4)}`,
+    `Sisa saldo: $${usage.remaining_usd.toFixed(4)}`,
+    `Budget (top-up): $${usage.budget_usd.toFixed(2)}`,
+  ].join(" · ");
 
   return (
     <div
@@ -371,8 +376,10 @@ function UsageBox({ usage }: { usage: AIUsageStats | null }) {
       <div className="h-1 w-16 rounded-full bg-gray-200 overflow-hidden">
         <div className={`h-1 rounded-full ${barFill}`} style={{ width: `${Math.min(pct, 100)}%` }} />
       </div>
+      {/* Tampilkan sisa saldo */}
       <span className="tabular-nums">
-        ${usage.total_cost_usd.toFixed(2)}
+        sisa{" "}
+        <span className="font-semibold">${usage.remaining_usd.toFixed(2)}</span>
         <span className="opacity-60"> / ${usage.budget_usd.toFixed(0)}</span>
       </span>
       {isDanger && <span title="Kredit hampir habis!">⚠️</span>}

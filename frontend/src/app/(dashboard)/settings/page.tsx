@@ -1,18 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthStore } from "@/stores/auth.store";
 import { SettingsProfile } from "./components/SettingsProfile";
 import { SettingsSourceChannels } from "./components/SettingsSourceChannels";
+import { SettingsAI } from "./components/SettingsAI";
 
-type Tab = "profile" | "source-channels";
-
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "profile", label: "Profile", icon: "person" },
-  { id: "source-channels", label: "Source Channels", icon: "star" },
-];
+type Tab = "profile" | "source-channels" | "ai-budget";
 
 export default function SettingsPage() {
+  const isAdmin = useAuthStore((s) => s.isRole("admin"));
+  const isManagerOrAdmin = useAuthStore((s) => s.isRole("manager", "admin"));
   const [activeTab, setActiveTab] = useState<Tab>("profile");
+
+  const TABS: { id: Tab; label: string; icon: string; show: boolean }[] = [
+    { id: "profile",         label: "Profile",         icon: "person",     show: true },
+    { id: "source-channels", label: "Source Channels", icon: "star",       show: true },
+    { id: "ai-budget",       label: "AI & Budget",     icon: "monitoring", show: isManagerOrAdmin },
+  ];
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
@@ -27,7 +32,7 @@ export default function SettingsPage() {
       {/* Tabs */}
       <div className="border-b border-outline-variant mb-6">
         <div className="flex gap-0">
-          {TABS.map((tab) => (
+          {TABS.filter((t) => t.show).map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -45,8 +50,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === "profile" && <SettingsProfile />}
+      {activeTab === "profile"         && <SettingsProfile />}
       {activeTab === "source-channels" && <SettingsSourceChannels />}
+      {activeTab === "ai-budget"       && isManagerOrAdmin && <SettingsAI />}
     </div>
   );
 }

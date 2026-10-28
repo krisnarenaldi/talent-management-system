@@ -223,7 +223,7 @@ export default function DashboardPage() {
   });
 
   const { data: activePositions = [], isLoading: loadingActivePositions } = useQuery<ActivePositionSummary[]>({
-    queryKey: ["active-positions"],
+    queryKey: ["analytics-active-positions", 5],
     queryFn: () => fetchActivePositions(5),
   });
 

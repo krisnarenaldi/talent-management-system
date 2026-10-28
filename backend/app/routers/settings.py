@@ -1,12 +1,55 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.dependencies import get_db, require_role
+from app.models.app_setting import AppSetting
 from app.models.candidate import SourceChannel
 from app.schemas.source_channel import SourceChannelCreate, SourceChannelResponse, SourceChannelUpdate
 
 router = APIRouter()
+
+_BUDGET_KEY = "openai_budget_usd"
+
+
+# ── AI Budget settings ────────────────────────────────────────────────────────
+
+class AIBudgetResponse(BaseModel):
+    budget_usd: float
+
+
+class AIBudgetUpdate(BaseModel):
+    budget_usd: float = Field(..., gt=0, description="Nominal top-up kredit OpenAI (USD)")
+
+
+@router.get("/ai-budget", response_model=AIBudgetResponse, summary="Ambil nominal budget OpenAI")
+def get_ai_budget(
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "manager")),
+):
+    """Kembalikan nominal budget OpenAI yang tersimpan (atau default dari config)."""
+    row = db.query(AppSetting).filter(AppSetting.key == _BUDGET_KEY).first()
+    if row:
+        return AIBudgetResponse(budget_usd=float(row.value))
+    return AIBudgetResponse(budget_usd=settings.OPENAI_BUDGET_USD)
+
+
+@router.put("/ai-budget", response_model=AIBudgetResponse, summary="Update nominal budget OpenAI")
+def update_ai_budget(
+    payload: AIBudgetUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    """Simpan nominal top-up terbaru ke database. Hanya admin."""
+    row = db.query(AppSetting).filter(AppSetting.key == _BUDGET_KEY).first()
+    if row:
+        row.value = str(payload.budget_usd)
+    else:
+        db.add(AppSetting(key=_BUDGET_KEY, value=str(payload.budget_usd)))
+    db.commit()
+    return AIBudgetResponse(budget_usd=payload.budget_usd)
 
 
 @router.get("/source-channels", response_model=list[SourceChannelResponse])

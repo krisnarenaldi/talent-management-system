@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -70,6 +71,10 @@ async function fetchCandidateProjects(id: string): Promise<DraftProjectItem[]> {
 
 export default function CandidateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
+  const fromSource = searchParams.get("from");
+  const isFromTalentPool = fromSource === "talent-pool";
+
   const [tab, setTab] = useState<TabKey>("profil");
   const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState(false);
   const [isRemoveTalentPoolOpen, setIsRemoveTalentPoolOpen] = useState(false);
@@ -232,8 +237,11 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             )}
           </div>
           <div>
-            <Link href="/candidates" className="text-sm font-medium text-primary hover:underline">
-              ← Kembali ke kandidat
+            <Link
+              href={isFromTalentPool ? "/talent-pool" : "/candidates"}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              ← Kembali ke {isFromTalentPool ? "Talent Pool" : "kandidat"}
             </Link>
             <div className="mt-2 flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900">{candidate.full_name}</h1>
@@ -251,7 +259,11 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href={`/candidates/${id}/cv`}
+            href={
+              isFromTalentPool
+                ? `/candidates/${id}/cv?from=talent-pool`
+                : `/candidates/${id}/cv`
+            }
             className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100"
           >
             <FileText className="h-4 w-4" />
@@ -279,7 +291,11 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             )
           )}
           <Link
-            href={`/candidates/${id}/edit`}
+            href={
+              isFromTalentPool
+                ? `/candidates/${id}/edit?from=talent-pool`
+                : `/candidates/${id}/edit`
+            }
             className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Edit kandidat
@@ -303,31 +319,41 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
       {/* Remove from Talent Pool Modal */}
       {isRemoveTalentPoolOpen && candidate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
           onClick={() => setIsRemoveTalentPoolOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => setIsRemoveTalentPoolOpen(false)}
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors"
+              aria-label="Tutup modal"
+            >
+              <span className="material-symbols-outlined text-2xl">close</span>
+            </button>
+
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100">
                 <UserMinus className="h-5 w-5 text-rose-600" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Keluarkan dari Talent Pool</h2>
-                <p className="text-sm text-gray-500">{candidate.full_name}</p>
+                <h2 className="text-xl font-semibold text-on-surface">Keluarkan dari Talent Pool</h2>
+                <p className="text-sm text-on-surface-variant">{candidate.full_name}</p>
               </div>
             </div>
-            <p className="mb-6 text-sm text-gray-600">
-              Apakah Anda yakin ingin mengeluarkan <strong>{candidate.full_name}</strong> dari Talent Pool? Status kandidat akan dikembalikan menjadi Database kandidat biasa.
+            <p className="mb-6 text-body-sm text-on-surface-variant">
+              Apakah Anda yakin ingin mengeluarkan <strong className="text-on-surface">{candidate.full_name}</strong> dari Talent Pool? Status kandidat akan dikembalikan menjadi Database kandidat biasa.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setIsRemoveTalentPoolOpen(false)}
                 disabled={isRemovingTalentPool}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-medium hover:bg-surface-container-highest transition-colors disabled:opacity-50"
               >
                 Batal
               </button>
@@ -335,8 +361,15 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                 type="button"
                 onClick={handleRemoveFromTalentPool}
                 disabled={isRemovingTalentPool}
-                className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-error hover:bg-error/90 text-on-error rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-wait"
               >
+                {isRemovingTalentPool ? (
+                  <span className="material-symbols-outlined text-lg animate-spin">
+                    progress_activity
+                  </span>
+                ) : (
+                  <span className="material-symbols-outlined text-lg">logout</span>
+                )}
                 {isRemovingTalentPool ? "Mengeluarkan..." : "Keluarkan"}
               </button>
             </div>

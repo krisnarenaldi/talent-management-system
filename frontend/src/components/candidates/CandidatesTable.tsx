@@ -158,6 +158,9 @@ export default function CandidatesTable({
 
   // Close bulk modal on Escape
   useModalEscape(() => setShowTalentPoolModal(false), showTalentPoolModal && !isUpdatingTalentPool);
+  // Close remove from talent pool modals on Escape
+  useModalEscape(() => setCandidateToRemove(null), candidateToRemove !== null && !isRemovingTalentPool);
+  useModalEscape(() => setShowBulkRemoveModal(false), showBulkRemoveModal && !isRemovingTalentPool);
 
   const handleBulkTalentPool = () => {
     if (selectedCandidateIds.size === 0) return;
@@ -272,6 +275,7 @@ export default function CandidatesTable({
         itemsPerPage,
       },
     ],
+    staleTime: 0,
     queryFn: () =>
       fetchCandidates({
         pool_status: poolStatus || undefined,
@@ -799,7 +803,14 @@ export default function CandidatesTable({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <Link href={`/candidates/${candidate.id}`} className="flex-shrink-0">
+                          <Link
+                            href={
+                              poolStatus === "talent_pool"
+                                ? `/candidates/${candidate.id}?from=talent-pool`
+                                : `/candidates/${candidate.id}`
+                            }
+                            className="flex-shrink-0"
+                          >
                             {candidate.photo_url ? (
                               <img
                                 src={candidate.photo_url}
@@ -815,7 +826,11 @@ export default function CandidatesTable({
                           <div>
                             <div className="flex items-center gap-2">
                               <Link
-                                href={`/candidates/${candidate.id}`}
+                                href={
+                                  poolStatus === "talent_pool"
+                                    ? `/candidates/${candidate.id}?from=talent-pool`
+                                    : `/candidates/${candidate.id}`
+                                }
                                 className="font-semibold text-gray-900 transition-colors hover:text-blue-600 hover:underline"
                               >
                                 {candidate.full_name}
@@ -936,7 +951,11 @@ export default function CandidatesTable({
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Link
-                            href={`/candidates/${candidate.id}/cv`}
+                            href={
+                              poolStatus === "talent_pool"
+                                ? `/candidates/${candidate.id}/cv?from=talent-pool`
+                                : `/candidates/${candidate.id}/cv`
+                            }
                             className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition-all hover:bg-violet-100"
                             title="Generate CV Standar Altek"
                           >
@@ -967,7 +986,11 @@ export default function CandidatesTable({
                             )
                           )}
                           <Link
-                            href={`/candidates/${candidate.id}/edit`}
+                            href={
+                              poolStatus === "talent_pool"
+                                ? `/candidates/${candidate.id}/edit?from=talent-pool`
+                                : `/candidates/${candidate.id}/edit`
+                            }
                             className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50"
                             title="Edit Data Kandidat"
                           >

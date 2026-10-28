@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     # OpenAI (untuk TASK-14 Natural Language Search)
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
+    # Nominal top-up terakhir — set setiap kali top up kredit OpenAI
+    OPENAI_BUDGET_USD: float = 20.0
 
     # Model khusus untuk ekstraksi data CV (nama, email, HP, skills, dll).
     # Bisa diset ke model lebih ringan/murah karena tugasnya hanya structured extraction.

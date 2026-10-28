@@ -11,8 +11,8 @@ import { id as idLocale } from "date-fns/locale";
 
 interface PendingReviewData {
   id: string;
-  cv_file_url: string;
-  cv_drive_item_id: string;
+  cv_file_url?: string | null;
+  cv_drive_item_id?: string | null;
   position_title: string;
   client_name?: string;
   uploaded_by_name?: string;
@@ -153,12 +153,13 @@ export default function PendingReviewPage() {
                   <div className="mb-2">
                     <h2 className="text-lg font-semibold truncate">
                       {screening.cv_file_url
-                        .split("/")
-                        .pop()
-                        ?.split("%2F")
-                        .pop()
-                        ?.replace(/_/g, " ") ||
-                        "CV.pdf"}
+                        ? screening.cv_file_url
+                            .split("/")
+                            .pop()
+                            ?.split("%2F")
+                            .pop()
+                            ?.replace(/_/g, " ") || "CV.pdf"
+                        : "CV.pdf"}
                     </h2>
                     <p className="text-xs text-on-surface-variant">
                       {screening.position_title} at{" "}
@@ -176,11 +177,13 @@ export default function PendingReviewPage() {
                     <div>
                       <p className="font-medium text-on-surface">Tanggal upload</p>
                       <p className="text-on-surface-variant">
-                        {format(
-                          new Date(screening.created_at),
-							"dd MMM yyyy HH:mm",
-							{ locale: idLocale }
-						)}
+                        {screening.created_at
+                          ? format(
+                              new Date(screening.created_at),
+                              "dd MMM yyyy HH:mm",
+                              { locale: idLocale }
+                            )
+                          : "-"}
                       </p>
                     </div>
                     <div>

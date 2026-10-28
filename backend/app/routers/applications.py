@@ -507,17 +507,26 @@ def get_screening_result(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
-    """Ambil detail satu AI screening result."""
+    """Ambil detail satu AI screening result (bisa via screening_id atau application_id)."""
+    import uuid as _uuid
     screening_id = screening_id.strip()
-    screening = (
+    
+    query = (
         db.query(AIScreeningResult)
         .options(
             joinedload(AIScreeningResult.position).joinedload(Position.client),
             joinedload(AIScreeningResult.uploader),
         )
-        .filter(AIScreeningResult.id == screening_id)
-        .first()
     )
+    screening = query.filter(AIScreeningResult.id == screening_id).first()
+    if not screening:
+        # Fallback: cari berdasarkan application_id jika yang dikirim adalah ID lamaran
+        try:
+            app_uuid = _uuid.UUID(screening_id)
+            screening = query.filter(AIScreeningResult.application_id == app_uuid).first()
+        except ValueError:
+            screening = None
+
     if not screening:
         raise HTTPException(status_code=404, detail="AI screening result tidak ditemukan")
     return {
@@ -568,6 +577,14 @@ def review_screening_result(
 
     screening_id = screening_id.strip()
     screening = db.query(AIScreeningResult).filter(AIScreeningResult.id == screening_id).first()
+    if not screening:
+        # Fallback: cari berdasarkan application_id
+        try:
+            app_uuid = _uuid.UUID(screening_id)
+            screening = db.query(AIScreeningResult).filter(AIScreeningResult.application_id == app_uuid).first()
+        except ValueError:
+            screening = None
+
     if not screening:
         raise HTTPException(status_code=404, detail="AI screening result tidak ditemukan")
 
@@ -623,6 +640,14 @@ async def retry_screening(
     """
     screening_id = screening_id.strip()
     screening = db.query(AIScreeningResult).filter(AIScreeningResult.id == screening_id).first()
+    if not screening:
+        # Fallback: cari berdasarkan application_id
+        try:
+            app_uuid = _uuid.UUID(screening_id)
+            screening = db.query(AIScreeningResult).filter(AIScreeningResult.application_id == app_uuid).first()
+        except ValueError:
+            screening = None
+
     if not screening:
         raise HTTPException(status_code=404, detail="AI screening result tidak ditemukan")
     if screening.status != "error":
@@ -728,9 +753,21 @@ def get_application(
 
     # Build ai_screening dict
     ai_screening = None
-    if application.ai_screening_result:
-        sr = application.ai_screening_result
+    sr = application.ai_screening_result
+    if not sr:
+        # Fallback: cari AIScreeningResult berdasarkan candidate_id dan position_id
+        sr = (
+            db.query(AIScreeningResult)
+            .filter(
+                AIScreeningResult.candidate_id == application.candidate_id,
+                AIScreeningResult.position_id == application.position_id,
+            )
+            .order_by(AIScreeningResult.created_at.desc())
+            .first()
+        )
+    if sr:
         ai_screening = {
+            "id": str(sr.id),
             "ai_score": sr.ai_score,
             "ai_screening_status": sr.status,
             "score": sr.ai_score,

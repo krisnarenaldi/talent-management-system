@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
+import { useQueryClient } from "@tanstack/react-query";
 import type { AIScreeningResult } from "@/types";
 import { useModalEscape } from "@/hooks/useModalEscape";
 
@@ -32,6 +33,7 @@ function parseExtractedData(raw: any): Record<string, any> {
 
 export default function AIExtractionReview({ screening }: AIExtractionReviewProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [applying, setApplying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -310,6 +312,12 @@ export default function AIExtractionReview({ screening }: AIExtractionReviewProp
 
       // 6. Mark related notifications as read
       await api.patch("/api/v1/notifications/read-all", {}).catch(() => {});
+
+      // Invalidate related caches so pipeline & candidate stats update immediately
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-active-positions"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
 
       setActionSuccess(
         kind === "save_only"

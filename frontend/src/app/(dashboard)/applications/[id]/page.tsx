@@ -21,6 +21,11 @@ async function fetchApplication(id: string) {
   return response.data as Application & { next_possible_stages?: string[]; stage_history?: StageHistory[]; last_result?: string | null };
 }
 
+async function fetchScreeningDetail(screeningId: string) {
+  const response = await api.get(`/api/v1/applications/screening/${screeningId}`);
+  return response.data as { ai_notes?: string | null; ai_score?: number | null; status?: string };
+}
+
 async function fetchStageHistory(id: string) {
   const response = await api.get(`/api/v1/applications/${id}/stages/`);
   return response.data as StageHistory[];
@@ -105,6 +110,14 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const { data: stageHistory = [] } = useQuery({
     queryKey: ["application-stages", trimmedId],
     queryFn: () => fetchStageHistory(trimmedId),
+  });
+
+  // Fetch screening detail langsung untuk mendapatkan ai_notes
+  const screeningId = application?.ai_screening?.id;
+  const { data: screeningDetail } = useQuery({
+    queryKey: ["screening-detail", screeningId],
+    queryFn: () => fetchScreeningDetail(screeningId!),
+    enabled: !!screeningId,
   });
 
   // Hanya load HR/Manager user list saat modal terbuka
@@ -339,60 +352,63 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             </div>
             {application.ai_screening ? (
               <div className="space-y-4">
-                {/* Score */}
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-500 w-20">AI Score</span>
-                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-bold ${aiScoreBadgeClass(application.ai_screening.score ?? application.ai_score)}`}>
-                    {application.ai_screening.score ?? application.ai_score ?? "-"}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    ({application.ai_screening.ai_screening_status === "sudah_direview" ? "Terd_review" : application.ai_screening.ai_screening_status === "siap_review" ? "Siap review" : "Menunggu review"})
-                  </span>
-                </div>
-                {/* Notes */}
-                {application.ai_screening.notes && (
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Catatan AI</p>
-                    <p className="text-sm text-gray-700 italic bg-gray-50 rounded-lg px-3 py-2">{application.ai_screening.notes}</p>
+                {/* Score Card — mirip tampilan pending-review */}
+                <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">AI Score</span>
+                    <span className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${aiScoreBadgeClass(application.ai_screening.score ?? application.ai_score)}`}>
+                      {application.ai_screening.score ?? application.ai_score ?? "-"}
+                      {" — "}
+                      {(application.ai_screening.score ?? application.ai_score ?? 0) >= 80
+                        ? "Tinggi"
+                        : (application.ai_screening.score ?? application.ai_score ?? 0) >= 60
+                        ? "Menengah"
+                        : "Rendah"}
+                    </span>
                   </div>
-                )}
+                  <span className="text-xs text-gray-400">
+                    {application.ai_screening.ai_screening_status === "sudah_direview" ? "Sudah direview" : application.ai_screening.ai_screening_status === "siap_review" ? "Siap review" : "Menunggu review"}
+                  </span>
+                  {/* Catatan AI — pakai notes dari ai_screening, fallback ke screeningDetail.ai_notes */}
+                  {(application.ai_screening.notes || screeningDetail?.ai_notes) && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs font-medium text-gray-500 mb-1">Catatan AI</p>
+                      <p className="text-sm italic text-gray-600">{application.ai_screening.notes || screeningDetail?.ai_notes}</p>
+                    </div>
+                  )}
+                </div>
                 {/* Summary table */}
                 {application.ai_screening.extracted_summary && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Ringkasan Match per Dimensi</p>
+                    {/*<p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Ringkasan Match per Dimensi</p> */}
                     <table className="w-full text-sm">
-                      <thead>
+                      {/*<thead>
                         <tr className="text-left text-gray-500 border-b border-gray-200">
                           <th className="pb-1.5 pr-4 font-medium">Dimensi</th>
                           <th className="pb-1.5 font-medium">Detail</th>
                         </tr>
-                      </thead>
+                      </thead>*/}
                       <tbody>
                         {Object.entries(application.ai_screening.extracted_summary)
                           .filter(([k]) => !["_ai_scoring_config", "nama", "name", "email", "telepon", "phone", "kontak", "skills", "pendidikan", "pengalaman_kerja"].includes(k))
                           .slice(0, 8)
-                          .map(([key, val]) => (
-                            <tr key={key} className="border-b border-gray-100 last:border-0">
-                              <td className="py-1.5 pr-4 text-gray-500 capitalize">{key.replace(/_/g, " ")}</td>
-                              <td className="py-1.5 text-gray-800 font-medium">
-                                {typeof val === "number" ? `${val}/100` : String(val)}
-                              </td>
-                            </tr>
-                          ))}
+                          .map(([key, val]) => {
+                            const isScore = /score|skor/i.test(key);
+                            return (
+                              <tr key={key} className="border-b border-gray-100 last:border-0">
+                                <td className="py-1.5 pr-4 text-gray-500 capitalize">{key.replace(/_/g, " ")}</td>
+                                <td className="py-1.5 text-gray-800 font-medium">
+                                  {typeof val === "number"
+                                    ? isScore ? `${val}/100` : String(val)
+                                    : String(val)}
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
                 )}
-                {/* Link to review */}
-                {!application.ai_screening.ai_screening_status || application.ai_screening.ai_screening_status === "siap_review" ? (
-                  <Link
-                    href={`/applications/pending-review/${application.id}`}
-                    className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
-                  >
-                    <span className="material-symbols-outlined text-sm">rate_review</span>
-                    Review Hasil AI
-                  </Link>
-                ) : null}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-6 text-center">
