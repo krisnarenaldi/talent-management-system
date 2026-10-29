@@ -98,6 +98,7 @@ class CandidateExperience(Base):
     start_date = Column(Date)
     end_date = Column(Date)    # NULL = masih bekerja
     description = Column(Text)
+    tools = Column(JSONB, default=list, nullable=True)  # e.g. ["Katalon", "Selenium", "JMeter"]
 
     candidate = relationship("Candidate", back_populates="experiences")
 

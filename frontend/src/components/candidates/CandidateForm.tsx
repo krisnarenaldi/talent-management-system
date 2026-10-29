@@ -11,6 +11,7 @@ import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
 import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
+import TagInput from "@/components/shared/TagInput";
 import type { Candidate, CandidateEducation, CandidateExperience, SourceChannel } from "@/types";
 
 const educationItemSchema = z.object({
@@ -28,6 +29,7 @@ const experienceItemSchema = z.object({
   start_date: z.string().optional(),
   end_date: z.string().optional(),
   description: z.string().optional(),
+  tools: z.array(z.string()).default([]),
 });
 
 const candidateFormSchema = z.object({
@@ -75,6 +77,7 @@ const defaultExperience = {
   start_date: "",
   end_date: "",
   description: "",
+  tools: [] as string[],
 };
 
 function toNumber(value: string | undefined) {
@@ -122,6 +125,11 @@ export default function CandidateForm({
   const [initialExperience, setInitialExperience] = useState<CandidateExperience[]>([]);
   const [skillInput, setSkillInput] = useState("");
   const [pendingSourceChannel, setPendingSourceChannel] = useState<string | null>(null);
+  // ── Upload Latest Data modal state ──
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const { data: sourceChannels = [] } = useQuery<SourceChannel[]>({
     queryKey: ["source-channels-active"],
     queryFn: () => settingsApi.listSourceChannels({ is_active: true }),
@@ -225,6 +233,7 @@ export default function CandidateForm({
                   start_date: item.start_date ? item.start_date.slice(0, 10) : "",
                   end_date: item.end_date ? item.end_date.slice(0, 10) : "",
                   description: item.description || "",
+                  tools: item.tools ?? [],
                 }))
               : [defaultExperience],
         });
@@ -317,8 +326,8 @@ export default function CandidateForm({
           start_date: item.start_date || null,
           end_date: item.end_date || null,
           description: item.description?.trim() || null,
+          tools: item.tools && item.tools.length > 0 ? item.tools : null,
         }));
-
       if (mode === "edit" && candidateId) {
         const existingEducationIds = new Set(initialEducation.map((item) => item.id));
         const existingExperienceIds = new Set(initialExperience.map((item) => item.id));
@@ -385,6 +394,80 @@ export default function CandidateForm({
     }
   };
 
+  // ── Handler untuk upload data terbaru PDF ──
+  const handleUploadLatestData = async () => {
+    if (!uploadFile || !candidateId) return;
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      const res = await api.post(
+        `/api/v1/candidates/${candidateId}/upload-latest-data`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      showToast("success", res.data?.message || "Data kandidat berhasil diperbarui dari PDF.");
+      setShowUploadModal(false);
+      setUploadFile(null);
+      if (uploadInputRef.current) uploadInputRef.current.value = "";
+      // Reload data form agar fields experience + tools ter-update
+      const [updatedCandidate, updatedEducations, updatedExperiences] = await Promise.all([
+        fetchCandidateById(candidateId),
+        fetchEducationById(candidateId),
+        fetchExperienceById(candidateId),
+      ]);
+      setInitialExperience(updatedExperiences);
+      setInitialEducation(updatedEducations);
+
+      // Sinkronisasi data pribadi yang mungkin baru terisi
+      if (updatedCandidate.full_name) form.setValue("full_name", updatedCandidate.full_name);
+      if (updatedCandidate.email) form.setValue("email", updatedCandidate.email);
+      if (updatedCandidate.phone) form.setValue("phone", updatedCandidate.phone);
+      if (updatedCandidate.gender) form.setValue("gender", updatedCandidate.gender);
+      if (updatedCandidate.marital_status) form.setValue("marital_status", updatedCandidate.marital_status);
+
+      form.setValue("skills", updatedCandidate.skills ?? []);
+
+      // Sinkronisasi pendidikan
+      if (updatedEducations.length > 0) {
+        form.setValue(
+          "education",
+          updatedEducations.map((item, idx) => ({
+            id: item.id,
+            institution: item.institution || "",
+            major: item.major || "",
+            graduation_year: item.graduation_year != null ? String(item.graduation_year) : "",
+            gpa: idx === 0 && item.gpa != null ? String(item.gpa) : "",
+          })),
+        );
+      }
+
+      // Sinkronisasi pengalaman kerja beserta tools & tanggal
+      form.setValue(
+        "experience",
+        updatedExperiences.length > 0
+          ? updatedExperiences.map((item) => ({
+              id: item.id,
+              company_name: item.company_name || "",
+              job_title: item.job_title || "",
+              start_date: item.start_date ? item.start_date.slice(0, 10) : "",
+              end_date: item.end_date ? item.end_date.slice(0, 10) : "",
+              description: item.description || "",
+              tools: item.tools ?? [],
+            }))
+          : [defaultExperience],
+      );
+      queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["candidate-education", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["candidate-experience", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
+    } catch (error) {
+      showToast("error", getErrorMessage(error, "Gagal memproses PDF data terbaru."));
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   if (mode === "edit" && isLoadingData) {
     return <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Memuat form kandidat...</div>;
   }
@@ -411,6 +494,17 @@ export default function CandidateForm({
             {mode === "create" ? "Tambah Kandidat" : "Edit Kandidat"}
           </h1>
         </div>
+        {/* Tombol Upload Data Terakhir — hanya di mode edit */}
+        {mode === "edit" && candidateId && (
+          <button
+            type="button"
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">upload_file</span>
+            Upload Data Terakhir untuk Edit
+          </button>
+        )}
       </div>
 
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6 pb-16">
@@ -721,6 +815,19 @@ export default function CandidateForm({
                     <label className="mb-1 block text-sm font-medium text-gray-700">Deskripsi</label>
                     <textarea rows={4} {...form.register(`experience.${index}.description`)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
                   </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Tools</label>
+                    <p className="mb-1.5 text-xs text-gray-500">
+                      Ketik tool lalu tekan <kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-xs">Enter</kbd> atau <kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-xs">,</kbd> untuk menambah.
+                    </p>
+                    <TagInput
+                      value={form.watch(`experience.${index}.tools`) ?? []}
+                      onChange={(tags) => form.setValue(`experience.${index}.tools`, tags)}
+                      placeholder="Contoh: Katalon, Selenium, JMeter..."
+                      ariaLabel={`Tools untuk pengalaman ${index + 1}`}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
@@ -740,6 +847,100 @@ export default function CandidateForm({
           </button>
         </div>
       </form>
+
+      {/* ── Modal Upload Data Terakhir ── */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Upload Data Terakhir</h2>
+                <p className="mt-0.5 text-sm text-gray-500">Upload PDF formulir data kandidat hasil interview</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadFile(null);
+                  if (uploadInputRef.current) uploadInputRef.current.value = "";
+                }}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
+                <p className="font-medium mb-1">Cara kerja:</p>
+                <ul className="list-disc pl-4 space-y-0.5 text-xs text-blue-700">
+                  <li>Sistem akan membaca teks dari PDF secara otomatis</li>
+                  <li>AI akan mengekstrak data pengalaman kerja &amp; tools per perusahaan</li>
+                  <li>Data kandidat akan diperbarui langsung di form</li>
+                </ul>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Pilih file PDF
+                </label>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
+                />
+                {uploadFile && (
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-600">
+                    <span className="material-symbols-outlined text-sm text-green-600">check_circle</span>
+                    {uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadFile(null);
+                  if (uploadInputRef.current) uploadInputRef.current.value = "";
+                }}
+                disabled={isUploading}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleUploadLatestData}
+                disabled={!uploadFile || isUploading}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {isUploading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Memproses...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-base">auto_awesome</span>
+                    Proses &amp; Update Data
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

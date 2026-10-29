@@ -41,6 +41,7 @@ from app.services import candidate_service
 from app.core.phone_utils import normalize_phone as _normalize_phone
 from app.services.ai_service import generate_project_drafts
 from app.services.storage_service import get_storage_service
+from app.services.usage_logger import log_openai_usage
 from app.core.arq_pool import get_redis_pool
 
 router = APIRouter()
@@ -986,6 +987,344 @@ def delete_experience(
         raise HTTPException(status_code=404, detail="Pengalaman kerja tidak ditemukan")
     db.delete(exp)
     db.commit()
+
+
+# ── Upload Latest Data (PDF extraction & candidate update) ───────────────────
+
+@router.post("/{candidate_id}/upload-latest-data", status_code=status.HTTP_200_OK)
+async def upload_latest_data(
+    candidate_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Upload PDF data terbaru kandidat (hasil form interview).
+    Sistem akan mengekstrak teks dari PDF, mengirimnya ke AI,
+    lalu memperbarui data kandidat (pengalaman kerja + tools).
+    """
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    ALLOWED_EXTENSIONS = {".pdf"}
+
+    ext = (file.filename or "").lower().rsplit(".", 1)
+    ext = f".{ext[-1]}" if len(ext) > 1 else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Hanya file PDF yang diizinkan.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ukuran file melebihi 10MB.",
+        )
+
+    candidate = db.query(Candidate).filter(
+        Candidate.id == candidate_id,
+        Candidate.is_deleted == False,
+    ).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+
+    # ── Ekstrak teks dari PDF menggunakan PyMuPDF ──
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(stream=content, filetype="pdf")
+        extracted_text = ""
+        for page_idx, page in enumerate(doc):
+            extracted_text += f"\n--- HALAMAN {page_idx + 1} ---\n" + page.get_text()
+        doc.close()
+    except Exception as exc:
+        logger.error("Gagal mengekstrak teks PDF: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Gagal membaca isi file PDF. Pastikan file tidak terpassword.",
+        )
+
+    if not extracted_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="PDF tidak mengandung teks yang dapat dibaca.",
+        )
+
+    # ── Kirim ke AI untuk ekstraksi terstruktur ──
+    LATEST_DATA_PROMPT = """Kamu adalah sistem ekstraksi data HR yang sangat teliti, ahli dalam mengekstrak dokumen CV/Resume lengkap ke dalam JSON terstruktur.
+Dokumen yang diberikan mungkin memiliki banyak halaman (Halaman 1: Cover, Halaman 2: Data Pribadi & Pendidikan, Halaman 3+: Pengalaman Kerja / Working Experience, Halaman berikutnya: Skills & Sertifikat).
+
+TUGAS UTAMA:
+Ekstrak SELURUH entri dari bagian "Working Experience" / "Pengalaman Kerja". JANGAN SAMPAI ADA PERUSAHAAN YANG TERLEWAT.
+Setiap entri pengalaman kerja biasanya memiliki:
+- Periode (contoh: "January 2026 - Present", "October 2023 – Jan 2026", "Jul 2022 – Sep 2024", "2018 - 2020")
+- Company / Perusahaan (contoh: "PT Dasa Aprilindo Sentosa", "PT Median Talenta Raya", "PT. Sinergi Digital Teknologi")
+- Position / Posisi (contoh: "IT Senior Quality Assurance Analyst", "Frontend Developer")
+- Tools: DAFTAR TOOLS/SOFTWARE/TEKNOLOGI YANG DIGUNAKAN DI PERUSAHAAN TERSEBUT (contoh: ["Postman", "LoadRunner", "NeoLoad", "Jira", "Ms. Excel"]). Nilai ini spesifik per pengalaman!
+- Job description / Deskripsi pekerjaan (kumpulkan bullet points / teks deskripsi pekerjaan)
+
+EKSTRAK JUGA:
+1. Data pribadi:
+   - nama lengkap (full_name)
+   - email
+   - nomor HP/telepon (phone)
+   - jenis kelamin (gender: "Laki-laki" jika Male/Pria/Laki-laki, atau "Perempuan" jika Female/Wanita/Perempuan)
+   - status pernikahan (marital_status: "Menikah" jika Married/Menikah/Kawin, "Belum Menikah" jika Single/Belum Menikah/Lajang, "Cerai Hidup", atau "Cerai Mati")
+2. Riwayat pendidikan: nama institusi/universitas, jurusan (major), tahun masuk, tahun lulus, IPK/GPA.
+3. Skills: semua keahlian teknis (programming language, database, framework, testing tools, soft skills) yang disebutkan di CV.
+
+Format JSON yang DIHARUSKAN (kembalikan SATU objek JSON murni):
+{
+  "personal": {
+    "full_name": "string | null",
+    "email": "string | null",
+    "phone": "string | null",
+    "gender": "Laki-laki | Perempuan | null",
+    "marital_status": "Belum Menikah | Menikah | Cerai Hidup | Cerai Mati | null"
+  },
+  "skills": ["skill1", "skill2"],
+  "educations": [
+    {
+      "institution": "nama universitas / institusi",
+      "major": "jurusan",
+      "graduation_year": 2017,
+      "gpa": 3.61
+    }
+  ],
+  "experiences": [
+    {
+      "company_name": "nama perusahaan",
+      "job_title": "posisi/jabatan",
+      "period": "teks periode asli",
+      "start_date": "YYYY-MM-DD",
+      "end_date": "YYYY-MM-DD atau null jika Present/Sekarang",
+      "description": "deskripsi pekerjaan lengkap",
+      "tools": ["tool1", "tool2", "tool3"]
+    }
+  ]
+}
+
+Aturan Ketat:
+- BACA SELURUH TEKS DOKUMEN SAMPAI SELESAI, jangan hanya membaca halaman 1 atau 2.
+- Field "experiences" HARUS berupa array dari semua entri pengalaman kerja yang ditemukan di dokumen. Jangan kembalikan array kosong jika ada teks Working Experience / Pengalaman Kerja.
+- Tanggal mulai (start_date) diisi format YYYY-MM-DD (jika hanya bulan & tahun, misal Oct 2023 -> 2023-10-01).
+- Tanggal selesai (end_date) diisi format YYYY-MM-DD atau null jika "Present" / "Sekarang".
+- Tools pada tiap pengalaman HARUS dipecah menjadi array string (pisahkan jika di teks memakai koma / kata "and").
+- Output HARUS berupa JSON murni tanpa markdown fence (```json ... ```) dan tanpa teks tambahan sebelum/sesudah.
+
+Teks dokumen kandidat:
+"""
+
+    try:
+        from openai import OpenAI
+        from app.core.config import settings as app_settings
+        client = OpenAI(api_key=app_settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Kamu adalah sistem ekstraksi data HR yang mengembalikan JSON murni tanpa markdown."},
+                {"role": "user", "content": LATEST_DATA_PROMPT + extracted_text[:16000]},
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        raw_json = response.choices[0].message.content or "{}"
+        log_openai_usage(
+            db,
+            prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
+            completion_tokens=response.usage.completion_tokens if response.usage else 0,
+            model="gpt-4o-mini",
+            call_type="candidate_cv_extract",
+        )
+    except Exception as exc:
+        logger.error("Gagal memanggil AI untuk ekstraksi: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Gagal memproses PDF dengan AI. Coba lagi nanti.",
+        )
+
+    # ── Parse JSON hasil AI ──
+    import json as _json
+    try:
+        extracted = _json.loads(raw_json)
+    except _json.JSONDecodeError:
+        logger.error("AI mengembalikan JSON tidak valid: %s", raw_json[:500])
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI mengembalikan data tidak valid.",
+        )
+
+    updated_fields: list[str] = []
+
+    # ── Update data pribadi kandidat ──
+    ai_personal = extracted.get("personal") or {}
+    if isinstance(ai_personal, dict):
+        if ai_personal.get("full_name") and (not candidate.full_name or candidate.full_name == "Unknown"):
+            candidate.full_name = ai_personal["full_name"].strip()
+            updated_fields.append("nama")
+        if ai_personal.get("email") and not candidate.email:
+            candidate.email = ai_personal["email"].strip()
+            updated_fields.append("email")
+        if ai_personal.get("phone"):
+            normalized_p = _normalize_phone(ai_personal["phone"])
+            if normalized_p and not candidate.phone:
+                candidate.phone = normalized_p
+                updated_fields.append("telepon")
+        if ai_personal.get("gender"):
+            raw_g = str(ai_personal["gender"]).strip().lower()
+            norm_g = None
+            if "laki" in raw_g or "pria" in raw_g or "male" in raw_g or raw_g == "m" or "man" in raw_g:
+                norm_g = "Laki-laki"
+            elif "perempuan" in raw_g or "wanita" in raw_g or "female" in raw_g or raw_g == "f" or "woman" in raw_g:
+                norm_g = "Perempuan"
+            else:
+                norm_g = ai_personal["gender"].strip()
+            if norm_g and candidate.gender != norm_g:
+                candidate.gender = norm_g
+                updated_fields.append("gender")
+
+        if ai_personal.get("marital_status"):
+            raw_m = str(ai_personal["marital_status"]).strip().lower()
+            norm_m = None
+            if "belum" in raw_m or "single" in raw_m or "lajang" in raw_m:
+                norm_m = "Belum Menikah"
+            elif "cerai hidup" in raw_m or "divorced" in raw_m:
+                norm_m = "Cerai Hidup"
+            elif "cerai mati" in raw_m or "widowed" in raw_m:
+                norm_m = "Cerai Mati"
+            elif "nikah" in raw_m or "married" in raw_m or "kawin" in raw_m:
+                norm_m = "Menikah"
+            else:
+                norm_m = ai_personal["marital_status"].strip()
+            if norm_m and candidate.marital_status != norm_m:
+                candidate.marital_status = norm_m
+                updated_fields.append("status pernikahan")
+
+    # ── Update skills kandidat (merge / replace) ──
+    ai_skills = extracted.get("skills") or []
+    if ai_skills and isinstance(ai_skills, list):
+        existing_skills = candidate.skills or []
+        clean_ai_skills = [str(s).strip() for s in ai_skills if str(s).strip()]
+        merged_skills = list(dict.fromkeys(existing_skills + [s for s in clean_ai_skills if s not in existing_skills]))
+        candidate.skills = merged_skills
+        updated_fields.append("skills")
+
+    # ── Update riwayat pendidikan ──
+    ai_educations = extracted.get("educations") or []
+    if ai_educations and isinstance(ai_educations, list):
+        existing_edus = db.query(CandidateEducation).filter(
+            CandidateEducation.candidate_id == candidate_id
+        ).all()
+        edu_lookup = {
+            (e.institution or "").strip().lower(): e
+            for e in existing_edus
+        }
+        edus_updated = 0
+        edus_created = 0
+
+        for ai_edu in ai_educations:
+            if not isinstance(ai_edu, dict):
+                continue
+            institution = (ai_edu.get("institution") or "").strip()
+            if not institution:
+                continue
+
+            major = (ai_edu.get("major") or "").strip() or None
+            grad_year = None
+            if ai_edu.get("graduation_year"):
+                try:
+                    grad_year = int(ai_edu["graduation_year"])
+                except (ValueError, TypeError):
+                    pass
+
+            gpa = None
+            if ai_edu.get("gpa"):
+                try:
+                    from decimal import Decimal
+                    gpa = Decimal(str(ai_edu["gpa"]).replace(",", "."))
+                except Exception:
+                    pass
+
+            existing_e = edu_lookup.get(institution.lower())
+            if existing_e:
+                if major and not existing_e.major:
+                    existing_e.major = major
+                if grad_year and not existing_e.graduation_year:
+                    existing_e.graduation_year = grad_year
+                if gpa and not existing_e.gpa:
+                    existing_e.gpa = gpa
+                edus_updated += 1
+            else:
+                new_edu = CandidateEducation(
+                    candidate_id=candidate_id,
+                    institution=institution,
+                    major=major,
+                    graduation_year=grad_year,
+                    gpa=gpa,
+                )
+                db.add(new_edu)
+                edus_created += 1
+
+        if edus_updated or edus_created:
+            updated_fields.append(f"pendidikan ({edus_updated} diupdate, {edus_created} ditambahkan)")
+
+    # ── Update pengalaman kerja (Replace dengan data terbaru dari CV) ──
+    ai_experiences = extracted.get("experiences") or []
+    if ai_experiences and isinstance(ai_experiences, list):
+        from app.core.date_utils import parse_date_str, parse_period_range
+
+        # Filter entri yang memiliki nama perusahaan
+        valid_experiences = [
+            exp for exp in ai_experiences
+            if isinstance(exp, dict) and (exp.get("company_name") or "").strip()
+        ]
+
+        # Hanya hapus dan ganti jika AI berhasil mengekstrak setidaknya satu pengalaman kerja yang valid
+        if valid_experiences:
+            # Hapus data pengalaman kerja lama
+            db.query(CandidateExperience).filter(
+                CandidateExperience.candidate_id == candidate_id
+            ).delete()
+
+            for ai_exp in valid_experiences:
+                company = (ai_exp.get("company_name") or "").strip()
+                tools_raw = ai_exp.get("tools") or []
+                tools = [t.strip() for t in tools_raw if isinstance(t, str) and t.strip()]
+
+                # Tangani tanggal periode secara fleksibel (support dua konvensi field: EN & ID)
+                period = ai_exp.get("period") or ai_exp.get("periode")
+                start_raw = ai_exp.get("start_date") or ai_exp.get("mulai")
+                end_raw = ai_exp.get("end_date") or ai_exp.get("selesai")
+                start_date, end_date = None, None
+                if period:
+                    start_date, end_date = parse_period_range(period)
+                if not start_date and start_raw:
+                    start_date = parse_date_str(start_raw)
+                if not end_date and end_raw:
+                    end_date = parse_date_str(end_raw)
+
+                description = (ai_exp.get("description") or "").strip() or None
+                job_title = (ai_exp.get("job_title") or "").strip() or None
+
+                new_exp = CandidateExperience(
+                    candidate_id=candidate_id,
+                    company_name=company,
+                    job_title=job_title,
+                    start_date=start_date,
+                    end_date=end_date,
+                    description=description,
+                    tools=tools if tools else None,
+                )
+                db.add(new_exp)
+
+            updated_fields.append(f"pengalaman kerja ({len(valid_experiences)} entri terbaru disimpan)")
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Data kandidat berhasil diperbarui. Field yang diupdate: {', '.join(updated_fields) if updated_fields else 'Tidak ada perubahan'}.",
+        "updated_fields": updated_fields,
+    }
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

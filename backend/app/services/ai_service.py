@@ -32,6 +32,7 @@ from app.core.config import settings
 from app.models.candidate import Candidate, CandidateEducation, CandidateExperience
 from app.models.blacklist import Blacklist
 from app.models.employee import Employee
+from app.services.usage_logger import log_openai_usage
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,13 @@ def generate_project_drafts(candidate: Candidate, db: Session) -> dict[str, Any]
             temperature=0.5,
             max_tokens=1200,
             response_format={"type": "json_object"},
+        )
+        log_openai_usage(
+            db,
+            prompt_tokens=resp.usage.prompt_tokens if resp.usage else 0,
+            completion_tokens=resp.usage.completion_tokens if resp.usage else 0,
+            model=settings.OPENAI_MODEL,
+            call_type="project_drafts",
         )
         raw = resp.choices[0].message.content
     except Exception as exc:
@@ -749,7 +757,8 @@ async def recommend_candidates_for_position(
     )
 
     # Call LLM
-    scored_candidates = await _call_llm_matching(prompt)
+    scored_candidates, matching_tokens = await _call_llm_matching(prompt)
+    log_openai_usage(db, call_type="candidate_matching", **matching_tokens)
 
     if not scored_candidates:
         # Fallback: return stage 1 candidates without scoring
@@ -873,15 +882,17 @@ Output HARUS berupa JSON object dengan format:
 Hanya kembalikan JSON object valid, tanpa teks tambahan, tanpa markdown."""
 
 
-async def _call_llm_matching(prompt: str) -> list[dict] | None:
-    """Panggil LLM untuk scoring kandidat. Return list of dict atau None jika gagal."""
+async def _call_llm_matching(prompt: str) -> tuple[list[dict] | None, dict]:
+    """Panggil LLM untuk scoring kandidat. Return (candidates, token_usage)."""
     from app.core.config import settings
     import httpx
     import json
 
+    _empty = {"prompt_tokens": 0, "completion_tokens": 0, "model": settings.OPENAI_MODEL}
+
     if not settings.OPENAI_API_KEY:
         logger.warning("OPENAI_API_KEY tidak dikonfigurasi, skip LLM matching")
-        return None
+        return None, _empty
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -904,21 +915,29 @@ async def _call_llm_matching(prompt: str) -> list[dict] | None:
             )
             resp.raise_for_status()
 
-        raw = resp.json()["choices"][0]["message"]["content"]
+        body = resp.json()
+        raw = body["choices"][0]["message"]["content"]
         parsed = json.loads(raw)
+
+        usage = body.get("usage") or {}
+        token_usage = {
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "model": settings.OPENAI_MODEL,
+        }
 
         # LLM might return {"candidates": [...]} or direct array
         if isinstance(parsed, dict) and "candidates" in parsed:
-            return parsed["candidates"]
+            return parsed["candidates"], token_usage
         elif isinstance(parsed, list):
-            return parsed
+            return parsed, token_usage
         else:
             logger.warning("LLM matching return unexpected format: %s", type(parsed))
-            return None
+            return None, token_usage
 
     except Exception as exc:
         logger.exception("LLM matching gagal: %s", exc)
-        return None
+        return None, _empty
 
 
 # ── Ekstraksi Kriteria Posisi dari Deskripsi (TASK-20.5) ─────────────────────
@@ -1054,7 +1073,7 @@ def _normalize_position_criteria(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def extract_position_criteria(text: str) -> dict[str, Any]:
+def extract_position_criteria(text: str, db: Session | None = None) -> dict[str, Any]:
     """
     Ekstrak budget gaji, lokasi, required skills, dan minimal pengalaman dari
     teks deskripsi/requirement lowongan.
@@ -1090,6 +1109,14 @@ def extract_position_criteria(text: str) -> dict[str, Any]:
             max_tokens=400,
             response_format={"type": "json_object"},
         )
+        if db is not None:
+            log_openai_usage(
+                db,
+                prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
+                completion_tokens=response.usage.completion_tokens if response.usage else 0,
+                model=settings.OPENAI_MODEL,
+                call_type="position_criteria_extract",
+            )
         raw = response.choices[0].message.content or "{}"
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):

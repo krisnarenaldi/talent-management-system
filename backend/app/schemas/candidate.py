@@ -44,6 +44,7 @@ class ExperienceCreate(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     description: str | None = None
+    tools: List[str] | None = None
 
 
 class ExperienceUpdate(BaseModel):
@@ -52,6 +53,7 @@ class ExperienceUpdate(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     description: str | None = None
+    tools: List[str] | None = None
 
 
 class ExperienceResponse(BaseModel):
@@ -61,6 +63,7 @@ class ExperienceResponse(BaseModel):
     start_date: datetime | None
     end_date: datetime | None
     description: str | None
+    tools: List[str] | None = None
 
     class Config:
         from_attributes = True

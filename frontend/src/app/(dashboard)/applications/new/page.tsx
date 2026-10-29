@@ -24,7 +24,7 @@ import type {
 import { useModalEscape } from "@/hooks/useModalEscape";
 
 const formSchema = z.object({
-  candidate_id: z.string().min(1, "Pilih kandidat terlebih dahulu"),
+  candidate_id: z.string().optional(),
   position_id: z.string().min(1, "Pilih posisi terlebih dahulu"),
   recruiter_id: z.string().optional(),
   client_user_name: z.string().optional(),
@@ -48,6 +48,9 @@ export default function NewApplicationPage() {
   const [candidateSearch, setCandidateSearch] = useState("");
   const [showCandidateDropdown, setShowCandidateDropdown] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  // Multi-kandidat untuk form manual
+  const [selectedCandidates, setSelectedCandidates] = useState<Candidate[]>([]);
+  const manualCandidateInputRef = useRef<HTMLInputElement>(null);
   const [showBlacklistModal, setShowBlacklistModal] = useState(false);
   const [showCooldownModal, setShowCooldownModal] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState<string>("");
@@ -292,6 +295,14 @@ export default function NewApplicationPage() {
     setValue("candidate_id", candidate.id);
     setCandidateSearch(candidate.full_name);
     setShowCandidateDropdown(false);
+    // Tambahkan ke multi-kandidat jika belum ada
+    setSelectedCandidates((prev) => {
+      if (prev.find((c) => c.id === candidate.id)) return prev;
+      return [...prev, candidate];
+    });
+    // Reset input agar siap untuk kandidat berikutnya
+    setCandidateSearch("");
+    setTimeout(() => manualCandidateInputRef.current?.focus(), 0);
   };
 
   const handleSelectPosition = (position: Position) => {
@@ -437,6 +448,26 @@ export default function NewApplicationPage() {
   };
 
   const onSubmit = (values: FormValues) => {
+    // Validasi manual: harus ada setidaknya 1 kandidat
+    if (selectedCandidates.length === 0) {
+      showToast("error", "Pilih minimal satu kandidat.");
+      return;
+    }
+    // Multi-kandidat: gunakan bulk-assign
+    if (selectedCandidates.length > 1) {
+      if (!selectedPosition) {
+        showToast("error", "Pilih posisi terlebih dahulu.");
+        return;
+      }
+      bulkAssignMutation.mutate({
+        candidate_ids: selectedCandidates.map((c) => c.id),
+        position_id: selectedPosition.id,
+        client_user_name: clientUserName || undefined,
+        run_ai_screening: false,
+      });
+      return;
+    }
+    // Single kandidat: alur lama dengan blacklist/cooldown check
     if (selectedCandidate?.is_blacklisted) {
       setPendingFormValues(values);
       setShowBlacklistModal(true);
@@ -444,13 +475,13 @@ export default function NewApplicationPage() {
       return;
     }
     setPendingFormValues(values);
-    createMutation.mutate(values);
+    createMutation.mutate({ ...values, candidate_id: selectedCandidates[0].id });
   };
 
   const handleConfirmBlacklisted = () => {
     if (!pendingFormValues) return;
     setShowBlacklistModal(false);
-    createMutation.mutate({ ...pendingFormValues, force_blacklisted: true });
+    createMutation.mutate({ ...pendingFormValues, candidate_id: selectedCandidates[0]?.id ?? pendingFormValues.candidate_id, force_blacklisted: true });
     setPendingFormValues(null);
   };
 
@@ -462,7 +493,7 @@ export default function NewApplicationPage() {
   const handleConfirmCooldown = () => {
     if (!pendingFormValues) return;
     setShowCooldownModal(false);
-    createMutation.mutate({ ...pendingFormValues, force_cooldown: true });
+    createMutation.mutate({ ...pendingFormValues, candidate_id: selectedCandidates[0]?.id ?? pendingFormValues.candidate_id, force_cooldown: true });
     setPendingFormValues(null);
   };
 
@@ -1003,44 +1034,112 @@ export default function NewApplicationPage() {
         {/* Candidate Selection */}
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
           <h2 className="text-lg font-semibold text-gray-900">Pilih Kandidat</h2>
+          <p className="text-xs text-gray-500">
+            Ketik nama kandidat lalu pilih dari daftar untuk menambahkan. Bisa pilih banyak kandidat sekaligus — semua akan didaftarkan ke posisi yang sama.
+          </p>
 
           <div className="relative" ref={candidateRef}>
+            {/* Tag chips + input */}
             <label className="mb-1 block text-sm font-medium text-gray-700">
               Nama Kandidat <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              value={candidateSearch}
-              onChange={(e) => {
-                setCandidateSearch(e.target.value);
-                setShowCandidateDropdown(true);
-                if (e.target.value.length < 2) setSelectedCandidate(null);
-              }}
-              onFocus={() => setShowCandidateDropdown(true)}
-              placeholder="Ketik nama kandidat..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
-            />
+            <div
+              className="flex min-h-[42px] flex-wrap gap-2 rounded-lg border border-gray-300 px-3 py-2 cursor-text focus-within:border-primary"
+              onClick={() => manualCandidateInputRef.current?.focus()}
+            >
+              {selectedCandidates.map((candidate) => (
+                <span
+                  key={candidate.id}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                    candidate.is_blacklisted
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-blue-100 text-blue-800"
+                  }`}
+                >
+                  {candidate.is_blacklisted && <span title="Blacklist">⚠</span>}
+                  {candidate.full_name}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
+                      // Sync candidate_id ke kandidat pertama yang tersisa
+                      const remaining = selectedCandidates.filter((c) => c.id !== candidate.id);
+                      if (remaining.length > 0) {
+                        setSelectedCandidate(remaining[0]);
+                        setValue("candidate_id", remaining[0].id);
+                      } else {
+                        setSelectedCandidate(null);
+                        setValue("candidate_id", "");
+                      }
+                    }}
+                    className="ml-0.5 text-blue-600 hover:text-blue-900"
+                    aria-label={`Hapus ${candidate.full_name}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <input
+                ref={manualCandidateInputRef}
+                type="text"
+                value={candidateSearch}
+                onChange={(e) => {
+                  setCandidateSearch(e.target.value);
+                  setShowCandidateDropdown(true);
+                  if (e.target.value.length < 2) setShowCandidateDropdown(false);
+                }}
+                onFocus={() => { if (candidateSearch.length >= 2) setShowCandidateDropdown(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Backspace" && candidateSearch === "" && selectedCandidates.length > 0) {
+                    // Hapus kandidat terakhir
+                    setSelectedCandidates((prev) => prev.slice(0, -1));
+                    const remaining = selectedCandidates.slice(0, -1);
+                    if (remaining.length > 0) {
+                      setSelectedCandidate(remaining[remaining.length - 1]);
+                      setValue("candidate_id", remaining[remaining.length - 1].id);
+                    } else {
+                      setSelectedCandidate(null);
+                      setValue("candidate_id", "");
+                    }
+                  }
+                }}
+                placeholder={selectedCandidates.length === 0 ? "Ketik nama kandidat..." : "Tambah kandidat lain..."}
+                className="flex-1 min-w-[150px] border-none bg-transparent text-sm outline-none placeholder:text-gray-400"
+              />
+            </div>
             {errors.candidate_id && (
               <p className="mt-1 text-xs text-red-600">{errors.candidate_id.message}</p>
             )}
 
             {showCandidateDropdown && candidates.length > 0 && (
               <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto">
-                {candidates.map((candidate) => (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    onClick={() => handleSelectCandidate(candidate)}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0 flex items-center gap-3"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">{candidate.full_name}</p>
-                      <p className="text-xs text-gray-500">
-                        {candidate.email || candidate.phone || "-"}
-                      </p>
-                    </div>
-                  </button>
-                ))}
+                {candidates.map((candidate) => {
+                  const alreadyAdded = selectedCandidates.some((c) => c.id === candidate.id);
+                  return (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => !alreadyAdded && handleSelectCandidate(candidate)}
+                      disabled={alreadyAdded}
+                      className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-100 last:border-0 flex items-center gap-3 ${
+                        alreadyAdded
+                          ? "bg-gray-50 cursor-default opacity-60"
+                          : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900">{candidate.full_name}</p>
+                        <p className="text-xs text-gray-500">
+                          {candidate.email || candidate.phone || "-"}
+                        </p>
+                      </div>
+                      {alreadyAdded && (
+                        <span className="shrink-0 text-xs text-green-600 font-medium">✓ Ditambahkan</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -1051,26 +1150,46 @@ export default function NewApplicationPage() {
             )}
           </div>
 
-          {selectedCandidate && (
-            <div className={`rounded-lg px-4 py-3 text-sm border ${selectedCandidate.is_blacklisted ? "bg-amber-50 border-amber-300" : "bg-blue-50 border-blue-200"}`}>
-              <div className="flex items-center gap-2">
-                <p className={`font-medium ${selectedCandidate.is_blacklisted ? "text-amber-900" : "text-blue-900"}`}>
-                  {selectedCandidate.full_name}
-                </p>
-                {selectedCandidate.is_blacklisted && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                    ⚠ Blacklist
-                  </span>
-                )}
-              </div>
-              <p className={`text-xs mt-1 ${selectedCandidate.is_blacklisted ? "text-amber-700" : "text-blue-700"}`}>
-                {selectedCandidate.email && `Email: ${selectedCandidate.email}  •  `}
-                {selectedCandidate.phone && `HP: ${selectedCandidate.phone}`}
-              </p>
-              {selectedCandidate.is_blacklisted && (
-                <p className="mt-1.5 text-xs text-amber-800 font-medium">
-                  Kandidat ini terdaftar dalam blacklist. Anda masih dapat melanjutkan proses lamaran, namun konfirmasi diperlukan.
-                </p>
+          {/* Info summary kandidat terpilih */}
+          {selectedCandidates.length > 0 && (
+            <div className="space-y-2">
+              {selectedCandidates.length === 1 && (
+                <div className={`rounded-lg px-4 py-3 text-sm border ${selectedCandidates[0].is_blacklisted ? "bg-amber-50 border-amber-300" : "bg-blue-50 border-blue-200"}`}>
+                  <div className="flex items-center gap-2">
+                    <p className={`font-medium ${selectedCandidates[0].is_blacklisted ? "text-amber-900" : "text-blue-900"}`}>
+                      {selectedCandidates[0].full_name}
+                    </p>
+                    {selectedCandidates[0].is_blacklisted && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                        ⚠ Blacklist
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-xs mt-1 ${selectedCandidates[0].is_blacklisted ? "text-amber-700" : "text-blue-700"}`}>
+                    {selectedCandidates[0].email && `Email: ${selectedCandidates[0].email}  •  `}
+                    {selectedCandidates[0].phone && `HP: ${selectedCandidates[0].phone}`}
+                  </p>
+                  {selectedCandidates[0].is_blacklisted && (
+                    <p className="mt-1.5 text-xs text-amber-800 font-medium">
+                      Kandidat ini terdaftar dalam blacklist. Anda masih dapat melanjutkan, namun konfirmasi diperlukan.
+                    </p>
+                  )}
+                </div>
+              )}
+              {selectedCandidates.length > 1 && (
+                <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
+                  <p className="font-medium text-blue-900">
+                    {selectedCandidates.length} kandidat dipilih
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    Semua kandidat akan didaftarkan ke posisi yang sama sekaligus.
+                    {selectedCandidates.some((c) => c.is_blacklisted) && (
+                      <span className="ml-1 font-medium text-amber-700">
+                        ⚠ Beberapa kandidat dalam blacklist — akan diproses dengan force.
+                      </span>
+                    )}
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -1126,10 +1245,10 @@ export default function NewApplicationPage() {
           </Link>
           <button
             type="submit"
-            disabled={isSubmitting || createMutation.isPending}
+            disabled={isSubmitting || createMutation.isPending || bulkAssignMutation.isPending}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            {createMutation.isPending ? "Menyimpan..." : "Simpan Lamaran"}
+            {isSubmitting || createMutation.isPending || bulkAssignMutation.isPending ? "Menyimpan..." : selectedCandidates.length > 1 ? `Simpan ${selectedCandidates.length} Lamaran` : "Simpan Lamaran"}
           </button>
         </div>
       </form>

@@ -40,6 +40,7 @@ from app.models.candidate import Candidate, CandidateDocument, CandidateEducatio
 from app.models.candidate_project import CandidateProject
 from app.models.generated_cv import GeneratedCV
 from app.services.storage_service import get_storage_service
+from app.services.usage_logger import log_openai_usage
 
 logger = logging.getLogger(__name__)
 
@@ -389,11 +390,12 @@ def _generate_summary_with_llm(
     experiences: list[CandidateExperience],
     educations: list[CandidateEducation],
     language: str,
-) -> str | None:
-    """Call LLM (OpenAI) to generate a candidate summary. Returns None on failure."""
+) -> tuple[str | None, dict]:
+    """Call LLM (OpenAI) to generate a candidate summary. Returns (text, token_usage)."""
+    _empty_tokens: dict = {"prompt_tokens": 0, "completion_tokens": 0, "model": settings.OPENAI_MODEL}
     if not settings.OPENAI_API_KEY:
         logger.debug("OPENAI_API_KEY tidak diset, skip LLM summary")
-        return None
+        return None, _empty_tokens
 
     try:
         from openai import OpenAI
@@ -451,10 +453,15 @@ def _generate_summary_with_llm(
             max_tokens=300,
         )
         text = (resp.choices[0].message.content or "").strip()
-        return text if text else None
+        token_usage = {
+            "prompt_tokens": resp.usage.prompt_tokens if resp.usage else 0,
+            "completion_tokens": resp.usage.completion_tokens if resp.usage else 0,
+            "model": settings.OPENAI_MODEL,
+        }
+        return (text if text else None), token_usage
     except Exception as exc:
         logger.warning("LLM summary generation gagal: %s", exc)
-        return None
+        return None, {"prompt_tokens": 0, "completion_tokens": 0, "model": settings.OPENAI_MODEL}
 
 
 def _heuristic_summary(
@@ -602,12 +609,13 @@ async def generate_cv(
             final_summary_source = existing_cv.summary_source or "AI"
         else:
             # Belum ada summary sama sekali → generate via LLM
-            final_summary_text = _generate_summary_with_llm(
+            final_summary_text, summary_tokens = _generate_summary_with_llm(
                 candidate,
                 candidate.experiences,
                 candidate.educations,
                 language,
             )
+            log_openai_usage(db, call_type="cv_summary", **summary_tokens)
             if not final_summary_text:
                 final_summary_text = _heuristic_summary(candidate, candidate.experiences, language)
             final_summary_source = "AI"

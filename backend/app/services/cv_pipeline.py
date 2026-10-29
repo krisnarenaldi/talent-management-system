@@ -32,6 +32,7 @@ from app.models.position import Position
 from app.services import candidate_service
 from app.services.cv_parser import extract_pdf_text, extract_docx_text
 from app.services.onedrive_service import onedrive_service
+from app.services.usage_logger import log_openai_usage
 from app.core.phone_utils import normalize_phone as _normalize_phone
 
 logger = logging.getLogger("cv_pipeline")
@@ -61,6 +62,33 @@ _SCREEN_SYSTEM_PROMPT = (
 )
 
 
+def _normalize_exp_dates(exp: dict[str, Any]) -> tuple[Any, Any, Any]:
+    """
+    Ambil nilai periode/mulai/selesai dari extracted experience dengan toleransi
+    terhadap dua konvensi penamaan field yang berbeda di prompt:
+      - Indonesia: periode / mulai / selesai
+      - English:   period / start_date / end_date
+    Return (period_text, start_date, end_date) — date akan di-parse oleh caller.
+    """
+    period = exp.get("periode") or exp.get("period")
+    mulai = exp.get("mulai") or exp.get("start_date")
+    selesai = exp.get("selesai") or exp.get("end_date")
+    return period, mulai, selesai
+
+
+def _normalize_exp_text(exp: dict[str, Any], *keys: str) -> str:
+    """
+    Ambil nilai string dari extracted experience dengan toleransi terhadap dua
+    konvensi penamaan field (Indonesia vs English). Mengembalikan string ter-strip
+    atau '' jika semua key tidak ditemukan.
+    """
+    for key in keys:
+        val = exp.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
 def _build_extract_prompt(cv_text: str, was_truncated: bool) -> str:
     """Prompt untuk LLM_MODEL_EXTRACT: ekstrak data terstruktur dari teks CV."""
     truncation_note = (
@@ -70,23 +98,38 @@ def _build_extract_prompt(cv_text: str, was_truncated: bool) -> str:
     )
     return (
         f"{truncation_note}"
-        "Ekstrak informasi dari teks CV dan kembalikan SATU objek JSON dengan struktur PERSIS seperti berikut:\n"
+        "Kamu adalah sistem ekstraksi data CV/Resume profesional. Ekstrak informasi dari teks CV dan kembalikan SATU objek JSON dengan struktur PERSIS seperti berikut:\n"
         "{\n"
         '  "nama": "string | null",\n'
         '  "email": "string | null",\n'
         '  "telepon": "string | null",\n'
-        '  "pendidikan": [{"institusi": "", "jurusan": "", "tahun_lulus": null, "gpa": null}],\n'
-        '  "pengalaman_kerja": [{"perusahaan": "", "jabatan": "", "mulai": "", "selesai": "", "deskripsi": ""}],\n'
+        '  "pendidikan": [{"institusi": "", "jurusan": "", "tahun_masuk": null, "tahun_lulus": null, "gpa": null}],\n'
+        '  "pengalaman_kerja": [\n'
+        '    {\n'
+        '      "perusahaan": "nama perusahaan",\n'
+        '      "jabatan": "posisi/jabatan",\n'
+        '      "periode": "teks periode asli di CV (contoh: JAN, 2026 - APR 2026, MAR, 2023 – DES 2025, 2022 - Present)",\n'
+        '      "mulai": "YYYY-MM-DD",\n'
+        '      "selesai": "YYYY-MM-DD atau null jika masih bekerja / Present",\n'
+        '      "deskripsi": "deskripsi pekerjaan lengkap",\n'
+        '      "tools": ["tool1", "tool2"]\n'
+        '    }\n'
+        '  ],\n'
         '  "skills": ["skill1", "skill2"],\n'
         '  "total_experience_years": null\n'
         "}\n\n"
-        "Ketentuan:\n"
+        "Ketentuan penting ekstraksi:\n"
         "- Output HARUS berupa JSON valid saja, TANPA teks apapun di luar JSON, TANPA markdown code fence.\n"
         "- Isi field dengan data faktual dari CV. Gunakan null jika data tidak tersedia.\n"
+        "- PENTING TENTANG TANGGAL PENGALAMAN KERJA: Selalu cari baris tanggal/periode di atas atau di samping nama perusahaan/posisi. "
+        "Contoh di CV: 'JAN, 2026 - APR 2026' -> isi field 'periode' dengan 'JAN, 2026 - APR 2026', 'mulai' dengan '2026-01-01', dan 'selesai' dengan '2026-04-01'. "
+        "Contoh: 'MAR, 2023 – DES 2025' -> 'periode': 'MAR, 2023 – DES 2025', 'mulai': '2023-03-01', 'selesai': '2025-12-01'. "
+        "Contoh: 'October 2023 – Present' -> 'periode': 'October 2023 – Present', 'mulai': '2023-10-01', 'selesai': null. "
+        "Jangan biarkan field 'periode' atau 'mulai' kosong jika tanggal tertera di CV.\n"
+        "- Field 'tools' pada setiap pengalaman_kerja: kumpulkan tools, teknologi, framework, atau software yang disebutkan pada entri tersebut (contoh: ['Katalon Studio', 'Postman', 'Newman', 'Jira', 'Qase.io', 'Netsuite ERP', 'Azure DevOps', 'JMeter']).\n"
         "- Field 'skills' HARUS berisi nama skill/teknologi konkret (contoh: 'JavaScript', 'React', 'Python', 'Docker', 'Figma'). "
         "JANGAN isi dengan kategori atau judul section (contoh: JANGAN tulis 'Frontend Development', 'Soft Skills', 'Web Development', 'Programming'). "
-        "Kumpulkan semua item skill individual dari seluruh section skills di CV, termasuk sub-kategori seperti 'Frontend Development', 'Backend Development', 'Tools & Collaboration', dll. "
-        "Jika CV punya section SKILLS dengan sub-label (misal 'Frontend Development: Next.js, React'), ekstrak item-itemnya: ['Next.js', 'React'], bukan labelnya.\n\n"
+        "Kumpulkan semua item skill individual dari seluruh section skills di CV, termasuk sub-kategori seperti 'Frontend Development', 'Backend Development', 'Tools & Collaboration', dll.\n\n"
         f"=== MULAI TEKS CV ===\n{cv_text}\n=== AKHIR TEKS CV ==="
     )
 
@@ -165,12 +208,11 @@ def _parse_json_response(raw_text: str) -> dict[str, Any]:
 
 # ── LLM calls ─────────────────────────────────────────────────────────────────
 
-async def _call_llm_extract(cv_text: str, was_truncated: bool) -> dict[str, Any]:
+async def _call_llm_extract(cv_text: str, was_truncated: bool) -> tuple[dict[str, Any], dict]:
     """
     Step 6a — Ekstraksi data CV menggunakan LLM_MODEL_EXTRACT.
 
-    Return dict fields: nama, email, telepon, pendidikan, pengalaman_kerja,
-    skills, total_experience_years.
+    Return (extracted_dict, token_usage).
     """
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY belum dikonfigurasi di environment variables.")
@@ -195,19 +237,27 @@ async def _call_llm_extract(cv_text: str, was_truncated: bool) -> dict[str, Any]
         )
         resp.raise_for_status()
 
-    raw_text: str = resp.json()["choices"][0]["message"]["content"]
+    body = resp.json()
+    raw_text: str = body["choices"][0]["message"]["content"]
     extracted = _parse_json_response(raw_text)
 
     # Buang field score/notes jika LLM menyertakannya (seharusnya tidak)
     extracted.pop("ai_score", None)
     extracted.pop("ai_notes", None)
 
+    usage = body.get("usage") or {}
+    token_usage = {
+        "prompt_tokens": usage.get("prompt_tokens", 0),
+        "completion_tokens": usage.get("completion_tokens", 0),
+        "model": settings.LLM_MODEL_EXTRACT,
+    }
+
     logger.debug(
         "CV extraction selesai (model=%s): fields=%s",
         settings.LLM_MODEL_EXTRACT,
         list(extracted.keys()),
     )
-    return extracted
+    return extracted, token_usage
 
 
 async def _call_llm_screen(
@@ -217,11 +267,11 @@ async def _call_llm_screen(
     position_title: str | None = None,
     position_requirement: str | None = None,
     position_job_description: str | None = None,
-) -> tuple[float | None, str]:
+) -> tuple[float | None, str, dict]:
     """
     Step 6b — Screening/penilaian kandidat menggunakan OPENAI_MODEL.
 
-    Return (ai_score, ai_notes).
+    Return (ai_score, ai_notes, token_usage).
     """
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY belum dikonfigurasi di environment variables.")
@@ -253,7 +303,8 @@ async def _call_llm_screen(
         )
         resp.raise_for_status()
 
-    raw_text: str = resp.json()["choices"][0]["message"]["content"]
+    body = resp.json()
+    raw_text: str = body["choices"][0]["message"]["content"]
     parsed = _parse_json_response(raw_text)
 
     ai_score_raw = parsed.get("ai_score")
@@ -266,12 +317,19 @@ async def _call_llm_screen(
 
     ai_notes = str(parsed.get("ai_notes", "Penilaian selesai."))
 
+    usage = body.get("usage") or {}
+    token_usage = {
+        "prompt_tokens": usage.get("prompt_tokens", 0),
+        "completion_tokens": usage.get("completion_tokens", 0),
+        "model": settings.OPENAI_MODEL,
+    }
+
     logger.debug(
         "CV screening selesai (model=%s): score=%s",
         settings.OPENAI_MODEL,
         ai_score,
     )
-    return ai_score, ai_notes
+    return ai_score, ai_notes, token_usage
 
 
 # ── Notifikasi batch ──────────────────────────────────────────────────────────
@@ -470,10 +528,11 @@ async def process_cv_screening(ctx: dict, screening_result_id: str) -> None:
             position_job_description: str | None = position.job_description if position else None
 
             # Step 5 — Call LLM: ekstraksi data CV (LLM_MODEL_EXTRACT)
-            extracted = await _call_llm_extract(cv_text_stripped, was_truncated)
+            extracted, extract_tokens = await _call_llm_extract(cv_text_stripped, was_truncated)
+            log_openai_usage(db, call_type="cv_extract", **extract_tokens)
 
             # Step 5b — Call LLM: screening/penilaian (OPENAI_MODEL)
-            ai_score, ai_notes = await _call_llm_screen(
+            ai_score, ai_notes, screen_tokens = await _call_llm_screen(
                 extracted,
                 scoring_config,
                 was_truncated,
@@ -481,6 +540,7 @@ async def process_cv_screening(ctx: dict, screening_result_id: str) -> None:
                 position_requirement=position_requirement,
                 position_job_description=position_job_description,
             )
+            log_openai_usage(db, call_type="cv_screen", **screen_tokens)
 
             # Step 6 — Simpan hasil
             result.extracted_json = extracted
@@ -574,7 +634,8 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                 cv_text_stripped = cv_text_stripped[:_MAX_CV_CHARS]
 
             # Step 4 — Call LLM: ekstraksi data CV (LLM_MODEL_EXTRACT)
-            extracted = await _call_llm_extract(cv_text_stripped, was_truncated)
+            extracted, extract_tokens = await _call_llm_extract(cv_text_stripped, was_truncated)
+            log_openai_usage(db, call_type="cv_extract", **extract_tokens)
 
             # Normalisasi nomor HP agar format seragam (08xxx, digit-only)
             if extracted.get("telepon"):
@@ -605,6 +666,76 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                     if extracted.get("skills"):
                         existing_candidate.skills = extracted["skills"]
                     existing_candidate.possible_duplicate = True
+
+                    # Update / append riwayat pendidikan jika ada
+                    from app.core.date_utils import parse_date_str, parse_period_range
+                    if extracted.get("pendidikan"):
+                        for edu in extracted.get("pendidikan", []):
+                            inst = (edu.get("institusi") or "").strip()
+                            if not inst:
+                                continue
+                            existing_edu = db.query(CandidateEducation).filter(
+                                CandidateEducation.candidate_id == existing_candidate.id,
+                                CandidateEducation.institution.ilike(f"%{inst}%"),
+                            ).first()
+                            if not existing_edu:
+                                db.add(CandidateEducation(
+                                    candidate_id=existing_candidate.id,
+                                    institution=inst,
+                                    major=edu.get("jurusan"),
+                                    graduation_year=edu.get("tahun_lulus"),
+                                    gpa=edu.get("gpa"),
+                                ))
+
+                    # Update / append riwayat pengalaman kerja (termasuk tools & periode)
+                    if extracted.get("pengalaman_kerja"):
+                        for exp in extracted.get("pengalaman_kerja", []):
+                            comp = _normalize_exp_text(exp, "perusahaan", "company_name")
+                            if not comp:
+                                continue
+                            tools_raw = exp.get("tools") or []
+                            tools = [t.strip() for t in tools_raw if isinstance(t, str) and t.strip()]
+
+                            period_text, mulai, selesai = _normalize_exp_dates(exp)
+                            start_date, end_date = None, None
+                            if period_text:
+                                start_date, end_date = parse_period_range(period_text)
+                            if not start_date and mulai:
+                                start_date = parse_date_str(mulai)
+                            if not end_date and selesai:
+                                end_date = parse_date_str(selesai)
+
+                            existing_exp = db.query(CandidateExperience).filter(
+                                CandidateExperience.candidate_id == existing_candidate.id,
+                                CandidateExperience.company_name.ilike(f"%{comp}%"),
+                            ).first()
+
+                            if existing_exp:
+                                if tools:
+                                    existing_exp.tools = tools
+                                if start_date:
+                                    existing_exp.start_date = start_date
+                                if end_date is not None:
+                                    existing_exp.end_date = end_date
+                                elif period_text and any(w in str(period_text).lower() for w in ["present", "sekarang", "current"]):
+                                    existing_exp.end_date = None
+                                desc_text = _normalize_exp_text(exp, "deskripsi", "description")
+                                if desc_text and not existing_exp.description:
+                                    existing_exp.description = desc_text
+                                title_text = _normalize_exp_text(exp, "jabatan", "job_title", "position")
+                                if title_text and not existing_exp.job_title:
+                                    existing_exp.job_title = title_text
+                            else:
+                                db.add(CandidateExperience(
+                                    candidate_id=existing_candidate.id,
+                                    company_name=comp,
+                                    job_title=_normalize_exp_text(exp, "jabatan", "job_title", "position") or None,
+                                    start_date=start_date,
+                                    end_date=end_date,
+                                    description=_normalize_exp_text(exp, "deskripsi", "description") or None,
+                                    tools=tools if tools else None,
+                                ))
+
                     db.commit()
                     db.refresh(existing_candidate)
 
@@ -694,26 +825,45 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                 db.add(edu_record)
 
             # Simpan pengalaman kerja
+            from app.core.date_utils import parse_date_str, parse_period_range
             for exp in extracted.get("pengalaman_kerja", []) or []:
+                tools_raw = exp.get("tools") or []
+                tools = [t.strip() for t in tools_raw if isinstance(t, str) and t.strip()]
+
                 exp_record = CandidateExperience(
                     candidate_id=candidate.id,
-                    company_name=exp.get("perusahaan"),
-                    job_title=exp.get("jabatan"),
-                    description=exp.get("deskripsi"),
+                    company_name=_normalize_exp_text(exp, "perusahaan", "company_name") or None,
+                    job_title=_normalize_exp_text(exp, "jabatan", "job_title", "position") or None,
+                    description=_normalize_exp_text(exp, "deskripsi", "description") or None,
+                    tools=tools if tools else None,
                 )
-                # Parse dates if available
-                start_str = exp.get("mulai")
-                end_str = exp.get("selesai")
-                if start_str:
-                    try:
-                        exp_record.start_date = dt.strptime(start_str, "%Y-%m-%d").date()
-                    except (ValueError, TypeError):
-                        pass
-                if end_str:
-                    try:
-                        exp_record.end_date = dt.strptime(end_str, "%Y-%m-%d").date()
-                    except (ValueError, TypeError):
-                        pass
+                # Parse dates - coba dari periode terlebih dahulu, lalu mulai/selesai
+                period_text, mulai, selesai = _normalize_exp_dates(exp)
+                start_date = None
+                end_date = None
+                if period_text:
+                    p_start, p_end = parse_period_range(period_text)
+                    start_date = p_start
+                    end_date = p_end
+
+                if not start_date and mulai:
+                    start_date = parse_date_str(mulai)
+                if not end_date and selesai:
+                    end_date = parse_date_str(selesai)
+
+                logger.debug(
+                    "CV ingestion date parse: company=%s periode=%r mulai=%r selesai=%r "
+                    "-> start_date=%s end_date=%s",
+                    exp.get("perusahaan"),
+                    period_text,
+                    mulai,
+                    selesai,
+                    start_date,
+                    end_date,
+                )
+
+                exp_record.start_date = start_date
+                exp_record.end_date = end_date
                 db.add(exp_record)
 
             # Simpan document record (CV asli)
@@ -866,7 +1016,7 @@ async def process_position_matching(ctx: dict, application_id: str) -> None:
             profile = _build_candidate_profile(candidate)
             scoring_config: dict[str, Any] = position.ai_scoring_config or {}
 
-            ai_score, ai_notes = await _call_llm_screen(
+            ai_score, ai_notes, screen_tokens = await _call_llm_screen(
                 profile,
                 scoring_config,
                 False,
@@ -874,6 +1024,7 @@ async def process_position_matching(ctx: dict, application_id: str) -> None:
                 position_requirement=position.requirement,
                 position_job_description=position.job_description,
             )
+            log_openai_usage(db, call_type="cv_screen_matching", **screen_tokens)
 
             screening.extracted_json = profile
             screening.ai_score = ai_score

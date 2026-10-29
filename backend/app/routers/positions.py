@@ -154,6 +154,7 @@ def update_position(
 @router.post("/extract-criteria", response_model=ExtractCriteriaResponse)
 def extract_criteria(
     payload: ExtractCriteriaRequest,
+    db: Session = Depends(get_db),
     current_user=Depends(require_role("admin", "manager")),
 ):
     """
@@ -163,7 +164,7 @@ def extract_criteria(
     Dipakai oleh tombol helper "Ekstrak Kriteria dari Deskripsi (AI)" pada form
     master data posisi. Tidak menyimpan apa pun ke database.
     """
-    result = ai_service.extract_position_criteria(payload.text)
+    result = ai_service.extract_position_criteria(payload.text, db=db)
 
     if "error" in result:
         raise HTTPException(

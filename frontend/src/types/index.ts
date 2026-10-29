@@ -189,6 +189,7 @@ export interface CandidateExperience {
   start_date?: string;
   end_date?: string;
   description?: string;
+  tools?: string[];
 }
 
 export interface CandidateDocument {

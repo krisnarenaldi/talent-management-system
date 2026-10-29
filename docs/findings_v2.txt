@@ -12,3 +12,4 @@
 	/applications/6e0c8125-f96e-49c9-a221-c18193fce724
 	
 	
+	cd backend && PYTHONPATH=. .venv/bin/python3 tests/test_cv_parser.py
