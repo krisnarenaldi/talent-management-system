@@ -12,6 +12,7 @@ import KeyboardShortcutModal from "@/components/ui/KeyboardShortcutModal";
 import QuickCreateMenu from "@/components/ui/QuickCreateMenu";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useAuthStore } from "@/stores/auth.store";
+import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 import api from "@/lib/api";
 
 function normalizeRole(role: string | undefined): string {
@@ -38,11 +39,7 @@ function isPMAllowedRoute(pathname: string): boolean {
   return PM_ALLOWED_PREFIXES.some((r) => pathname.startsWith(r));
 }
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function DashboardContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
@@ -55,6 +52,7 @@ export default function DashboardLayout({
   const menuRef = useRef<HTMLDivElement>(null);
   const isAdmin = normalizeRole(user?.role) === "admin";
   const isPM = normalizeRole(user?.role) === "pm";
+  const { collapsed } = useSidebar();
 
   useKeyboardShortcuts(shortcutModalOpen, setShortcutModalOpen);
 
@@ -104,15 +102,22 @@ export default function DashboardLayout({
     !authLoading && isAdminOnlyRoute(pathname) && !isAdmin && !isPM;
 
   return (
-    <TokenRefreshProvider>
-      <AuthProvider>
+    <>
       <div className="flex h-full bg-surface text-on-surface">
         <Sidebar />
 
-        {/* Content area — offset by sidebar width */}
-        <div className="flex-1 flex flex-col ml-64 h-full relative">
+        {/* Content area — smoothly transitions padding/margin when sidebar collapses */}
+        <div
+          className={`flex-1 flex flex-col h-full relative transition-[margin-left] duration-300 ease-in-out ${
+            collapsed ? "ml-16" : "ml-64"
+          }`}
+        >
           {/* Top header bar */}
-          <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface border-b border-outline-variant flex items-center justify-between px-container-padding z-40">
+          <header
+            className={`fixed top-0 right-0 h-16 bg-surface border-b border-outline-variant flex items-center justify-between px-container-padding z-40 transition-[width] duration-300 ease-in-out ${
+              collapsed ? "w-[calc(100%-4rem)]" : "w-[calc(100%-16rem)]"
+            }`}
+          >
             <h2 className="text-headline-md text-on-surface font-semibold hidden md:block">
               Candidate Database
             </h2>
@@ -133,7 +138,10 @@ export default function DashboardLayout({
                 >
                   <span className="material-symbols-outlined">apps</span>
                 </button>
-                <QuickCreateMenu isOpen={quickMenuOpen} onClose={() => setQuickMenuOpen(false)} />
+                <QuickCreateMenu
+                  isOpen={quickMenuOpen}
+                  onClose={() => setQuickMenuOpen(false)}
+                />
               </div>
 
               {/* User dropdown */}
@@ -149,26 +157,37 @@ export default function DashboardLayout({
                 {menuOpen && (
                   <>
                     {/* Backdrop overlay */}
-                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setMenuOpen(false)}
+                    />
                     {/* Dropdown panel */}
                     <div className="absolute right-0 top-10 w-56 bg-surface border border-outline-variant rounded-xl shadow-lg z-50 py-1 overflow-hidden">
                       <div className="px-4 py-3 border-b border-outline-variant">
-                        <p className="text-body-sm text-on-surface font-medium truncate">{user?.name}</p>
-                        <p className="text-caption text-on-surface-variant truncate">{user?.email}</p>
+                        <p className="text-body-sm text-on-surface font-medium truncate">
+                          {user?.name}
+                        </p>
+                        <p className="text-caption text-on-surface-variant truncate">
+                          {user?.email}
+                        </p>
                       </div>
                       <Link
                         href="/settings"
                         onClick={() => setMenuOpen(false)}
                         className="flex items-center gap-3 px-4 py-2.5 text-body-sm text-on-surface hover:bg-primary-container hover:text-on-primary transition-colors"
                       >
-                        <span className="material-symbols-outlined text-lg">person</span>
+                        <span className="material-symbols-outlined text-lg">
+                          person
+                        </span>
                         Profile
                       </Link>
                       <button
                         onClick={handleLogout}
                         className="flex w-full items-center gap-3 px-4 py-2.5 text-body-sm text-error hover:bg-error-container/20 transition-colors text-left"
                       >
-                        <span className="material-symbols-outlined text-lg">logout</span>
+                        <span className="material-symbols-outlined text-lg">
+                          logout
+                        </span>
                         Logout
                       </button>
                     </div>
@@ -197,8 +216,27 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
-    </AuthProvider>
-    <KeyboardShortcutModal isOpen={shortcutModalOpen} onClose={() => setShortcutModalOpen(false)} />
+
+      <KeyboardShortcutModal
+        isOpen={shortcutModalOpen}
+        onClose={() => setShortcutModalOpen(false)}
+      />
+    </>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <TokenRefreshProvider>
+      <AuthProvider>
+        <SidebarProvider>
+          <DashboardContent>{children}</DashboardContent>
+        </SidebarProvider>
+      </AuthProvider>
     </TokenRefreshProvider>
   );
 }

@@ -105,3 +105,4 @@ nginx.confdocs/
 
 docs/screenshots/
 docs/**/*.pdf
+nginx.conf
