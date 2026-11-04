@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db, require_role
 from app.core.phone_utils import PHONE_PATTERN as PIC_CONTACT_PATTERN
 from app.core.phone_utils import normalize_phone
-from app.models.application import Application
 from app.models.client import Client
 from app.models.position import Position
 from app.schemas.client import ClientCreate, ClientResponse, ClientUpdate
 from app.services import client_service
+from app.services.application_service import bulk_reject_applications
 
 router = APIRouter()
 
@@ -145,6 +145,23 @@ def update_client(
 
     data = payload.model_dump(exclude_unset=True)
 
+    # Bulk-reject: bila klien dinon-aktifkan dengan bulk_reject=True, nonaktifkan
+    # semua posisi klien ini dan tolak semua lamaran aktif dengan alasan tersebut.
+    if payload.is_active is False and payload.bulk_reject:
+        if not payload.reject_reason:
+            raise HTTPException(
+                status_code=400,
+                detail="reject_reason wajib bila bulk_reject=True",
+            )
+        client.is_active = False
+        # deactivate all positions of this client
+        positions = db.query(Position).filter(Position.client_id == client_id).all()
+        pos_ids = [str(p.id) for p in positions]
+        db.query(Position).filter(Position.client_id == client_id).update(
+            {"is_active": False}, synchronize_session=False
+        )
+        bulk_reject_applications(db, pos_ids, payload.reject_reason)
+
     if "name" in data and data["name"] is not None:
         _check_name_unique(db, data["name"], exclude_client_id=client_id)
 
@@ -221,36 +238,7 @@ def delete_client(
     if not client:
         raise HTTPException(status_code=404, detail="Client tidak ditemukan")
 
-    # Guard: tidak boleh nonaktifkan jika masih ada posisi aktif.
-    active_positions = (
-        db.query(Position)
-        .filter(Position.client_id == client_id, Position.is_active == True)
-        .count()
-    )
-    if active_positions:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Tidak dapat menonaktifkan klien. Masih ada {active_positions} "
-                f"posisi aktif. Nonaktifkan posisi terlebih dahulu."
-            ),
-        )
-
-    # Guard: tidak boleh nonaktifkan jika masih ada kandidat aktif dalam pipeline.
-    active_applications = (
-        db.query(Application)
-        .join(Position, Application.position_id == Position.id)
-        .filter(Position.client_id == client_id, Application.status == "active")
-        .count()
-    )
-    if active_applications:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Tidak dapat menonaktifkan klien. Masih ada {active_applications} "
-                f"kandidat aktif dalam pipeline. Selesaikan atau tarik kembali terlebih dahulu."
-            ),
-        )
-
+    # Soft-delete: cukup nonaktifkan klien. Penanganan posisi & lamaran aktif
+    # dilakukan lewat alur PUT dengan bulk_reject (lihat update_client).
     client.is_active = False
     db.commit()

@@ -17,6 +17,7 @@ from app.schemas.position import (
     RecommendCandidatesResponse,
 )
 from app.services import ai_service, client_service
+from app.services.application_service import bulk_reject_applications
 
 router = APIRouter()
 
@@ -135,6 +136,17 @@ def update_position(
     if not position:
         raise HTTPException(status_code=404, detail="Position tidak ditemukan")
 
+    # Bulk-reject: bila posisi dinon-aktifkan dengan bulk_reject=True, tolak
+    # semua lamaran aktif pada posisi ini dengan alasan yang diberikan.
+    if payload.is_active is False and payload.bulk_reject:
+        if not payload.reject_reason:
+            raise HTTPException(
+                status_code=400,
+                detail="reject_reason wajib bila bulk_reject=True",
+            )
+        position.is_active = False
+        count = bulk_reject_applications(db, [str(position.id)], payload.reject_reason)
+
     data = payload.model_dump(exclude_unset=True)
     if "client_user_names" in data:
         client = db.query(Client).filter(Client.id == position.client_id).first()
@@ -142,8 +154,10 @@ def update_position(
             raise HTTPException(status_code=404, detail="Client tidak ditemukan")
         data["client_user_names"] = _validate_client_pics(client, data["client_user_names"] or [])
 
+    SKIP_FIELDS = {"bulk_reject", "reject_reason"}
     for key, value in data.items():
-        setattr(position, key, value)
+        if key not in SKIP_FIELDS:
+            setattr(position, key, value)
     db.commit()
     db.refresh(position)
     return position

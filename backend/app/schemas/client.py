@@ -49,6 +49,10 @@ class ClientUpdate(BaseModel):
     pic_contact: str | None = None
     pics: list[ClientPic] | None = None
     is_active: bool | None = None
+    # Bulk-reject: tolak semua lamaran aktif (dan nonaktifkan posisi) saat
+    # klien dinon-aktifkan.
+    bulk_reject: bool = False
+    reject_reason: str | None = None
 
     @field_validator("name")
     @classmethod

@@ -102,6 +102,7 @@ class ApplicationResponse(BaseModel):
     client_user_name: str | None = None
     current_stage: str
     status: str
+    reject_reason: str | None = None
     last_result: str | None = None
     cv_submitted_to_pm_date: date | None
     created_at: datetime | None

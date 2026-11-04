@@ -58,6 +58,8 @@ class Application(Base):
     cv_submitted_to_pm_date = Column(Date)
     client_user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True)
     client_user_name = Column(String(255), nullable=True)
+    # Alasan bulk-reject ketika client/position dinon-aktifkan
+    reject_reason = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

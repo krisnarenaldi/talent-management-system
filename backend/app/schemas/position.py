@@ -40,6 +40,9 @@ class PositionUpdate(BaseModel):
     )
     is_active: bool | None = None
     ai_scoring_config: dict[str, Any] | None = None
+    # Bulk-reject: tolak semua lamaran aktif saat posisi dinon-aktifkan.
+    bulk_reject: bool = False
+    reject_reason: str | None = None
 
 
 class PositionResponse(BaseModel):
