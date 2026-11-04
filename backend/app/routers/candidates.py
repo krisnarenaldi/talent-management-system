@@ -224,6 +224,9 @@ def list_candidates(
         )
     )
 
+    # Urutkan berdasarkan nama kandidat secara A-Z, stabil dengan created_at
+    query = query.order_by(Candidate.full_name.asc(), Candidate.created_at.desc())
+
     candidates = query.offset(skip).limit(limit).all()
     # Re-compute & persist freshness, and collect blacklist status before commit.
     # Also pre-compute derived display fields (last_education, applied_positions,
