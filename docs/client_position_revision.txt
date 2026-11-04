@@ -1,0 +1,264 @@
+1. DB Schema changes
+1.1 Tambah kolom reject_reason pada tabel application
+a. alembic revision -m "add reject_reason to application"
+b. Isi migration (alembic/versions/<rev_id>_add_reject_reason_to_application.py)
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+revision = "<rev_id>"
+down_revision = "<prev_rev>"
+branch_labels = None
+depends_on = None
+
+def upgrade() -> None:
+op.add_column(
+	"application",
+	sa.Column(
+		"reject_reason",
+		sa.String(length=255),
+		nullable=True,
+		comment="Alasan bulk‑reject ketika client/position dinon‑aktifkan",
+	),
+)
+
+def downgrade() -> None:
+op.drop_column("application", "reject_reason")
+
+c. apply migration
+alembic upgrade head
+
+
+1.2 Tambah indeks pada application.position_id untuk bulk‑update cepat
+op.create_index(
+	"ix_application_position_active",
+	"application",
+	["position_id", "status"],
+		unique=False,
+	)
+
+2. Update Pydantic Schema
+- backend/app/schemas/application.py =>	Tambah field `reject_reason: str
+- backend/app/schemas/position.py	=> Tambah field pada PositionUpdate:
+`bulk_reject: bool
+- backend/app/schemas/client.py => Tambah field pada ClientUpdate:
+`bulk_reject: bool
+
+3. Service Layer – Bulk Reject Logic
+Buat file baru backend/app/services/application_service.py
+
+from sqlalchemy.orm import Session
+from sqlalchemy import update, func
+from app.models.application import Application
+
+def bulk_reject_applications(
+	db: Session,
+	position_ids: list[str],
+	reason: str,
+) -> int:
+"""
+Semua Application dengan status='active' pada posisi‑posisi yang diberikan
+di‑set menjadi 'rejected' + alasan.
+Mengembalikan jumlah baris yang ter‑update.
+"""
+stmt = (
+	update(Application)
+	.where(
+		Application.position_id.in_(position_ids),
+		Application.status == "active",
+	)
+	.values(
+		status="rejected",
+		reject_reason=reason,
+		updated_at=func.now(),
+	)
+)
+result = db.execute(stmt)
+return result.rowcount
+
+4. Extend API Endpoints
+4.1 PUT /positions/{position_id}
+
+Edit backend/app/routers/positions.py:
+
+from app.services.application_service import bulk_reject_applications
+
+@router.put("/{position_id}", response_model=PositionResponse)
+def update_position(
+	position_id: str,
+	payload: PositionUpdate,
+	db: Session = Depends(get_db),
+	current_user=Depends(require_role("admin", "manager")),
+):
+position = db.query(Position).filter(Position.id == position_id).first()
+if not position:
+raise HTTPException(status_code=404, detail="Position tidak ditemukan")
+
+# ---------- Bulk reject flow ----------
+if payload.is_active is False and payload.bulk_reject:
+if not payload.reject_reason:
+raise HTTPException(
+	status_code=400,
+	detail="reject_reason wajib bila bulk_reject=True",
+)
+# Mulai transaksi atomik
+with db.begin():
+position.is_active = False
+# reject semua lamaran aktif pada posisi ini
+bulk_reject_applications(db, [position.id], payload.reject_reason)
+
+# ---------- Normal updates ----------
+for key, value in payload.model_dump(exclude_unset=True).items():
+setattr(position, key, value)
+
+db.commit()
+db.refresh(position)
+return position
+
+4.2 PUT /clients/{client_id}
+
+Edit backend/app/routers/clients.py:
+
+from app.services.application_service import bulk_reject_applications
+from app.models.position import Position
+
+@router.put("/{client_id}", response_model=ClientResponse)
+def update_client(
+	client_id: str,
+	payload: ClientUpdate,
+	db: Session = Depends(get_db),
+	current_user=Depends(require_role("admin", "manager")),
+):
+client = db.query(Client).filter(Client.id == client_id).first()
+if not client:
+raise HTTPException(status_code=404, detail="Client tidak ditemukan")
+
+if payload.is_active is False and payload.bulk_reject:
+if not payload.reject_reason:
+raise HTTPException(
+	status_code=400,
+	detail="reject_reason wajib bila bulk_reject=True",
+)
+with db.begin():
+# 1️⃣ non‑aktifkan client
+client.is_active = False
+
+# 2️⃣ non‑aktifkan semua posisi milik client
+position_ids = (
+	db.query(Position.id).filter(Position.client_id == client_id).all()
+)
+pos_ids = [pid for (pid,) in position_ids]
+db.query(Position).filter(Position.id.in_(pos_ids)).update(
+	{"is_active": False}, synchronize_session=False
+	)
+	
+	# 3️⃣ reject semua lamaran yang masih aktif pada posisi‑posisi itu
+	bulk_reject_applications(db, pos_ids, payload.reject_reason)
+	
+	# ----- Update field lain -----
+	for key, value in payload.model_dump(exclude_unset=True).items():
+	setattr(client, key, value)
+	
+	db.commit()
+	db.refresh(client)
+	return client
+	
+
+5. Audit / Notification (Opsional tapi direkomendasikan)
+5.1 Buat tabel audit_log (migration) dengan kolom event, actor_id, payload_json, created_at.
+5.2 Helper di backend/app/services/audit_service.py:
+import json
+from sqlalchemy.orm import Session
+from app.models.audit import AuditLog
+
+def create_audit(db: Session, event: str, actor_id: str, payload: dict) -> None:
+db.add(
+	AuditLog(
+		event=event,
+		actor_id=actor_id,
+		payload_json=json.dumps(payload),
+		created_at=func.now(),
+	)
+)
+db.flush()
+
+6. Front‑end Adjustments (Next.js – App Router)
+6.1 Komponen tombol “Non‑aktifkan Posisi”
+// src/app/(dashboard)/admin/positions/[clientId]/page.tsx
+import { useRouter } from "next/navigation";
+
+export default function DeactivatePositionButton({ position }: { position: Position }) {
+	const router = useRouter();
+	
+	const handleDeactivate = async () => {
+		if (!confirm(
+			"Posisi akan dinon‑aktifkan. Semua kandidat yang masih aktif akan otomatis ditolak. Lanjutkan?"
+		)) return;
+		
+		const res = await fetch(`/api/positions/${position.id}`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				is_active: false,
+				bulk_reject: true,
+				reject_reason: "Posisi ditutup oleh HR",
+			}),
+		});
+		
+		if (!res.ok) {
+			const err = await res.json();
+			alert(`Gagal: ${err.detail}`);
+			return;
+		}
+		router.refresh();        // reload list / detail
+	};
+	
+	return (
+		<Button color="danger" onClick={handleDeactivate}>
+		Non‑aktifkan Posisi
+		</Button>
+	);
+}
+
+6.2 Komponen tombol “Non‑aktifkan Klien”
+export default function DeactivateClientButton({ client }: { client: Client }) {
+	const router = useRouter();
+	
+	const handle = async () => {
+		if (!confirm(
+			"Klien akan dinon‑aktifkan. Semua posisi dan lamaran aktif akan otomatis ditolak. Lanjutkan?"
+		)) return;
+		
+		const res = await fetch(`/api/clients/${client.id}`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				is_active: false,
+				bulk_reject: true,
+				reject_reason: "Klien tidak lagi bekerja sama",
+			}),
+		});
+		
+		if (!res.ok) {
+			const err = await res.json();
+			alert(`Gagal: ${err.detail}`);
+			return;
+		}
+		router.refresh();
+	};
+	
+	return (
+		<Button color="danger" onClick={handle}>
+		Non‑aktifkan Klien
+		</Button>
+	);
+}
+Pastikan API route (/api/...) mengarah ke router FastAPI yang sudah dimodifikasi (biasanya melalui nextjs‑proxy atau api‑handler yang ada di repo).
+
+7. Unit & Integration Tests
+lihat screenshot
+
+8. Dokumentasi & Release Notes
+- Update README / API docs (Swagger) – jelaskan parameter bulk_reject dan reject_reason.
+- Changelog entry – feat: bulk reject on client/position deactivation.

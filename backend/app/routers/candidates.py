@@ -574,6 +574,19 @@ async def update_talent_pool(
             detail="pool_status harus berupa 'database', 'talent_pool', atau 'future_lead'",
         )
 
+    # Validasi: Kandidat berstatus blacklist tidak boleh dimasukkan ke talent pool / future lead
+    if payload.pool_status in ("talent_pool", "future_lead"):
+        is_blacklisted = db.query(Blacklist).filter(
+            Blacklist.candidate_id == candidate.id,
+            Blacklist.is_active == True,
+            Blacklist.is_approved == True,
+        ).first() is not None
+        if is_blacklisted:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Kandidat sedang dalam status Blacklist dan tidak dapat dimasukkan ke Talent Pool.",
+            )
+
     # Update field
     candidate.pool_status = payload.pool_status
     candidate.talent_pool_reason = payload.talent_pool_reason

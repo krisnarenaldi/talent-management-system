@@ -6,6 +6,7 @@ import { X, Briefcase, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useModalEscape } from "@/hooks/useModalEscape";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import api from "@/lib/api";
@@ -24,7 +25,6 @@ export interface BulkAssignModalProps {
 // ── Schema ────────────────────────────────────────────────────────────────────
 const bulkAssignSchema = z.object({
   position_id: z.string().uuid("Pilih posisi yang valid"),
-  client_user_name: z.string().optional(),
   run_ai_screening: z.boolean().default(false),
 });
 
@@ -55,7 +55,6 @@ export default function BulkAssignModal({
     resolver: zodResolver(bulkAssignSchema),
     defaultValues: {
       position_id: "",
-      client_user_name: "",
       run_ai_screening: false,
     },
   });
@@ -85,18 +84,10 @@ export default function BulkAssignModal({
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch selected position details to get client_user_names
-  const { data: selectedPosition } = useQuery({
-    queryKey: ["position-detail", selectedPositionId],
-    queryFn: () => positionsApi.getById(selectedPositionId),
-    enabled: !!selectedPositionId,
-    staleTime: 5 * 60 * 1000,
-  });
-
   // Reset form when modal opens/closes or candidate list changes
   useEffect(() => {
     if (isOpen) {
-      reset({ position_id: "", client_user_name: "", run_ai_screening: false });
+      reset({ position_id: "", run_ai_screening: false });
       setComboQuery("");
       setComboOpen(false);
     }
@@ -124,7 +115,6 @@ export default function BulkAssignModal({
       const payload = {
         candidate_ids: candidateIds,
         position_id: values.position_id,
-        client_user_name: values.client_user_name || undefined,
         run_ai_screening: canToggleAIScreening ? values.run_ai_screening : false,
       };
       const res = await api.post("/api/v1/candidates/bulk-assign", payload);
@@ -154,6 +144,9 @@ export default function BulkAssignModal({
       showToast("error", apiError.response?.data?.detail ?? "Gagal assign kandidat ke lowongan");
     },
   });
+
+  // Close on Escape
+  useModalEscape(onClose, isOpen && !mutation.isPending);
 
   if (!isOpen) return null;
 
@@ -290,35 +283,6 @@ export default function BulkAssignModal({
             )}
             {errors.position_id && (
               <p className="mt-1.5 text-xs text-red-600">{errors.position_id.message}</p>
-            )}
-          </div>
-
-          {/* PIC User Client dropdown (from position.client_user_names) */}
-          <div className="mb-4">
-            <label htmlFor="client_user_name" className="mb-1.5 block text-sm font-medium text-gray-700">
-              PIC User Klien (Pewawancara)
-            </label>
-            {selectedPosition && selectedPosition.client_user_names && selectedPosition.client_user_names.length > 0 ? (
-              <select
-                id="client_user_name"
-                {...register("client_user_name")}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-colors focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              >
-                <option value="">-- Pilih PIC User --</option>
-                {selectedPosition.client_user_names.map((name: string, idx: number) => (
-                  <option key={idx} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id="client_user_name"
-                type="text"
-                {...register("client_user_name")}
-                placeholder="Masukkan nama PIC User (opsional)"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-colors focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              />
             )}
           </div>
 

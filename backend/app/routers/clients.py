@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db, require_role
 from app.core.phone_utils import PHONE_PATTERN as PIC_CONTACT_PATTERN
 from app.core.phone_utils import normalize_phone
+from app.models.application import Application
 from app.models.client import Client
 from app.models.position import Position
 from app.schemas.client import ClientCreate, ClientResponse, ClientUpdate
@@ -182,9 +183,13 @@ def update_client(
         # Tentukan pasangan rename: setiap nama lama yang masih ada di daftar baru
         # tapi telah berubah penulisannya (case-insensitive match pada kontak).
         # Strategi: pasangkan PIC lama ↔ baru berdasarkan kontak yang sama.
+        old_pics = client_service.client_pics(client)
+        old_names = [p["name"] for p in old_pics if p.get("name")]
+        new_names_lower = {p["name"].strip().lower() for p in pics if p.get("name")}
+
         old_contact_to_name = {
             p.get("contact"): p["name"]
-            for p in client_service.client_pics(client)
+            for p in old_pics
             if p.get("contact")
         }
         new_contact_to_name = {
@@ -197,6 +202,34 @@ def update_client(
             new_name = new_contact_to_name.get(contact)
             if new_name and new_name != old_name:
                 rename_map[old_name.lower()] = new_name
+
+        # Validasi penghapusan PIC:
+        # Jika ada PIC lama yang tidak ada di daftar baru dan tidak direname,
+        # pastikan tidak sedang digunakan oleh lamaran aktif.
+        deleted_pics = [
+            name for name in old_names
+            if name.strip().lower() not in new_names_lower and name.strip().lower() not in rename_map
+        ]
+        for deleted_name in deleted_pics:
+            active_app_count = (
+                db.query(Application)
+                .join(Position, Application.position_id == Position.id)
+                .filter(
+                    Position.client_id == client_id,
+                    Application.status == "active",
+                    func.lower(Application.client_user_name) == deleted_name.strip().lower(),
+                )
+                .count()
+            )
+            if active_app_count > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"PIC '{deleted_name}' tidak bisa dihapus karena ada {active_app_count} "
+                        f"lamaran aktif dengan PIC ini. Silakan buat PIC baru, alihkan posisi & "
+                        f"lamaran ke PIC baru terlebih dahulu."
+                    ),
+                )
 
         pic_name, pic_contact = client_service.pics_to_legacy(pics)
         client.pics = pics

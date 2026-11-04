@@ -537,7 +537,10 @@ function ClientFormModal({
         },
   });
 
+  const [formError, setFormError] = useState<string | null>(null);
+
   const onSubmit = async (data: Record<string, unknown>) => {
+    setFormError(null);
     // Validate per-row PIC errors
     if (picErrors.some((e) => e.contact || e.name)) return;
 
@@ -604,10 +607,15 @@ function ClientFormModal({
 
     const fullData = { ...data, pics: validPics };
 
-    if (isCreating) {
-      await onCreate(fullData as unknown as ClientCreateForm);
-    } else if (client) {
-      await onUpdate({ id: client.id, payload: fullData as unknown as ClientUpdateForm });
+    try {
+      if (isCreating) {
+        await onCreate(fullData as unknown as ClientCreateForm);
+      } else if (client) {
+        await onUpdate({ id: client.id, payload: fullData as unknown as ClientUpdateForm });
+      }
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, "Gagal menyimpan perubahan.");
+      setFormError(msg);
     }
   };
 
@@ -617,6 +625,15 @@ function ClientFormModal({
         <h2 className="text-headline-md font-semibold text-on-surface mb-4">
           {isCreating ? "Tambah Klien Baru" : `Edit Klien: ${client?.name}`}
         </h2>
+
+        {formError && (
+          <div className="mb-4 p-3 bg-error-container/40 border border-error/30 rounded-lg flex items-start gap-2 text-error text-body-sm">
+            <span className="material-symbols-outlined text-base mt-0.5 shrink-0">
+              warning
+            </span>
+            <div className="flex-1">{formError}</div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>

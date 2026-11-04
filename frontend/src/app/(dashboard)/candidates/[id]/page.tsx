@@ -283,7 +283,13 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
               <button
                 type="button"
                 onClick={() => setIsTalentPoolModalOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+                disabled={Boolean(candidate.is_blacklisted)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  candidate.is_blacklisted
+                    ? "Kandidat berstatus Blacklist tidak dapat dipindahkan ke Talent Pool"
+                    : "Pindahkan ke Talent Pool"
+                }
               >
                 <Users className="h-4 w-4" />
                 Pindahkan ke Talent Pool

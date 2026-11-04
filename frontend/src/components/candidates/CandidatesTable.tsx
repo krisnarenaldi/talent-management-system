@@ -332,6 +332,12 @@ export default function CandidatesTable({
     return c ? isCandidateInTalentPool(c) : false;
   });
 
+  const selectedBlacklistedCount = Array.from(selectedCandidateIds).filter((id) => {
+    const c = candidates.find((cand) => cand.id === id);
+    return c ? Boolean(c.is_blacklisted) : false;
+  }).length;
+  const canMoveSelectedToTalentPool = selectedBlacklistedCount === 0;
+
   return (
     <div className="space-y-6">
       {/* Floating Bulk Action Bar */}
@@ -355,7 +361,13 @@ export default function CandidatesTable({
                 <>
                   <button
                     onClick={handleBulkTalentPool}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700"
+                    disabled={!canMoveSelectedToTalentPool}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={
+                      !canMoveSelectedToTalentPool
+                        ? `${selectedBlacklistedCount} kandidat berstatus Blacklist tidak dapat dipindahkan ke Talent Pool`
+                        : undefined
+                    }
                   >
                     <Users className="h-4 w-4" />
                     Pindahkan ke Talent Pool
@@ -840,7 +852,7 @@ export default function CandidatesTable({
                                   Blacklist
                                 </span>
                               )}
-                              {isCandidateInTalentPool(candidate) && (
+                              {poolStatus !== "talent_pool" && isCandidateInTalentPool(candidate) && (
                                 <span
                                   className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 border border-emerald-200"
                                   title="Kandidat berstatus Talent Pool"
@@ -977,8 +989,13 @@ export default function CandidatesTable({
                               <button
                                 type="button"
                                 onClick={() => setRowTalentPoolCandidate(candidate)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm transition-all hover:bg-emerald-100"
-                                title="Pindahkan ke Talent Pool"
+                                disabled={Boolean(candidate.is_blacklisted)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm transition-all hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={
+                                  candidate.is_blacklisted
+                                    ? "Kandidat berstatus Blacklist tidak dapat dipindahkan ke Talent Pool"
+                                    : "Pindahkan ke Talent Pool"
+                                }
                               >
                                 <Users className="h-3.5 w-3.5" />
                                 Talent Pool

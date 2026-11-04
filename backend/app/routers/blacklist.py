@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -317,6 +317,16 @@ def approve_blacklist(
             app.current_stage = "Rejected"
             rejected_count += 1
         if rejected_count > 0:
+            db.commit()
+
+        # Auto-remove from talent pool if candidate was in talent pool
+        candidate = db.get(Candidate, blacklist.candidate_id)
+        if candidate and candidate.pool_status in ("talent_pool", "future_lead"):
+            candidate.pool_status = "database"
+            candidate.talent_pool_reason = None
+            candidate.talent_pool_notes = None
+            candidate.talent_pool_updated_at = datetime.now(timezone.utc)
+            candidate.talent_pool_updated_by = current_user.id
             db.commit()
 
         # Notify HR/users about rejections
