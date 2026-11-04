@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
 import { useToastStore } from "@/stores/toast.store";
+import { useModalEscape } from "@/hooks/useModalEscape";
 import { getErrorMessage } from "@/lib/errors";
 import TagInput from "@/components/shared/TagInput";
 import type { Candidate, CandidateEducation, CandidateExperience, SourceChannel } from "@/types";
@@ -135,6 +136,14 @@ export default function CandidateForm({
     queryFn: () => settingsApi.listSourceChannels({ is_active: true }),
   });
   const skillInputRef = useRef<HTMLInputElement>(null);
+
+  const closeUploadModal = () => {
+    setShowUploadModal(false);
+    setUploadFile(null);
+    if (uploadInputRef.current) uploadInputRef.current.value = "";
+  };
+
+  useModalEscape(closeUploadModal, showUploadModal && !isUploading);
 
   const form = useForm<CandidateFormValues>({
     resolver: zodResolver(candidateFormSchema),
@@ -860,11 +869,7 @@ export default function CandidateForm({
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setShowUploadModal(false);
-                  setUploadFile(null);
-                  if (uploadInputRef.current) uploadInputRef.current.value = "";
-                }}
+                onClick={closeUploadModal}
                 className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               >
                 <span className="material-symbols-outlined text-xl">close</span>
@@ -906,11 +911,7 @@ export default function CandidateForm({
             <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
               <button
                 type="button"
-                onClick={() => {
-                  setShowUploadModal(false);
-                  setUploadFile(null);
-                  if (uploadInputRef.current) uploadInputRef.current.value = "";
-                }}
+                onClick={closeUploadModal}
                 disabled={isUploading}
                 className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
               >
