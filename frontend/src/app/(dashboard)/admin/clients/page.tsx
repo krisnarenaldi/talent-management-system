@@ -17,6 +17,7 @@ import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
 import { getClientPics } from "@/lib/clients";
 import { normalizePhone } from "@/lib/phone";
+import DeactivateClientButton from "@/components/clients/DeactivateClientButton";
 
 const clientPicSchema = z.object({
   name: z.string().trim().min(1, "Nama PIC wajib diisi").max(255, "Nama PIC maksimal 255 karakter"),
@@ -74,7 +75,6 @@ export default function AdminClientsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [deleteConfirmClient, setDeleteConfirmClient] = useState<Client | null>(null);
 
   const authorized = !!user && isRole("admin", "hr", "manager");
 
@@ -135,18 +135,6 @@ export default function AdminClientsPage() {
     },
     onError: (err: unknown) => {
       showToast("error", getErrorMessage(err, "Gagal memperbarui klien."));
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/v1/clients/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      setDeleteConfirmClient(null);
-      showToast("success", "Klien berhasil dinonaktifkan.");
-    },
-    onError: (err: unknown) => {
-      showToast("error", getErrorMessage(err, "Gagal menonaktifkan klien."));
     },
   });
 
@@ -369,15 +357,15 @@ export default function AdminClientsPage() {
                           {isRole("admin") && (
                             <>
                               {client.is_active ? (
-                                <button
-                                  onClick={() => setDeleteConfirmClient(client)}
-                                  className="p-1 text-on-surface-variant hover:text-error transition-colors"
-                                  title="Nonaktifkan"
-                                >
-                                  <span className="material-symbols-outlined text-lg">
-                                    delete
-                                  </span>
-                                </button>
+                                <DeactivateClientButton
+                                  client={client}
+                                  onSuccess={() => {
+                                    queryClient.invalidateQueries({ queryKey: ["clients"] });
+                                    queryClient.invalidateQueries({ queryKey: ["positions"] });
+                                    queryClient.invalidateQueries({ queryKey: ["positions-by-client"] });
+                                  }}
+                                  compact
+                                />
                               ) : (
                                 <button
                                   onClick={() => handleReactivate(client)}
@@ -430,16 +418,6 @@ export default function AdminClientsPage() {
             onUpdate={updateMutation.mutateAsync}
             isCreatingPending={createMutation.isPending}
             isUpdatingPending={updateMutation.isPending}
-          />
-        )}
-
-        {/* Delete Confirm Modal */}
-        {deleteConfirmClient && (
-          <DeleteConfirmModal
-            client={deleteConfirmClient}
-            onClose={() => setDeleteConfirmClient(null)}
-            onConfirm={() => deleteMutation.mutate(deleteConfirmClient.id)}
-            isPending={deleteMutation.isPending}
           />
         )}
       </div>
@@ -774,60 +752,4 @@ function ClientFormModal({
   );
 }
 
-function DeleteConfirmModal({
-  client,
-  onClose,
-  onConfirm,
-  isPending,
-}: {
-  client: Client;
-  onClose: () => void;
-  onConfirm: () => void;
-  isPending: boolean;
-}) {
-  useModalEscape(onClose, !isPending);
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 w-full max-w-md mx-4">
-        <div className="flex items-center gap-3 mb-4">
-          <span className="material-symbols-outlined text-2xl text-error">
-            warning
-          </span>
-          <h2 className="text-headline-md font-semibold text-on-surface">
-            Konfirmasi Nonaktifkan Klien
-          </h2>
-        </div>
-        <p className="text-body-sm text-on-surface-variant mb-6">
-          Nonaktifkan klien{" "}
-          <span className="font-medium text-on-surface">{client.name}</span>?
-          Klien yang dinonaktifkan tidak dapat dipilih untuk posisi baru.
-        </p>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isPending}
-            className="flex-1 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-medium hover:bg-surface-container-highest transition-colors disabled:opacity-50"
-          >
-            Batal
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isPending}
-            className="flex-1 px-4 py-2 bg-error-container hover:bg-error-container/90 text-on-error-container rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-wait"
-          >
-            {isPending ? (
-              <span className="material-symbols-outlined text-lg animate-spin">
-                progress_activity
-              </span>
-            ) : (
-              <span className="material-symbols-outlined text-lg">check</span>
-            )}
-            Nonaktifkan
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+

@@ -10,6 +10,8 @@ import { useToastStore } from "@/stores/toast.store";
 interface DeactivatePositionButtonProps {
   position: { id: string; title: string };
   onSuccess?: () => void;
+  /** Tampilkan sebagai icon button kecil (untuk kolom aksi tabel). Default: false (tombol penuh). */
+  compact?: boolean;
 }
 
 /**
@@ -20,6 +22,7 @@ interface DeactivatePositionButtonProps {
 export default function DeactivatePositionButton({
   position,
   onSuccess,
+  compact = false,
 }: DeactivatePositionButtonProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -68,14 +71,25 @@ export default function DeactivatePositionButton({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={openModal}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-error-container hover:bg-error-container/90 text-on-error-container rounded-lg font-medium transition-colors"
-      >
-        <span className="material-symbols-outlined text-lg">block</span>
-        Non-aktifkan Posisi
-      </button>
+      {compact ? (
+        <button
+          type="button"
+          onClick={openModal}
+          className="p-1 text-on-surface-variant hover:text-error transition-colors"
+          title="Nonaktifkan Posisi"
+        >
+          <span className="material-symbols-outlined text-lg">block</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={openModal}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-error-container hover:bg-error-container/90 text-on-error-container rounded-lg font-medium transition-colors"
+        >
+          <span className="material-symbols-outlined text-lg">block</span>
+          Non-aktifkan Posisi
+        </button>
+      )}
 
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">

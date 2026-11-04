@@ -19,6 +19,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { getClientPics } from "@/lib/clients";
 import TagInput from "@/components/shared/TagInput";
 import RupiahInput from "@/components/shared/RupiahInput";
+import DeactivatePositionButton from "@/components/positions/DeactivatePositionButton";
 
 const optionalNumber = z.preprocess(
   (val) => {
@@ -259,10 +260,10 @@ export default function AdminClientPositionsPage() {
     },
   });
 
-  const handleToggleActive = (position: Position) => {
+  const handleReactivate = (position: Position) => {
     updateMutation.mutate({
       id: position.id,
-      payload: { is_active: !position.is_active },
+      payload: { is_active: true },
     });
   };
 
@@ -455,7 +456,7 @@ export default function AdminClientPositionsPage() {
                         {format(new Date(position.updated_at), "dd MMM yyyy", { locale: idLocale })}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-1">
+                        <div className="flex justify-end gap-1 items-center">
                           {isRole("admin", "manager") && (
                             <>
                               <button
@@ -466,16 +467,17 @@ export default function AdminClientPositionsPage() {
                                 <span className="material-symbols-outlined text-lg">edit</span>
                               </button>
                               {position.is_active ? (
-                                <button
-                                  onClick={() => handleToggleActive(position)}
-                                  className="p-1 text-on-surface-variant hover:text-warning transition-colors"
-                                  title="Nonaktifkan"
-                                >
-                                  <span className="material-symbols-outlined text-lg">toggle_off</span>
-                                </button>
+                                <DeactivatePositionButton
+                                  position={position}
+                                  onSuccess={() => {
+                                    queryClient.invalidateQueries({ queryKey: ["positions"] });
+                                    queryClient.invalidateQueries({ queryKey: ["positions-by-client"] });
+                                  }}
+                                  compact
+                                />
                               ) : (
                                 <button
-                                  onClick={() => handleToggleActive(position)}
+                                  onClick={() => handleReactivate(position)}
                                   className="p-1 text-on-surface-variant hover:text-primary transition-colors"
                                   title="Aktifkan kembali"
                                 >
