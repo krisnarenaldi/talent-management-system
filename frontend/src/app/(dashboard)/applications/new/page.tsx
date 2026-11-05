@@ -51,7 +51,6 @@ export default function NewApplicationPage() {
   // Multi-kandidat untuk form manual
   const [selectedCandidates, setSelectedCandidates] = useState<Candidate[]>([]);
   const manualCandidateInputRef = useRef<HTMLInputElement>(null);
-  const [showBlacklistModal, setShowBlacklistModal] = useState(false);
   const [showCooldownModal, setShowCooldownModal] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState<string>("");
   const [pendingFormValues, setPendingFormValues] = useState<FormValues | null>(null);
@@ -113,7 +112,8 @@ export default function NewApplicationPage() {
       const response = await api.get("/api/v1/candidates", {
         params: { search: candidateSearch, limit: 20 },
       });
-      return response.data as Candidate[];
+      // Sesuai filosofi Blacklist: kandidat dalam status blacklist tidak dimunculkan pada pencarian lamaran
+      return ((response.data as Candidate[]) ?? []).filter((c) => !c.is_blacklisted);
     },
     enabled: candidateSearch.length >= 2,
     staleTime: 5 * 60 * 1000,
@@ -263,12 +263,6 @@ export default function NewApplicationPage() {
         if (msg.includes("pernah ditolak")) {
           setCooldownMessage(msg);
           setShowCooldownModal(true);
-          return;
-        }
-        // Blacklist error dari backend (fallback jika pre-check di onSubmit tidak menangkap)
-        // → tampilkan modal konfirmasi yang sama dengan alur blacklist normal
-        if (msg.includes("blacklist")) {
-          setShowBlacklistModal(true);
           return;
         }
       }
@@ -467,27 +461,9 @@ export default function NewApplicationPage() {
       });
       return;
     }
-    // Single kandidat: alur lama dengan blacklist/cooldown check
-    if (selectedCandidate?.is_blacklisted) {
-      setPendingFormValues(values);
-      setShowBlacklistModal(true);
-      showToast("warning", `Peringatan: Kandidat ${selectedCandidate.full_name} sedang dalam daftar blacklist.`);
-      return;
-    }
+    // Single kandidat: cek cooldown jika ada penolakan sebelumnya
     setPendingFormValues(values);
     createMutation.mutate({ ...values, candidate_id: selectedCandidates[0].id });
-  };
-
-  const handleConfirmBlacklisted = () => {
-    if (!pendingFormValues) return;
-    setShowBlacklistModal(false);
-    createMutation.mutate({ ...pendingFormValues, candidate_id: selectedCandidates[0]?.id ?? pendingFormValues.candidate_id, force_blacklisted: true });
-    setPendingFormValues(null);
-  };
-
-  const handleCancelBlacklisted = () => {
-    setShowBlacklistModal(false);
-    setPendingFormValues(null);
   };
 
   const handleConfirmCooldown = () => {
@@ -502,7 +478,6 @@ export default function NewApplicationPage() {
     setCooldownMessage("");
   };
 
-  useModalEscape(handleCancelBlacklisted, showBlacklistModal && !createMutation.isPending);
   useModalEscape(handleCancelCooldown, showCooldownModal && !createMutation.isPending);
 
   return (
@@ -1050,13 +1025,8 @@ export default function NewApplicationPage() {
               {selectedCandidates.map((candidate) => (
                 <span
                   key={candidate.id}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-                    candidate.is_blacklisted
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-blue-100 text-blue-800"
-                  }`}
+                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-800"
                 >
-                  {candidate.is_blacklisted && <span title="Blacklist">⚠</span>}
                   {candidate.full_name}
                   <button
                     type="button"
@@ -1154,26 +1124,14 @@ export default function NewApplicationPage() {
           {selectedCandidates.length > 0 && (
             <div className="space-y-2">
               {selectedCandidates.length === 1 && (
-                <div className={`rounded-lg px-4 py-3 text-sm border ${selectedCandidates[0].is_blacklisted ? "bg-amber-50 border-amber-300" : "bg-blue-50 border-blue-200"}`}>
-                  <div className="flex items-center gap-2">
-                    <p className={`font-medium ${selectedCandidates[0].is_blacklisted ? "text-amber-900" : "text-blue-900"}`}>
-                      {selectedCandidates[0].full_name}
-                    </p>
-                    {selectedCandidates[0].is_blacklisted && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                        ⚠ Blacklist
-                      </span>
-                    )}
-                  </div>
-                  <p className={`text-xs mt-1 ${selectedCandidates[0].is_blacklisted ? "text-amber-700" : "text-blue-700"}`}>
+                <div className="rounded-lg px-4 py-3 text-sm border bg-blue-50 border-blue-200">
+                  <p className="font-medium text-blue-900">
+                    {selectedCandidates[0].full_name}
+                  </p>
+                  <p className="text-xs mt-1 text-blue-700">
                     {selectedCandidates[0].email && `Email: ${selectedCandidates[0].email}  •  `}
                     {selectedCandidates[0].phone && `HP: ${selectedCandidates[0].phone}`}
                   </p>
-                  {selectedCandidates[0].is_blacklisted && (
-                    <p className="mt-1.5 text-xs text-amber-800 font-medium">
-                      Kandidat ini terdaftar dalam blacklist. Anda masih dapat melanjutkan, namun konfirmasi diperlukan.
-                    </p>
-                  )}
                 </div>
               )}
               {selectedCandidates.length > 1 && (
@@ -1183,11 +1141,6 @@ export default function NewApplicationPage() {
                   </p>
                   <p className="text-xs text-blue-700 mt-1">
                     Semua kandidat akan didaftarkan ke posisi yang sama sekaligus.
-                    {selectedCandidates.some((c) => c.is_blacklisted) && (
-                      <span className="ml-1 font-medium text-amber-700">
-                        ⚠ Beberapa kandidat dalam blacklist — akan diproses dengan force.
-                      </span>
-                    )}
                   </p>
                 </div>
               )}
@@ -1252,47 +1205,6 @@ export default function NewApplicationPage() {
           </button>
         </div>
       </form>
-
-      {/* ── Blacklist Confirmation Modal ──────────────────────────────────────── */}
-      {showBlacklistModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-amber-200 p-6 space-y-4 mx-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 rounded-full bg-amber-100 p-2">
-                <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Kandidat Dalam Blacklist</h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  Kandidat <span className="font-semibold text-amber-800">{selectedCandidate?.full_name}</span> saat ini terdaftar dalam daftar blacklist.
-                </p>
-                <p className="mt-2 text-sm text-gray-700">
-                  Apakah Anda yakin ingin tetap melanjutkan proses Application untuk kandidat ini?
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleCancelBlacklisted}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmBlacklisted}
-                disabled={createMutation.isPending}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-              >
-                {createMutation.isPending ? "Menyimpan..." : "Ya, Lanjutkan"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Cooldown Confirmation Modal ──────────────────────────────────────── */}
       {showCooldownModal && (
