@@ -69,7 +69,13 @@ def list_employees(
                 )
             )
         )
-    employees = query.distinct().offset(skip).limit(limit).all()
+    employees = (
+        query.distinct()
+        .order_by(Employee.full_name.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     # Compute age and contract duration running for each employee
     for emp in employees:

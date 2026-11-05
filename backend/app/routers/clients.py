@@ -93,7 +93,7 @@ def list_clients(
         )
     if is_active is not None:
         query = query.filter(Client.is_active == is_active)
-    return query.all()
+    return query.order_by(Client.name.asc()).all()
 
 
 @router.get("/{client_id}", response_model=ClientResponse)

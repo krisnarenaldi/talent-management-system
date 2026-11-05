@@ -60,7 +60,7 @@ def list_positions_by_client(
         )
         .join(Position, Position.client_id == Client.id)
         .group_by(Client.id, Client.name)
-        .order_by(Client.name)
+        .order_by(func.max(Position.created_at).desc())
         .all()
     )
     return [
@@ -92,7 +92,7 @@ def list_positions(
     if search:
         pattern = f"%{search}%"
         query = query.filter(Position.title.ilike(pattern))
-    return query.all()
+    return query.order_by(Position.created_at.desc()).all()
 
 
 @router.post("", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)
