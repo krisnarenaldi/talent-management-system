@@ -166,7 +166,7 @@ def _get_excel_response_for_candidates(
     if max_expected_salary is not None:
         query = query.filter(Candidate.expected_salary <= max_expected_salary)
 
-    candidates = query.all()
+    candidates = query.order_by(Candidate.full_name.asc()).all()
 
     # ── Determine dynamic column counts ─────────────────────────────────────
     max_educations = max((len(c.educations) for c in candidates), default=0)
@@ -492,7 +492,7 @@ def _get_excel_response_for_pipeline(
     if end_date:
         query = query.filter(Application.created_at <= end_date)
 
-    applications = query.all()
+    applications = query.order_by(Candidate.full_name.asc()).all()
 
     # Create workbook
     wb = Workbook()
@@ -606,7 +606,7 @@ def _get_excel_response_for_incomplete_candidates(
             Application.position_id == position_id
         )
 
-    candidates = query.all()
+    candidates = query.order_by(Candidate.full_name.asc()).all()
 
     # Create workbook
     wb = Workbook()
