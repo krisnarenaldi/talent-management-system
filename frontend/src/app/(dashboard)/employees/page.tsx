@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -17,11 +17,24 @@ const STATUS_OPTIONS = [
 export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [placementFilter, setPlacementFilter] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expiryDays, setExpiryDays] = useState("");
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  // Debounce search: send query 400ms after user stops typing
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setSearchQuery(value.trim());
+      setCurrentPage(1);
+    }, 400);
+  };
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
@@ -39,11 +52,12 @@ export default function EmployeesPage() {
   };
 
   const { data: employees = [], isLoading } = useQuery({
-    queryKey: ["employees", { statusFilter, placementFilter, expiryDays, sortBy, sortOrder, currentPage, itemsPerPage }],
+    queryKey: ["employees", { statusFilter, placementFilter, searchQuery, expiryDays, sortBy, sortOrder, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchEmployees({
         status: statusFilter || undefined,
         placement: placementFilter || undefined,
+        search: searchQuery || undefined,
         contract_expiry_within_days: expiryDays ? Number(expiryDays) : undefined,
         sort_by: sortBy || undefined,
         sort_order: sortOrder,
@@ -66,14 +80,32 @@ export default function EmployeesPage() {
 
       {/* Filter bar */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
+          {/* Search name / phone */}
+          <div className="md:col-span-1">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Cari Nama / No HP
+            </label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-gray-400">
+                search
+              </span>
+              <input
+                value={searchInput}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Cari nama atau no HP…"
+                className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
               Status Karyawan
             </label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               {STATUS_OPTIONS.map((o) => (
@@ -88,7 +120,7 @@ export default function EmployeesPage() {
             </label>
             <input
               value={placementFilter}
-              onChange={(e) => setPlacementFilter(e.target.value)}
+              onChange={(e) => { setPlacementFilter(e.target.value); setCurrentPage(1); }}
               placeholder="Cari penempatan…"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
@@ -100,7 +132,7 @@ export default function EmployeesPage() {
             </label>
             <select
               value={expiryDays}
-              onChange={(e) => setExpiryDays(e.target.value)}
+              onChange={(e) => { setExpiryDays(e.target.value); setCurrentPage(1); }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             >
               <option value="">Semua</option>

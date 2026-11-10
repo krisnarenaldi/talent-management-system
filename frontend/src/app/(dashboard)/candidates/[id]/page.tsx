@@ -54,8 +54,10 @@ async function fetchCandidateExperience(id: string): Promise<CandidateExperience
   return response.data;
 }
 
-async function fetchApplications(): Promise<Application[]> {
-  const response = await api.get("/api/v1/applications");
+async function fetchCandidateApplications(candidateId: string): Promise<Application[]> {
+  const response = await api.get("/api/v1/applications", {
+    params: { candidate_id: candidateId, limit: 100 },
+  });
   return response.data;
 }
 
@@ -106,10 +108,7 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
 
   const { data: applications = [] } = useQuery({
     queryKey: ["candidate-applications", id],
-    queryFn: async () => {
-      const result = await fetchApplications();
-      return result.filter((application) => application.candidate_id === id);
-    },
+    queryFn: () => fetchCandidateApplications(id),
   });
 
   // Fetch detail (with stage_history) for each application — used in Catatan tab

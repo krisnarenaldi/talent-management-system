@@ -208,6 +208,7 @@ def _find_cooldown_blocking_application(
 
 @router.get("", response_model=list[ApplicationResponse])
 def list_applications(
+    candidate_id: str | None = Query(None),
     position_id: str | None = Query(None),
     status_filter: str | None = Query(None),
     current_stage: str | None = Query(None),
@@ -245,6 +246,14 @@ def list_applications(
                 Position.title.ilike(pattern),
             )
         )
+    if candidate_id:
+        # Include candidate's own applications as well as any siblings (same email or phone)
+        target_candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if target_candidate:
+            candidate_ids = {str(target_candidate.id)} | _get_sibling_candidate_ids(db, target_candidate)
+            query = query.filter(Application.candidate_id.in_(list(candidate_ids)))
+        else:
+            query = query.filter(Application.candidate_id == candidate_id)
     if position_id:
         query = query.filter(Application.position_id == position_id)
     if status_filter:

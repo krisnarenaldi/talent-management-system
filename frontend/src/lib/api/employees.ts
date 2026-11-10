@@ -14,6 +14,7 @@ import type {
 export async function fetchEmployees(params?: {
   status?: string;
   placement?: string;
+  search?: string;
   contract_expiry_within_days?: number;
   sort_by?: string;
   sort_order?: "asc" | "desc";
