@@ -84,6 +84,7 @@ def get_employee_details(db: Session, employee_id: str):
             joinedload(Employee.contracts),
             joinedload(Employee.payroll),
             joinedload(Employee.documents),
+            joinedload(Employee.candidate),
         )
         .filter(Employee.id == employee_id)
         .first()
@@ -107,5 +108,6 @@ def get_employee_details(db: Session, employee_id: str):
     # Attach computed fields to the employee object (for response)
     employee.age = age
     employee.contract_duration_running = contract_duration_running
+    employee.skills = employee.candidate.skills if employee.candidate else []
 
     return employee

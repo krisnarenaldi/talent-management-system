@@ -161,10 +161,13 @@ def update_employee(
 
     db.commit()
 
-    # Re-query dengan eager-load contracts agar tidak lazy-load + compute fields
+    # Re-query dengan eager-load contracts & candidate agar tidak lazy-load + compute fields
     employee = (
         db.query(Employee)
-        .options(joinedload(Employee.contracts))
+        .options(
+            joinedload(Employee.contracts),
+            joinedload(Employee.candidate),
+        )
         .filter(Employee.id == employee_id)
         .first()
     )
@@ -175,6 +178,7 @@ def update_employee(
             contract_duration = employee_service.calculate_contract_duration(contract.join_date)
             break
     employee.contract_duration_running = contract_duration
+    employee.skills = employee.candidate.skills if employee.candidate else []
 
     return employee
 

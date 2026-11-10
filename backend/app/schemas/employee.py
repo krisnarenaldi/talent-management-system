@@ -61,6 +61,7 @@ class EmployeeResponse(EmployeeBase):
     age: Optional[int] = None
     contract_duration_running: Optional[int] = None
     is_blacklisted: bool = False
+    skills: Optional[list[str]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

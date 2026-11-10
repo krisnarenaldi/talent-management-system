@@ -23,6 +23,7 @@ import {
   deleteLeave,
 } from "@/lib/api/employees";
 import EmployeeDocumentUploader from "@/components/employees/EmployeeDocumentUploader";
+import QualificationsTab from "@/components/employees/QualificationsTab";
 import CandidateDocumentUploader from "@/components/candidates/DocumentUploader";
 import CandidateCVPanel from "@/components/candidates/CandidateCVPanel";
 import type { Employee, EmployeeContract, EmployeePayroll, EmployeeLeave } from "@/types";
@@ -832,6 +833,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
 
   const tabs = [
     { key: "data", label: "Data Pribadi" },
+    { key: "qualifications", label: "Skill & Pengalaman" },
     { key: "contracts", label: "Kontrak" },
     ...(canViewPayroll ? [{ key: "payroll", label: "Payroll" }] : []),
     { key: "documents", label: "Dokumen" },
@@ -895,6 +897,12 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
 
       <div className="py-2">
         {activeTab === "data" && <PersonalDataTab employee={employee} />}
+        {activeTab === "qualifications" && (
+          <QualificationsTab
+            candidateId={employee.candidate_id}
+            initialSkills={employee.skills || []}
+          />
+        )}
         {activeTab === "contracts" && <ContractsTab employeeId={id} />}
         {activeTab === "payroll" && canViewPayroll && <PayrollTab employeeId={id} />}
         {activeTab === "documents" && <DocumentsTab employeeId={id} candidateId={employee.candidate_id} />}

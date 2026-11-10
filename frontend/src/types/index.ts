@@ -282,6 +282,7 @@ export interface Employee {
   age?: number;
   contract_duration_running?: number;
   is_blacklisted?: boolean;
+  skills?: string[];
   created_at?: string;
   updated_at?: string;
 }
