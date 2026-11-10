@@ -212,6 +212,7 @@ def list_applications(
     recruiter_id: str | None = Query(None),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    search: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -220,6 +221,7 @@ def list_applications(
     query = (
         db.query(Application)
         .join(Candidate, Application.candidate_id == Candidate.id)
+        .join(Position, Application.position_id == Position.id)
         .options(
             joinedload(Application.position).joinedload(Position.client),
             joinedload(Application.recruiter),
@@ -228,6 +230,15 @@ def list_applications(
             joinedload(Application.candidate).joinedload(Candidate.blacklists),
         )
     )
+    if search:
+        pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                Candidate.full_name.ilike(pattern),
+                Candidate.email.ilike(pattern),
+                Position.title.ilike(pattern),
+            )
+        )
     if position_id:
         query = query.filter(Application.position_id == position_id)
     if status_filter:

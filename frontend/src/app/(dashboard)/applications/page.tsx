@@ -321,6 +321,7 @@ function ApplicationsPipeline() {
   const initialStatus = searchParams.get("status") || searchParams.get("status_filter") || "";
   const initialPositionId = searchParams.get("position_id") || "";
 
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [stageFilter, setStageFilter] = useState(initialStage);
   const [positionIdFilter, setPositionIdFilter] = useState(initialPositionId);
@@ -350,9 +351,10 @@ function ApplicationsPipeline() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["applications", { statusFilter, stageFilter, positionIdFilter, startDate, endDate, currentPage, itemsPerPage }],
+    queryKey: ["applications", { searchTerm, statusFilter, stageFilter, positionIdFilter, startDate, endDate, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchApplications({
+        search: searchTerm.trim() || undefined,
         status_filter: statusFilter || undefined,
         current_stage: stageFilter || undefined,
         position_id: positionIdFilter || undefined,
@@ -509,7 +511,32 @@ function ApplicationsPipeline() {
 
       {/* Filter bar */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+          <div className="lg:col-span-2">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Cari</label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={handleFilterChange(setSearchTerm)}
+                placeholder="Cari kandidat, email, posisi..."
+                className="w-full rounded-lg border border-gray-300 pl-9 pr-8 py-2 text-sm outline-none focus:border-primary"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setCurrentPage(1);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              )}
+            </div>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Status</label>
             <select
