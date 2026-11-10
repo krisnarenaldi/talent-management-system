@@ -507,7 +507,6 @@ def _get_excel_response_for_pipeline(
     # Header row
     headers = [
         "No",
-        "ID Lamaran",
         "Nama Kandidat",
         "Email Kandidat",
         "Phone Kandidat",
@@ -547,7 +546,6 @@ def _get_excel_response_for_pipeline(
 
         row_data = [
             idx,
-            str(app.id),
             app.candidate_name or "",
             app.candidate.email if app.candidate else "",
             app.candidate.phone if app.candidate else "",

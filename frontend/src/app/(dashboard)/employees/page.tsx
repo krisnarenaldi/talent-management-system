@@ -18,16 +18,35 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [placementFilter, setPlacementFilter] = useState("");
   const [expiryDays, setExpiryDays] = useState("");
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      if (sortOrder === "asc") {
+        setSortOrder("desc");
+      } else {
+        setSortBy(null);
+        setSortOrder("asc");
+      }
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+    setCurrentPage(1);
+  };
+
   const { data: employees = [], isLoading } = useQuery({
-    queryKey: ["employees", { statusFilter, placementFilter, expiryDays, currentPage, itemsPerPage }],
+    queryKey: ["employees", { statusFilter, placementFilter, expiryDays, sortBy, sortOrder, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchEmployees({
         status: statusFilter || undefined,
         placement: placementFilter || undefined,
         contract_expiry_within_days: expiryDays ? Number(expiryDays) : undefined,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
         skip: (currentPage - 1) * itemsPerPage,
         limit: itemsPerPage,
       }),
@@ -99,13 +118,88 @@ export default function EmployeesPage() {
           <table className="min-w-full text-left text-sm text-gray-700">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
               <tr>
-                <th className="px-4 py-3">Nama</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("name")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Nama</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "name"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
                 <th className="px-4 py-3">NIK / NIP</th>
-                <th className="px-4 py-3">Penempatan</th>
-                <th className="px-4 py-3">Posisi</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("placement")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Penempatan</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "placement"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("position")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Posisi</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "position"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Kontrak Berjalan</th>
-                <th className="px-4 py-3">Umur</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("contract")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Kontrak Berjalan</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "contract"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("age")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Umur</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "age"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
                 <th className="px-4 py-3">Email</th>
               </tr>
             </thead>

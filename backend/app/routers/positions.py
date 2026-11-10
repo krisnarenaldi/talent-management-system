@@ -79,6 +79,8 @@ def list_positions(
     client_id: str | None = Query(None),
     is_active: bool | None = Query(None),
     search: str | None = Query(None),
+    sort_by: str | None = Query(None),
+    sort_order: str = Query("asc"),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
@@ -92,7 +94,24 @@ def list_positions(
     if search:
         pattern = f"%{search}%"
         query = query.filter(Position.title.ilike(pattern))
-    return query.order_by(Position.created_at.desc()).all()
+
+    is_desc = (sort_order or "asc").lower() == "desc"
+    if sort_by == "title" or sort_by == "position":
+        order_col = Position.title.desc() if is_desc else Position.title.asc()
+        query = query.order_by(order_col)
+    elif sort_by == "salary_budget" or sort_by == "budget":
+        order_col = Position.salary_budget.desc().nullslast() if is_desc else Position.salary_budget.asc().nullslast()
+        query = query.order_by(order_col, Position.title.asc())
+    elif sort_by == "created_at" or sort_by == "dibuat":
+        order_col = Position.created_at.desc() if is_desc else Position.created_at.asc()
+        query = query.order_by(order_col)
+    elif sort_by == "updated_at" or sort_by == "diubah":
+        order_col = Position.updated_at.desc() if is_desc else Position.updated_at.asc()
+        query = query.order_by(order_col)
+    else:
+        query = query.order_by(Position.created_at.desc())
+
+    return query.all()
 
 
 @router.post("", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)

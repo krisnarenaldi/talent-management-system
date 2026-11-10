@@ -43,6 +43,8 @@ def list_employees(
     contract_expiry_within_days: Optional[int] = Query(
         None, description="Filter employees whose active contract expires within N days"
     ),
+    sort_by: Optional[str] = Query(None),
+    sort_order: str = Query("asc"),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
@@ -69,9 +71,43 @@ def list_employees(
                 )
             )
         )
+
+    is_desc = (sort_order or "asc").lower() == "desc"
+    if sort_by == "name" or sort_by == "full_name":
+        order_col = Employee.full_name.desc() if is_desc else Employee.full_name.asc()
+        query = query.order_by(order_col)
+    elif sort_by == "placement":
+        order_col = Employee.placement.desc().nullslast() if is_desc else Employee.placement.asc().nullslast()
+        query = query.order_by(order_col, Employee.full_name.asc())
+    elif sort_by == "position" or sort_by == "role_level":
+        order_col = Employee.role_level.desc().nullslast() if is_desc else Employee.role_level.asc().nullslast()
+        query = query.order_by(order_col, Employee.full_name.asc())
+    elif sort_by == "age" or sort_by == "umur":
+        # Older age means earlier birth_date! So asc age = birth_date desc, desc age = birth_date asc
+        order_col = Employee.birth_date.asc().nullslast() if is_desc else Employee.birth_date.desc().nullslast()
+        query = query.order_by(order_col, Employee.full_name.asc())
+    elif sort_by == "contract" or sort_by == "contract_running":
+        # Sort by active contract join_date.
+        # Running duration = today - join_date.
+        # Longer duration running (desc duration) means earlier join_date (asc join_date).
+        active_contract_stmt = (
+            select(
+                EmployeeContract.employee_id,
+                func.min(EmployeeContract.join_date).label("active_join_date")
+            )
+            .where(EmployeeContract.status == "aktif")
+            .group_by(EmployeeContract.employee_id)
+            .subquery()
+        )
+        query = query.outerjoin(active_contract_stmt, Employee.id == active_contract_stmt.c.employee_id)
+        # If is_desc (longest duration first) -> smallest join_date first (asc join_date)
+        order_col = active_contract_stmt.c.active_join_date.asc().nullslast() if is_desc else active_contract_stmt.c.active_join_date.desc().nullslast()
+        query = query.order_by(order_col, Employee.full_name.asc())
+    else:
+        query = query.order_by(Employee.full_name.asc())
+
     employees = (
         query.distinct()
-        .order_by(Employee.full_name.asc())
         .offset(skip)
         .limit(limit)
         .all()

@@ -73,8 +73,24 @@ export default function AdminClientsPage() {
   // — semua hooks wajib di atas early return —
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      if (sortOrder === "asc") {
+        setSortOrder("desc");
+      } else {
+        setSortBy(null);
+        setSortOrder("asc");
+      }
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+  };
 
   const authorized = !!user && isRole("admin", "hr", "manager");
 
@@ -84,7 +100,7 @@ export default function AdminClientsPage() {
     isError,
     error,
   } = useQuery<ClientsResponse>({
-    queryKey: ["clients", { search: searchTerm, status: statusFilter }],
+    queryKey: ["clients", { search: searchTerm, status: statusFilter, sortBy, sortOrder }],
     queryFn: () =>
       fetchClients({
         search: searchTerm || undefined,
@@ -94,6 +110,8 @@ export default function AdminClientsPage() {
             : statusFilter === "inactive"
               ? false
               : undefined,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
       }),
     enabled: authorized,
   });
@@ -261,10 +279,36 @@ export default function AdminClientsPage() {
                 <thead>
                   <tr className="bg-surface-container-low text-label-md text-on-surface-variant">
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Nama Klien
+                      <button
+                        type="button"
+                        onClick={() => handleSort("name")}
+                        className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-on-surface-variant hover:text-primary transition-colors"
+                      >
+                        <span>Nama Klien</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {sortBy === "name"
+                            ? sortOrder === "asc"
+                              ? "arrow_upward"
+                              : "arrow_downward"
+                            : "unfold_more"}
+                        </span>
+                      </button>
                     </th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Industri
+                      <button
+                        type="button"
+                        onClick={() => handleSort("industry")}
+                        className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-on-surface-variant hover:text-primary transition-colors"
+                      >
+                        <span>Industri</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {sortBy === "industry"
+                            ? sortOrder === "asc"
+                              ? "arrow_upward"
+                              : "arrow_downward"
+                            : "unfold_more"}
+                        </span>
+                      </button>
                     </th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">
                       PIC
@@ -276,7 +320,20 @@ export default function AdminClientsPage() {
                       Status
                     </th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">
-                      Dibuat
+                      <button
+                        type="button"
+                        onClick={() => handleSort("dibuat")}
+                        className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-on-surface-variant hover:text-primary transition-colors"
+                      >
+                        <span>Dibuat</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {sortBy === "dibuat"
+                            ? sortOrder === "asc"
+                              ? "arrow_upward"
+                              : "arrow_downward"
+                            : "unfold_more"}
+                        </span>
+                      </button>
                     </th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">
                       Diubah

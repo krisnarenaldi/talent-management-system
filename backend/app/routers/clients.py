@@ -82,6 +82,8 @@ def _check_contacts_unique(db: Session, contacts: list[str], exclude_client_id: 
 def list_clients(
     search: str | None = Query(None),
     is_active: bool | None = Query(None, description="Filter: hanya aktif / hanya nonaktif"),
+    sort_by: str | None = Query(None),
+    sort_order: str = Query("asc"),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
@@ -93,7 +95,21 @@ def list_clients(
         )
     if is_active is not None:
         query = query.filter(Client.is_active == is_active)
-    return query.order_by(Client.name.asc()).all()
+
+    is_desc = (sort_order or "asc").lower() == "desc"
+    if sort_by == "name":
+        order_col = Client.name.desc() if is_desc else Client.name.asc()
+        query = query.order_by(order_col)
+    elif sort_by == "industry":
+        order_col = Client.industry.desc().nullslast() if is_desc else Client.industry.asc().nullslast()
+        query = query.order_by(order_col, Client.name.asc())
+    elif sort_by == "created_at" or sort_by == "dibuat":
+        order_col = Client.created_at.desc() if is_desc else Client.created_at.asc()
+        query = query.order_by(order_col, Client.name.asc())
+    else:
+        query = query.order_by(Client.name.asc())
+
+    return query.all()
 
 
 @router.get("/{client_id}", response_model=ClientResponse)

@@ -177,8 +177,24 @@ export default function AdminClientPositionsPage() {
   // — semua hooks wajib di atas early return —
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      if (sortOrder === "asc") {
+        setSortOrder("desc");
+      } else {
+        setSortBy(null);
+        setSortOrder("asc");
+      }
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+  };
 
   const authorized = !!user && isRole("admin", "hr", "manager");
 
@@ -188,7 +204,7 @@ export default function AdminClientPositionsPage() {
     isError,
     error,
   } = useQuery<PositionsResponse>({
-    queryKey: ["positions", { clientId, search: searchTerm, status: statusFilter }],
+    queryKey: ["positions", { clientId, search: searchTerm, status: statusFilter, sortBy, sortOrder }],
     queryFn: () =>
       fetchPositions({
         search: searchTerm || undefined,
@@ -199,6 +215,8 @@ export default function AdminClientPositionsPage() {
             : statusFilter === "inactive"
               ? false
               : undefined,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
       }),
     enabled: authorized && !!clientId,
   });
@@ -389,16 +407,76 @@ export default function AdminClientPositionsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-surface-container-low text-label-md text-on-surface-variant">
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Judul Posisi</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("title")}
+                        className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-on-surface-variant hover:text-primary transition-colors"
+                      >
+                        <span>Judul Posisi</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {sortBy === "title"
+                            ? sortOrder === "asc"
+                              ? "arrow_upward"
+                              : "arrow_downward"
+                            : "unfold_more"}
+                        </span>
+                      </button>
+                    </th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Klien</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Tipe Pekerjaan</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Durasi (bulan)</th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Budget Gaji</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("budget")}
+                        className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-on-surface-variant hover:text-primary transition-colors"
+                      >
+                        <span>Budget Gaji</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {sortBy === "budget"
+                            ? sortOrder === "asc"
+                              ? "arrow_upward"
+                              : "arrow_downward"
+                            : "unfold_more"}
+                        </span>
+                      </button>
+                    </th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Lokasi</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">PIC Klien</th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider">Status</th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Dibuat</th>
-                    <th className="py-3 px-4 font-medium uppercase tracking-wider">Diubah</th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("dibuat")}
+                        className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-on-surface-variant hover:text-primary transition-colors"
+                      >
+                        <span>Dibuat</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {sortBy === "dibuat"
+                            ? sortOrder === "asc"
+                              ? "arrow_upward"
+                              : "arrow_downward"
+                            : "unfold_more"}
+                        </span>
+                      </button>
+                    </th>
+                    <th className="py-3 px-4 font-medium uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("diubah")}
+                        className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-on-surface-variant hover:text-primary transition-colors"
+                      >
+                        <span>Diubah</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {sortBy === "diubah"
+                            ? sortOrder === "asc"
+                              ? "arrow_upward"
+                              : "arrow_downward"
+                            : "unfold_more"}
+                        </span>
+                      </button>
+                    </th>
                     <th className="py-3 px-4 font-medium uppercase tracking-wider text-right">Aksi</th>
                   </tr>
                 </thead>

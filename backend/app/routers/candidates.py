@@ -115,6 +115,8 @@ def list_candidates(
     min_expected_salary: Decimal | None = Query(None),
     max_expected_salary: Decimal | None = Query(None),
     pool_status: str | None = Query(None, description="Filter by talent pool status: 'database', 'talent_pool', 'future_lead', or 'all' (default)"),
+    sort_by: str | None = Query(None),
+    sort_order: str = Query("asc"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -224,8 +226,32 @@ def list_candidates(
         )
     )
 
-    # Urutkan berdasarkan nama kandidat secara A-Z, stabil dengan created_at
-    query = query.order_by(Candidate.full_name.asc(), Candidate.created_at.desc())
+    # Sorting
+    is_desc = (sort_order or "asc").lower() == "desc"
+    if sort_by == "name" or sort_by == "full_name":
+        order_col = Candidate.full_name.desc() if is_desc else Candidate.full_name.asc()
+        query = query.order_by(order_col, Candidate.created_at.desc())
+    elif sort_by == "expected_salary" or sort_by == "salary":
+        # Handle nulls last
+        order_col = Candidate.expected_salary.desc().nullslast() if is_desc else Candidate.expected_salary.asc().nullslast()
+        query = query.order_by(order_col, Candidate.full_name.asc())
+    elif sort_by == "level" or sort_by == "experience_level":
+        if not experience_level:
+            exp_sort_stmt = select(
+                CandidateExperience.candidate_id,
+                func.sum(
+                    func.coalesce(CandidateExperience.end_date, func.current_date()) - CandidateExperience.start_date
+                ).label("sort_total_days")
+            ).group_by(CandidateExperience.candidate_id).subquery()
+            query = query.outerjoin(exp_sort_stmt, Candidate.id == exp_sort_stmt.c.candidate_id)
+            total_days_col = func.coalesce(exp_sort_stmt.c.sort_total_days, 0)
+        else:
+            total_days_col = func.coalesce(exp_stmt.c.total_days, 0)
+        order_col = total_days_col.desc() if is_desc else total_days_col.asc()
+        query = query.order_by(order_col, Candidate.full_name.asc())
+    else:
+        # Default: Urutkan berdasarkan nama kandidat secara A-Z, stabil dengan created_at
+        query = query.order_by(Candidate.full_name.asc(), Candidate.created_at.desc())
 
     candidates = query.offset(skip).limit(limit).all()
     # Re-compute & persist freshness, and collect blacklist status before commit.

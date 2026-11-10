@@ -15,6 +15,8 @@ export async function fetchEmployees(params?: {
   status?: string;
   placement?: string;
   contract_expiry_within_days?: number;
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
   skip?: number;
   limit?: number;
 }): Promise<Employee[]> {

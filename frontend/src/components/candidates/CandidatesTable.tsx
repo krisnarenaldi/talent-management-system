@@ -103,9 +103,26 @@ export default function CandidatesTable({
   const [educationFilter, setEducationFilter] = useState("");
   const [currentSalaryFilter, setCurrentSalaryFilter] = useState("");
   const [expectedSalaryFilter, setExpectedSalaryFilter] = useState("");
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      if (sortOrder === "asc") {
+        setSortOrder("desc");
+      } else {
+        setSortBy(null);
+        setSortOrder("asc");
+      }
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+    setCurrentPage(1);
+  };
 
   // Multi-select state
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
@@ -271,6 +288,8 @@ export default function CandidatesTable({
         educationFilter,
         currentSalaryFilter,
         expectedSalaryFilter,
+        sortBy,
+        sortOrder,
         currentPage,
         itemsPerPage,
       },
@@ -292,6 +311,8 @@ export default function CandidatesTable({
         max_current_salary: getSalaryRange(currentSalaryFilter).max?.toString() || undefined,
         min_expected_salary: getSalaryRange(expectedSalaryFilter).min?.toString() || undefined,
         max_expected_salary: getSalaryRange(expectedSalaryFilter).max?.toString() || undefined,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
         skip: ((currentPage - 1) * itemsPerPage).toString(),
         limit: itemsPerPage.toString(),
       }),
@@ -770,13 +791,58 @@ export default function CandidatesTable({
                     className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 accent-blue-600"
                   />
                 </th>
-                <th className="px-4 py-3">Nama</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("name")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Nama</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "name"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
                 <th className="px-4 py-3">Kontak</th>
                 <th className="px-4 py-3">WA</th>
                 <th className="px-4 py-3">Pendidikan</th>
                 <th className="px-4 py-3">Posisi yang Dilamar</th>
-                <th className="px-4 py-3">Level</th>
-                <th className="px-4 py-3">Gaji Ekspektasi</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("level")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Level</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "level"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("salary")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Gaji Ekspektasi</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "salary"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
                 <th className="px-4 py-3 text-right">Aksi</th>
               </tr>
             </thead>
