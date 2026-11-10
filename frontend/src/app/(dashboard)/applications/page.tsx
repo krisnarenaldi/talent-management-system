@@ -327,7 +327,7 @@ function ApplicationsPipeline() {
   const [positionIdFilter, setPositionIdFilter] = useState(initialPositionId);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>(initialPositionId ? "candidate" : null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
