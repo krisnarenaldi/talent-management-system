@@ -327,11 +327,28 @@ function ApplicationsPipeline() {
   const [positionIdFilter, setPositionIdFilter] = useState(initialPositionId);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
   const user = useAuthStore((state) => state.user);
   const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
   const canExport = user ? ["admin", "manager"].includes(normalizeRole(user.role)) : false;
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      if (sortOrder === "asc") {
+        setSortOrder("desc");
+      } else {
+        setSortBy(null);
+        setSortOrder("asc");
+      }
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+    setCurrentPage(1);
+  };
 
   useEffect(() => {
     const s = searchParams.get("stage") || searchParams.get("current_stage");
@@ -351,7 +368,7 @@ function ApplicationsPipeline() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["applications", { searchTerm, statusFilter, stageFilter, positionIdFilter, startDate, endDate, currentPage, itemsPerPage }],
+    queryKey: ["applications", { searchTerm, statusFilter, stageFilter, positionIdFilter, startDate, endDate, sortBy, sortOrder, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchApplications({
         search: searchTerm.trim() || undefined,
@@ -360,6 +377,8 @@ function ApplicationsPipeline() {
         position_id: positionIdFilter || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
         skip: ((currentPage - 1) * itemsPerPage).toString(),
         limit: itemsPerPage.toString(),
       }),
@@ -593,16 +612,91 @@ function ApplicationsPipeline() {
           <table className="min-w-full text-left text-sm text-gray-700">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
               <tr>
-                <th className="px-4 py-3">Kandidat</th>
-                <th className="px-4 py-3">Posisi</th>
-                <th className="px-4 py-3">Client</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("candidate")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Kandidat</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "candidate"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("position")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Posisi</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "position"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("client")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Client</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "client"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
                 <th className="px-4 py-3">Tahap</th>
                 <th className="px-4 py-3">
                   <span title="Skor hasil screening CV mendalam oleh AI">Screening Score</span>
                 </th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Update</th>
-                <th className="px-4 py-3">Recruiter</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("update")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Update</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "update"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("recruiter")}
+                    className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
+                  >
+                    <span>Recruiter</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortBy === "recruiter"
+                        ? sortOrder === "asc"
+                          ? "arrow_upward"
+                          : "arrow_downward"
+                        : "unfold_more"}
+                    </span>
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>

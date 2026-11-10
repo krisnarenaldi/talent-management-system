@@ -24,8 +24,10 @@ from app.models.application import (
 from app.models.notification import Notification
 from app.models.blacklist import Blacklist
 from app.models.candidate import Candidate
+from app.models.client import Client
 from app.models.employee import Employee
 from app.models.position import Position
+from app.models.user import User
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationResponse,
@@ -213,6 +215,8 @@ def list_applications(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
     search: str | None = Query(None),
+    sort_by: str | None = Query(None),
+    sort_order: str = Query("asc"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -222,6 +226,8 @@ def list_applications(
         db.query(Application)
         .join(Candidate, Application.candidate_id == Candidate.id)
         .join(Position, Application.position_id == Position.id)
+        .outerjoin(Client, Position.client_id == Client.id)
+        .outerjoin(User, Application.recruiter_id == User.id)
         .options(
             joinedload(Application.position).joinedload(Position.client),
             joinedload(Application.recruiter),
@@ -253,7 +259,28 @@ def list_applications(
         query = query.filter(Application.created_at <= end_date + timedelta(days=1))
 
     total = query.count()
-    items = query.order_by(Application.created_at.desc()).offset(skip).limit(limit).all()
+
+    # Dynamic sorting
+    is_desc = (sort_order or "asc").lower() == "desc"
+    if sort_by == "candidate":
+        order_col = Candidate.full_name.desc() if is_desc else Candidate.full_name.asc()
+        query = query.order_by(order_col, Application.created_at.desc())
+    elif sort_by == "position":
+        order_col = Position.title.desc() if is_desc else Position.title.asc()
+        query = query.order_by(order_col, Application.created_at.desc())
+    elif sort_by == "client":
+        order_col = Client.name.desc() if is_desc else Client.name.asc()
+        query = query.order_by(order_col, Application.created_at.desc())
+    elif sort_by == "updated_at" or sort_by == "update":
+        order_col = Application.updated_at.desc() if is_desc else Application.updated_at.asc()
+        query = query.order_by(order_col, Application.created_at.desc())
+    elif sort_by == "recruiter":
+        order_col = User.name.desc() if is_desc else User.name.asc()
+        query = query.order_by(order_col, Application.created_at.desc())
+    else:
+        query = query.order_by(Application.created_at.desc())
+
+    items = query.offset(skip).limit(limit).all()
 
     serialized = []
     for item in items:

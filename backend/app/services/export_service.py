@@ -492,7 +492,12 @@ def _get_excel_response_for_pipeline(
     if end_date:
         query = query.filter(Application.created_at <= end_date)
 
-    applications = query.order_by(Candidate.full_name.asc()).all()
+    applications = (
+        query
+        .join(Candidate, Application.candidate_id == Candidate.id)
+        .order_by(Candidate.full_name.asc())
+        .all()
+    )
 
     # Create workbook
     wb = Workbook()
