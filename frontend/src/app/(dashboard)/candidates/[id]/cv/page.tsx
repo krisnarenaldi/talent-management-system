@@ -578,11 +578,11 @@ export default function CandidateCVPage({
               <ul className="divide-y divide-slate-100">
                 {cvList.map((cv, idx) => (
                   <li key={cv.id} className="flex items-center justify-between gap-4 px-5 py-4">
-                    <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex items-start gap-3">
                       <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
                         {idx + 1}
                       </span>
-                      <div className="space-y-1">
+                      <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                             {cv.language ?? "ID"}
