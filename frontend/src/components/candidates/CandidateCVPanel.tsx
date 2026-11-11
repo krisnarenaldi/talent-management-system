@@ -221,7 +221,7 @@ export default function CandidateCVPanel({ candidateId }: { candidateId: string 
               <ul className="divide-y divide-gray-100">
                 {cvList.map((cv, idx) => (
                   <li key={cv.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div className="space-y-1">
+                    <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
                           {cv.language ?? "ID"}

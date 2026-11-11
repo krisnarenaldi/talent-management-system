@@ -165,10 +165,11 @@
     ══════════════════════════════════════════════════════════════ */
     .detail-page {
       width: 210mm;
-      min-height: 297mm;
+      height: 297mm;
       padding: 28px 36px 64px 36px;
       position: relative;
       page-break-after: always;
+      overflow: hidden;
     }
     .detail-page:last-child {
       page-break-after: auto;
@@ -264,10 +265,11 @@
     ══════════════════════════════════════════════════════════════ */
     .attach-page {
       width: 210mm;
-      min-height: 297mm;
+      height: 297mm;
       padding: 28px 36px 64px 36px;
       position: relative;
       page-break-after: always;
+      overflow: hidden;
     }
     .attach-page:last-child { page-break-after: auto; }
 
@@ -496,7 +498,6 @@
 {% if experiences | length > 1 %}
 {% for exp in experiences[1:] %}
 
-{% if loop.first %}
 <div class="detail-page">
 
   <div class="page-header">
@@ -505,7 +506,6 @@
     {% endif %}
     <div class="page-header-company">PT ALTEK CITRA CEMERLANG</div>
   </div>
-{% endif %}
 
   <table class="section-table">
     <tr><td colspan="2" class="section-header">WORKING EXPERIENCE</td></tr>
@@ -535,16 +535,17 @@
     </tr>
   </table>
 
-{% if loop.last %}
+  {% if loop.last %}
   <p class="note-text">*) silakan menambahkan secara mandiri, jika pengalaman lebih dari kolom yang disediakan.</p>
+  {% endif %}
 
   <div class="deco-detail-left"></div>
   <div class="deco-detail-right"></div>
   <div class="page-footer">
     <span class="page-footer-text">Curriculum Vitae &nbsp;©&nbsp; Altek Citra Cemerlang</span>
   </div>
+
 </div><!-- /detail-page experience -->
-{% endif %}
 
 {% endfor %}
 {% endif %}
