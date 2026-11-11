@@ -86,6 +86,18 @@ def clear_all_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Hapus semua notifikasi milik user yang sedang login."""
+    """
+    Hapus semua notifikasi milik user yang sedang login.
+    Jika user adalah HR, sekaligus tandai item ai_screening_result (log upload) milik user ini
+    sebagai soft-deleted (is_deleted_by_uploader = True) agar sejalan dengan pembersihan log.
+    """
+    from app.models.application import AIScreeningResult
+
+    if current_user.role == "hr":
+        db.query(AIScreeningResult).filter(
+            AIScreeningResult.uploaded_by == current_user.id,
+            AIScreeningResult.position_id.is_(None),
+        ).update({"is_deleted_by_uploader": True}, synchronize_session=False)
+
     db.query(Notification).filter(Notification.user_id == current_user.id).delete()
     db.commit()

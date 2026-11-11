@@ -501,7 +501,10 @@ def list_candidate_pending_reviews(
     )
 
     if current_user.role == "hr":
-        query = query.filter(AIScreeningResult.uploaded_by == current_user.id)
+        query = query.filter(
+            AIScreeningResult.uploaded_by == current_user.id,
+            AIScreeningResult.is_deleted_by_uploader == False,
+        )
 
     results = query.order_by(AIScreeningResult.created_at.desc(), AIScreeningResult.id.desc()).all()
 
@@ -517,6 +520,7 @@ def list_candidate_pending_reviews(
             "ai_notes": r.ai_notes,
             "extracted_json": _normalize_extracted_json(r.extracted_json),
             "status": r.status,
+            "is_deleted_by_uploader": bool(r.is_deleted_by_uploader),
         }
         for r in results
     ]
@@ -530,6 +534,8 @@ def delete_candidate_screening(
 ):
     """
     Hapus item screening kandidat yang gagal / pending review.
+    - HR: Soft delete (is_deleted_by_uploader = True), Admin & Manager masih bisa melihatnya.
+    - Admin / Manager: Hard delete (menghapus record secara permanen).
     """
     from app.models.application import AIScreeningResult
 
@@ -541,11 +547,16 @@ def delete_candidate_screening(
     if not screening:
         raise HTTPException(status_code=404, detail="Data screening tidak ditemukan")
 
-    if current_user.role == "hr" and str(screening.uploaded_by) != str(current_user.id):
-        raise HTTPException(status_code=403, detail="Anda tidak memiliki izin untuk menghapus data ini")
-
-    db.delete(screening)
-    db.commit()
+    if current_user.role == "hr":
+        if str(screening.uploaded_by) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Anda tidak memiliki izin untuk menghapus data ini")
+        # Soft delete untuk HR
+        screening.is_deleted_by_uploader = True
+        db.commit()
+    else:
+        # Admin / Manager: Hard delete permanen
+        db.delete(screening)
+        db.commit()
 
 
 @router.post("/pending-review/retry-all-errors", response_model=dict)

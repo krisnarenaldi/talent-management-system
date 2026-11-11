@@ -195,6 +195,7 @@ class AIScreeningResult(Base):
     extracted_data = Column(Text, nullable=True)
     extracted_json = Column(JSONB(), nullable=True)
     status = Column(String(50), nullable=True, index=True)  # menunggu_screening_ai / sedang_diproses / siap_review / sudah_direview / error
+    is_deleted_by_uploader = Column(Boolean, default=False, nullable=False, server_default="false")
     reviewed_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

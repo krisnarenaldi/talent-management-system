@@ -17,6 +17,7 @@ interface NavItem {
 const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", icon: "dashboard", label: "Dashboard", description: "Ringkasan metrik & aktivitas" },
   { href: "/candidates", icon: "groups", label: "Database", description: "Database semua profil kandidat" },
+  { href: "/candidates/pending-review", icon: "history", label: "Log Upload", description: "Riwayat & status ekstraksi upload CV" },
   { href: "/talent-pool", icon: "folder_special", label: "Talent Pool", description: "Kumpulan talenta terkurasi" },
   { href: "/applications", icon: "assignment", label: "Applications", description: "Status lamaran & pipeline" },
   { href: "/employees", icon: "badge", label: "Employees", description: "Karyawan aktif & kontrak" },
@@ -49,8 +50,11 @@ export default function Sidebar() {
   const isPM = isRole("pm");
   const { collapsed, toggleSidebar } = useSidebar();
 
-  const isActive = (href: string) =>
-    href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === "/dashboard") return pathname === href;
+    if (href === "/candidates") return pathname === "/candidates" || (pathname.startsWith("/candidates/") && !pathname.startsWith("/candidates/pending-review"));
+    return pathname.startsWith(href);
+  };
 
   const renderLink = (item: NavItem) => {
     const active = isActive(item.href);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useToastStore } from "@/stores/toast.store";
+import { useAuthStore } from "@/stores/auth.store";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 
@@ -16,12 +17,16 @@ interface CandidateScreeningItem {
   created_at: string;
   ai_notes?: string | null;
   status: string;
+  is_deleted_by_uploader?: boolean;
   extracted_json?: { nama?: string; [key: string]: unknown } | null;
 }
 
 export default function CandidatePendingReviewPage() {
   const queryClient = useQueryClient();
   const showToast = useToastStore((s) => s.showToast);
+  const user = useAuthStore((s) => s.user);
+  const isHR = user?.role === "hr";
+  const canSeeAll = user?.role === "admin" || user?.role === "manager";
 
   const { data: items = [], isLoading, isError } = useQuery<CandidateScreeningItem[]>({
     queryKey: ["candidate-pending-reviews"],
@@ -62,11 +67,13 @@ export default function CandidatePendingReviewPage() {
               Database Kandidat
             </Link>
             <span>/</span>
-            <span className="text-gray-700">Review Ekstraksi CV</span>
+            <span className="text-gray-700">Log Upload</span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-gray-950">Review Ekstraksi CV Kandidat</h1>
+          <h1 className="mt-1 text-2xl font-bold text-gray-950">Log Upload &amp; Review Ekstraksi CV</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Daftar CV yang mengalami kendala pembacaan teks otomatis atau sedang dalam antrean ekstraksi AI.
+            {canSeeAll
+              ? "Semua riwayat upload CV kandidat oleh tim recruiter & status ekstraksi AI."
+              : "Riwayat upload CV kandidat Anda & status ekstraksi AI."}
           </p>
         </div>
 
@@ -95,20 +102,20 @@ export default function CandidatePendingReviewPage() {
       {isLoading && (
         <div className="rounded-xl border border-gray-200 bg-white p-12 text-center text-sm text-gray-500 shadow-sm">
           <span className="material-symbols-outlined animate-spin text-3xl text-gray-400 mb-2">progress_activity</span>
-          <p>Memuat daftar review CV...</p>
+          <p>Memuat log upload CV...</p>
         </div>
       )}
 
       {isError && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700 shadow-sm">
-          Gagal memuat data review CV kandidat.
+          Gagal memuat log upload CV kandidat.
         </div>
       )}
 
       {!isLoading && !isError && items.length === 0 && (
         <div className="rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm">
           <span className="material-symbols-outlined text-5xl text-emerald-500 mb-3">check_circle</span>
-          <h3 className="text-base font-semibold text-gray-900">Semua CV Berhasil Diproses!</h3>
+          <h3 className="text-base font-semibold text-gray-900">Tidak Ada Log Upload yang Tertunda</h3>
           <p className="mt-1 text-sm text-gray-500 max-w-md mx-auto">
             Tidak ada CV yang gagal diekstrak atau tertunda. Seluruh kandidat telah otomatis masuk ke Database Kandidat.
           </p>
@@ -135,6 +142,8 @@ export default function CandidatePendingReviewPage() {
           {items.map((item) => {
             const isErrorStatus = item.status === "error";
             const isProcessing = item.status === "menunggu_ekstraksi" || item.status === "sedang_diproses";
+            const isDuplicate = item.status === "duplikat";
+            const isBlacklisted = item.status === "blacklisted";
 
             return (
               <div
@@ -143,15 +152,23 @@ export default function CandidatePendingReviewPage() {
               >
                 <div className="space-y-1.5 flex-1 min-w-0">
                   {/* Candidate name row */}
-                  <p className="text-sm font-semibold text-gray-900 truncate">
-                    {item.extracted_json?.nama || (
-                      <span className="text-gray-600">
-                        {item.cv_file_url
-                          ? decodeURIComponent(item.cv_file_url.split("/").pop()?.split("?")[0] ?? "")
-                          : <span className="italic text-gray-400">Nama tidak tersedia</span>}
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {item.extracted_json?.nama || (
+                        <span className="text-gray-600">
+                          {item.cv_file_url
+                            ? decodeURIComponent(item.cv_file_url.split("/").pop()?.split("?")[0] ?? "")
+                            : <span className="italic text-gray-400">Nama tidak tersedia</span>}
+                        </span>
+                      )}
+                    </p>
+                    {item.is_deleted_by_uploader && canSeeAll && (
+                      <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 border border-amber-200">
+                        Dihapus oleh HR (Arsip)
                       </span>
                     )}
-                  </p>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -159,14 +176,34 @@ export default function CandidatePendingReviewPage() {
                           ? "bg-red-100 text-red-700"
                           : isProcessing
                           ? "bg-blue-100 text-blue-700"
+                          : isDuplicate
+                          ? "bg-amber-100 text-amber-700"
+                          : isBlacklisted
+                          ? "bg-purple-100 text-purple-700"
                           : "bg-gray-100 text-gray-700"
                       }`}
                     >
                       <span className="material-symbols-outlined text-xs">
-                        {isErrorStatus ? "error" : "sync"}
+                        {isErrorStatus ? "error" : isProcessing ? "sync" : isDuplicate ? "content_copy" : "info"}
                       </span>
-                      {isErrorStatus ? "Gagal Ekstrak" : isProcessing ? "Sedang Diproses" : item.status}
+                      {isErrorStatus
+                        ? "Gagal Ekstrak"
+                        : isProcessing
+                        ? "Sedang Diproses"
+                        : isDuplicate
+                        ? "Duplikat Terdeteksi"
+                        : isBlacklisted
+                        ? "Blacklisted"
+                        : item.status}
                     </span>
+
+                    {item.uploaded_by_name && canSeeAll && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-700">
+                        <span className="material-symbols-outlined text-xs">person</span>
+                        {item.uploaded_by_name}
+                      </span>
+                    )}
+
                     {item.source_channel && (
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                         {item.source_channel}
@@ -209,7 +246,10 @@ export default function CandidatePendingReviewPage() {
                   </Link>
                   <button
                     onClick={() => {
-                      if (confirm("Apakah Anda yakin ingin menghapus CV ini dari antrean review?")) {
+                      const confirmMsg = isHR
+                        ? "Hapus item ini dari riwayat Anda?"
+                        : "Apakah Anda yakin ingin menghapus permanen log CV ini?";
+                      if (confirm(confirmMsg)) {
                         deleteMutation.mutate(item.id);
                       }
                     }}
