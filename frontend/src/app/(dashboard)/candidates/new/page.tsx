@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
@@ -51,6 +52,7 @@ function StatusBadge({ status }: { status: FileUploadStatus["status"] }) {
 // ── main component ────────────────────────────────────────────────────────────
 
 export default function BulkCVUploadPage() {
+  const router = useRouter();
   const showToast = useToastStore((s) => s.showToast);
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -149,18 +151,16 @@ export default function BulkCVUploadPage() {
       setUploadProgress(0);
       // Mark all as done (API is async — actual per-file status comes from screening IDs)
       setFileStatuses((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
-      showToast("success", data.message || "CV berhasil diupload dan sedang diproses.");
+      showToast("success", data.message || "CV berhasil diupload. Mengarahkan ke database kandidat...");
 
       // Segera refetch notifikasi supaya bell tidak tertinggal 30 detik polling.
-      // Notifikasi batch muncul setelah worker selesai, jadi kita poll lebih sering
-      // selama ~10 menit (20x tiap 30 detik) sampai notifikasi muncul di DB.
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      let attempts = 0;
-      const pollId = setInterval(() => {
-        attempts++;
-        queryClient.invalidateQueries({ queryKey: ["notifications"] });
-        if (attempts >= 20) clearInterval(pollId);
-      }, 30_000);
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
+
+      // Redirect otomatis ke /candidates terurut kandidat paling baru
+      setTimeout(() => {
+        router.push("/candidates?sort_by=created_at&sort_order=desc");
+      }, 1500);
     },
     onError: (error) => {
       setUploadProgress(0);

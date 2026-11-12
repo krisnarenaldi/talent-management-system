@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileText, Filter, Pencil, X, Users, Briefcase, UserMinus } from "lucide-react";
 import api from "@/lib/api";
@@ -92,6 +93,10 @@ export default function CandidatesTable({
   title = "Kandidat",
   showExport = true,
 }: CandidatesTableProps) {
+  const searchParams = useSearchParams();
+  const initialSortBy = searchParams.get("sort_by") || null;
+  const initialSortOrder = (searchParams.get("sort_order") as "asc" | "desc") || "asc";
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -103,11 +108,21 @@ export default function CandidatesTable({
   const [educationFilter, setEducationFilter] = useState("");
   const [currentSalaryFilter, setCurrentSalaryFilter] = useState("");
   const [expectedSalaryFilter, setExpectedSalaryFilter] = useState("");
-  const [sortBy, setSortBy] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortBy, setSortBy] = useState<string | null>(initialSortBy);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialSortOrder);
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(20);
+
+  // Sync state if searchParams change
+  useEffect(() => {
+    const sBy = searchParams.get("sort_by");
+    const sOrder = searchParams.get("sort_order") as "asc" | "desc" | null;
+    if (sBy) {
+      setSortBy(sBy);
+      setSortOrder(sOrder || "desc");
+    }
+  }, [searchParams]);
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
@@ -517,7 +532,25 @@ export default function CandidatesTable({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{eyebrow}</p>
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+            {sortBy === "created_at" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-medium text-blue-700">
+                <span className="material-symbols-outlined text-sm">schedule</span>
+                Urutan: Terbaru Masuk
+                <button
+                  onClick={() => {
+                    setSortBy(null);
+                    setSortOrder("asc");
+                  }}
+                  className="ml-1 hover:text-blue-900"
+                  title="Kembali ke urutan default (A-Z)"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Link

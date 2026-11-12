@@ -452,7 +452,7 @@ def _create_candidate_ingestion_notification(db: Any, uploaded_by: Any, batch_id
     if error_count > 0:
         parts.append(f"{error_count} gagal diekstrak")
 
-    link = "/candidates/pending-review" if error_count > 0 else "/candidates"
+    link = "/candidates/pending-review" if error_count > 0 else "/candidates?sort_by=created_at&sort_order=desc"
     msg = "Ekstraksi CV selesai: " + ", ".join(parts) + "."
 
     notif = Notification(

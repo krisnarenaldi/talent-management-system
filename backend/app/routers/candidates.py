@@ -263,7 +263,10 @@ def list_candidates(
 
     # Sorting
     is_desc = (sort_order or "asc").lower() == "desc"
-    if sort_by == "name" or sort_by == "full_name":
+    if sort_by in ("created_at", "newest"):
+        order_col = Candidate.created_at.asc() if not is_desc else Candidate.created_at.desc()
+        query = query.order_by(order_col, Candidate.full_name.asc())
+    elif sort_by == "name" or sort_by == "full_name":
         order_col = Candidate.full_name.desc() if is_desc else Candidate.full_name.asc()
         query = query.order_by(order_col, Candidate.created_at.desc())
     elif sort_by == "expected_salary" or sort_by == "salary":
