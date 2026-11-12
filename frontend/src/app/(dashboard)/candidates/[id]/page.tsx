@@ -547,18 +547,20 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                 </div>
                 {candidate.pool_status === "talent_pool" && (
                   <>
-                    <div className="flex items-start justify-between gap-2">
-                      <span>Alasan Talent Pool</span>
-                      <span className="text-right capitalize">
-                        {candidate.talent_pool_reason === "gaji_tidak_sesuai" && "Gaji tidak sesuai"}
-                        {candidate.talent_pool_reason === "kebutuhan_masa_depan" && "Kebutuhan masa depan"}
-                        {candidate.talent_pool_reason === "lainnya" && "Lainnya"}
-                        {!candidate.talent_pool_reason && "-"}
-                      </span>
-                    </div>
+                    {candidate.talent_pool_reason && candidate.talent_pool_reason !== "lainnya" && (
+                      <div className="flex items-start justify-between gap-2">
+                        <span>Alasan Talent Pool</span>
+                        <span className="text-right capitalize">
+                          {candidate.talent_pool_reason === "gaji_tidak_sesuai" && "Gaji tidak sesuai"}
+                          {candidate.talent_pool_reason === "kebutuhan_masa_depan" && "Kebutuhan masa depan"}
+                        </span>
+                      </div>
+                    )}
                     {candidate.talent_pool_notes && (
                       <div className="pt-2 border-t border-gray-100">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Catatan Talent Pool</p>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                          Catatan / Alasan Talent Pool
+                        </p>
                         <p className="text-sm text-gray-700 whitespace-pre-line">{candidate.talent_pool_notes}</p>
                       </div>
                     )}

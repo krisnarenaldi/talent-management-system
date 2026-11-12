@@ -143,8 +143,8 @@ export default function CandidatesTable({
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
   const [showTalentPoolModal, setShowTalentPoolModal] = useState(false);
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
-  const [talentPoolReason, setTalentPoolReason] = useState<"gaji_tidak_sesuai" | "kebutuhan_masa_depan" | "lainnya">("gaji_tidak_sesuai");
   const [talentPoolNotes, setTalentPoolNotes] = useState("");
+  const [talentPoolNotesError, setTalentPoolNotesError] = useState("");
 
   const user = useAuthStore((state) => state.user);
   const canExport = user ? ["admin", "manager"].includes(normalizeRole(user.role)) : false;
@@ -196,11 +196,19 @@ export default function CandidatesTable({
 
   const handleBulkTalentPool = () => {
     if (selectedCandidateIds.size === 0) return;
+    setTalentPoolNotes("");
+    setTalentPoolNotesError("");
     setShowTalentPoolModal(true);
   };
 
   const handleConfirmTalentPool = async () => {
     if (selectedCandidateIds.size === 0) return;
+    const trimmedNotes = talentPoolNotes.trim();
+    if (!trimmedNotes) {
+      setTalentPoolNotesError("Catatan / alasan wajib diisi");
+      return;
+    }
+    setTalentPoolNotesError("");
     setIsUpdatingTalentPool(true);
     const count = selectedCandidateIds.size;
     try {
@@ -208,8 +216,8 @@ export default function CandidatesTable({
         Array.from(selectedCandidateIds).map((id) =>
           api.patch(`/api/v1/candidates/${id}/talent-pool`, {
             pool_status: "talent_pool",
-            talent_pool_reason: talentPoolReason,
-            talent_pool_notes: talentPoolNotes || undefined,
+            talent_pool_reason: "lainnya",
+            talent_pool_notes: trimmedNotes,
           })
         )
       );
@@ -221,8 +229,8 @@ export default function CandidatesTable({
       showToast("error", error?.response?.data?.detail || "Gagal memindahkan ke Talent Pool");
     } finally {
       setIsUpdatingTalentPool(false);
-      setTalentPoolReason("gaji_tidak_sesuai");
       setTalentPoolNotes("");
+      setTalentPoolNotesError("");
     }
   };
 
@@ -466,36 +474,25 @@ export default function CandidatesTable({
               </div>
             </div>
             
-            <div className="mb-4">
-              <label className="block text-label-md text-on-surface mb-1.5">
-                Alasan <span className="text-error">*</span>
-              </label>
-              <select
-                value={talentPoolReason}
-                onChange={(e) =>
-                  setTalentPoolReason(
-                    e.target.value as "gaji_tidak_sesuai" | "kebutuhan_masa_depan" | "lainnya"
-                  )
-                }
-                className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-              >
-                <option value="gaji_tidak_sesuai">Gaji tidak sesuai</option>
-                <option value="kebutuhan_masa_depan">Kebutuhan masa depan</option>
-                <option value="lainnya">Lainnya</option>
-              </select>
-            </div>
-            
             <div className="mb-6">
               <label className="block text-label-md text-on-surface mb-1.5">
-                Catatan (opsional)
+                Catatan / Alasan <span className="text-error">*</span>
               </label>
               <textarea
                 value={talentPoolNotes}
-                onChange={(e) => setTalentPoolNotes(e.target.value)}
-                rows={3}
-                placeholder="Tambahkan catatan..."
+                onChange={(e) => {
+                  setTalentPoolNotes(e.target.value);
+                  if (talentPoolNotesError && e.target.value.trim()) {
+                    setTalentPoolNotesError("");
+                  }
+                }}
+                rows={4}
+                placeholder="Masukkan alasan atau catatan pemindahan ke Talent Pool..."
                 className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
               />
+              {talentPoolNotesError && (
+                <p className="text-error text-xs mt-1">{talentPoolNotesError}</p>
+              )}
             </div>
             
             <div className="flex gap-3 pt-2">

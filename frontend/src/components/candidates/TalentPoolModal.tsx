@@ -13,10 +13,11 @@ import api from "@/lib/api";
 // ── Schema ────────────────────────────────────────────────────────────────────
 
 const talentPoolSchema = z.object({
-  reason: z.enum(["gaji_tidak_sesuai", "kebutuhan_masa_depan", "lainnya"], {
-    required_error: "Pilih alasan pemindahan ke Talent Pool",
-  }),
-  notes: z.string().optional(),
+  reason: z.string().default("lainnya"),
+  notes: z
+    .string({ required_error: "Catatan / alasan wajib diisi" })
+    .trim()
+    .min(1, "Catatan / alasan wajib diisi"),
 });
 
 type TalentPoolFormValues = z.infer<typeof talentPoolSchema>;
@@ -136,37 +137,24 @@ export default function TalentPoolModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit((values) => mutation.mutate(values))} noValidate>
-          <div className="mb-4">
-            <label className="block text-label-md text-on-surface mb-1.5">
-              Alasan <span className="text-error">*</span>
-            </label>
-            <select
-              {...register("reason")}
-              className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-            >
-              {REASON_OPTIONS.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            {errors.reason && (
-              <p className="text-error text-xs mt-1">{errors.reason.message}</p>
-            )}
-          </div>
+          {/* Hidden reason field with default value */}
+          <input type="hidden" {...register("reason")} value="lainnya" />
 
-          {/* Notes textarea */}
+          {/* Notes textarea - now mandatory free text */}
           <div className="mb-6">
             <label htmlFor="talent-pool-notes" className="block text-label-md text-on-surface mb-1.5">
-              Catatan (opsional)
+              Catatan / Alasan <span className="text-error">*</span>
             </label>
             <textarea
               id="talent-pool-notes"
               {...register("notes")}
-              rows={3}
-              placeholder="Tambahkan catatan..."
+              rows={4}
+              placeholder="Masukkan alasan atau catatan pemindahan ke Talent Pool..."
               className="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-body-sm text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
             />
+            {errors.notes && (
+              <p className="text-error text-xs mt-1">{errors.notes.message}</p>
+            )}
           </div>
 
           {/* Actions */}
