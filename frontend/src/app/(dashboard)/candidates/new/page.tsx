@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { Suspense, useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { settingsApi } from "@/lib/api/settings";
@@ -51,8 +51,10 @@ function StatusBadge({ status }: { status: FileUploadStatus["status"] }) {
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export default function BulkCVUploadPage() {
+function BulkCVUploadPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isTalentPoolMode = searchParams.get("talent_pool") === "true";
   const showToast = useToastStore((s) => s.showToast);
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -134,7 +136,11 @@ export default function BulkCVUploadPage() {
       // Mark all as uploading
       setFileStatuses((prev) => prev.map((s) => ({ ...s, status: "uploading" as const })));
 
-      const response = await api.post("/api/v1/candidates/bulk-upload", formData, {
+      const uploadUrl = isTalentPoolMode
+        ? "/api/v1/candidates/bulk-upload?talent_pool=true"
+        : "/api/v1/candidates/bulk-upload";
+
+      const response = await api.post(uploadUrl, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         onUploadProgress: (progressEvent) => {
           const percent = progressEvent.total
@@ -184,9 +190,19 @@ export default function BulkCVUploadPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Upload CV Kandidat</h1>
+          {isTalentPoolMode && (
+            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+              <span className="material-symbols-outlined text-sm">group_add</span>
+              Mode: Upload ke Talent Pool
+            </div>
+          )}
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isTalentPoolMode ? "Tambah Kandidat ke Talent Pool" : "Upload CV Kandidat"}
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Upload satu atau beberapa CV sekaligus. AI akan mengekstrak data kandidat secara otomatis.
+            {isTalentPoolMode
+              ? "Upload CV kandidat yang akan langsung masuk ke Talent Pool. AI akan mengekstrak data secara otomatis."
+              : "Upload satu atau beberapa CV sekaligus. AI akan mengekstrak data kandidat secara otomatis."}
           </p>
         </div>
         <Link
@@ -300,18 +316,30 @@ export default function BulkCVUploadPage() {
               <div className="space-y-1">
                 <p className="font-semibold text-blue-950">File berhasil diupload dan sedang diproses!</p>
                 <p className="text-blue-800">
-                  AI sedang mengekstrak data teks dan identitas kandidat di latar belakang.
-                  Begitu selesai, Anda akan menerima <strong>notifikasi lonceng</strong> di pojok kanan atas.
-                  Klik notifikasi tersebut untuk langsung melihat kandidat terbaru yang berhasil masuk.
+                  {isTalentPoolMode
+                    ? "AI sedang mengekstrak data kandidat di latar belakang. Kandidat akan otomatis masuk ke Talent Pool begitu selesai diproses. Anda akan menerima "
+                    : "AI sedang mengekstrak data teks dan identitas kandidat di latar belakang. Begitu selesai, Anda akan menerima "}
+                  <strong>notifikasi lonceng</strong> di pojok kanan atas.
+                  {!isTalentPoolMode && " Klik notifikasi tersebut untuk langsung melihat kandidat terbaru yang berhasil masuk."}
                 </p>
                 <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <Link
-                    href="/candidates?sort_by=created_at&sort_order=desc"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
-                  >
-                    Buka Database Kandidat
-                    <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                  </Link>
+                  {isTalentPoolMode ? (
+                    <Link
+                      href="/talent-pool"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-green-700"
+                    >
+                      <span className="material-symbols-outlined text-xs">group_add</span>
+                      Buka Talent Pool
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/candidates?sort_by=created_at&sort_order=desc"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
+                    >
+                      Buka Database Kandidat
+                      <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                    </Link>
+                  )}
                   <Link
                     href="/candidates/pending-review"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-50"
@@ -389,5 +417,13 @@ export default function BulkCVUploadPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BulkCVUploadPage() {
+  return (
+    <Suspense>
+      <BulkCVUploadPageInner />
+    </Suspense>
   );
 }

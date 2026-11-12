@@ -414,6 +414,7 @@ def create_candidate(
 async def bulk_upload_candidates(
     files: list[UploadFile] = File(...),
     source_channel: str | None = Query(None),
+    talent_pool: bool = Query(False, description="Jika True, kandidat yang diekstrak langsung mendapat status talent_pool"),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
@@ -480,6 +481,7 @@ async def bulk_upload_candidates(
                 cv_drive_item_id=result.get("drive_item_id"),
                 source_channel=source_channel,
                 status="menunggu_ekstraksi",
+                is_talent_pool_upload=talent_pool,
             )
             db.add(screening)
             db.commit()

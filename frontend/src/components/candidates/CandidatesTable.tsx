@@ -551,7 +551,7 @@ export default function CandidatesTable({
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/candidates/new"
+            href={poolStatus === "talent_pool" ? "/candidates/new?talent_pool=true" : "/candidates/new"}
             className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md"
           >
             + Tambah Kandidat

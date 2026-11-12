@@ -813,6 +813,14 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
             db.commit()
             db.refresh(candidate)
 
+            # Jika diupload dari halaman Talent Pool, langsung set status talent_pool
+            if getattr(result, "is_talent_pool_upload", False):
+                candidate.pool_status = "talent_pool"
+                candidate.talent_pool_reason = "lainnya"
+                candidate.talent_pool_notes = "Upload via Talent Pool"
+                candidate.talent_pool_updated_at = datetime.now(timezone.utc)
+                db.commit()
+
             # Simpan pendidikan
             for edu in extracted.get("pendidikan", []) or []:
                 edu_record = CandidateEducation(
