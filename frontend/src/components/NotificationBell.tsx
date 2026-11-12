@@ -115,15 +115,26 @@ export default function NotificationBell() {
                       }
                       setOpen(false);
                       if (notif.link && notif.link !== "#") {
+                        let targetLink = notif.link;
+                        // Pastikan notifikasi ekstraksi CV mengarah ke urutan terbaru
+                        if (
+                          notif.type === "cv_ingestion_done" &&
+                          targetLink.startsWith("/candidates") &&
+                          !targetLink.includes("/pending-review") &&
+                          !targetLink.includes("sort_by")
+                        ) {
+                          targetLink = "/candidates?sort_by=created_at&sort_order=desc";
+                        }
+
                         // Jika navigasi mengarah ke kandidat atau aplikasi, invalidate cache agar data terbaru langsung tampil tanpa refresh browser
-                        if (notif.link.startsWith("/candidates")) {
+                        if (targetLink.startsWith("/candidates")) {
                           queryClient.invalidateQueries({ queryKey: ["candidates"] });
                           queryClient.invalidateQueries({ queryKey: ["candidate-pending-reviews"] });
-                        } else if (notif.link.startsWith("/applications")) {
+                        } else if (targetLink.startsWith("/applications")) {
                           queryClient.invalidateQueries({ queryKey: ["applications"] });
                         }
                         // Gunakan client-side router agar request tidak dibatalkan browser
-                        router.push(notif.link);
+                        router.push(targetLink);
                       }
                     }}
                     className={`flex items-start gap-3 px-4 py-3 hover:bg-surface-container-highest transition-colors cursor-pointer ${
