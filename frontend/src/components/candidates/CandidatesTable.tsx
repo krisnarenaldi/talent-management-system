@@ -272,6 +272,14 @@ export default function CandidatesTable({
     queryFn: () => settingsApi.listSourceChannels({ is_active: true }),
   });
 
+  const { data: positionsList = [] } = useQuery({
+    queryKey: ["candidate-positions"],
+    queryFn: async () => {
+      const res = await api.get("/api/v1/candidates/positions");
+      return (res.data || []) as string[];
+    },
+  });
+
   const { data: candidates = [], isLoading } = useQuery({
     queryKey: [
       "candidates",
@@ -539,12 +547,16 @@ export default function CandidatesTable({
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
             <div>
               <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Posisi</label>
-              <input
+              <select
                 value={positionFilter}
                 onChange={(e) => setPositionFilter(e.target.value)}
-                placeholder="Judul posisi"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+              >
+                <option value="">Semua</option>
+                {positionsList.map((pos) => (
+                  <option key={pos} value={pos}>{pos}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -767,6 +779,22 @@ export default function CandidatesTable({
             >
               {SALARY_RANGES.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+              Posisi
+            </label>
+            <select
+              value={positionFilter}
+              onChange={(e) => setPositionFilter(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+            >
+              <option value="">Semua</option>
+              {positionsList.map((pos) => (
+                <option key={pos} value={pos}>{pos}</option>
               ))}
             </select>
           </div>

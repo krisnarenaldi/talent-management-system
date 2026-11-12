@@ -16,12 +16,12 @@ interface NavItem {
 // Distinct, non-confusing icons with descriptive tooltips
 const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", icon: "dashboard", label: "Dashboard", description: "Ringkasan metrik & aktivitas" },
-  { href: "/candidates", icon: "groups", label: "Database", description: "Database semua profil kandidat" },
-  { href: "/candidates/pending-review", icon: "history", label: "Log Upload", description: "Riwayat & status ekstraksi upload CV" },
+  { href: "/candidates", icon: "groups", label: "Database", description: "Database semua profil kandidat" },  
   { href: "/talent-pool", icon: "folder_special", label: "Talent Pool", description: "Kumpulan talenta terkurasi" },
   { href: "/applications", icon: "assignment", label: "Applications", description: "Status lamaran & pipeline" },
   { href: "/employees", icon: "badge", label: "Employees", description: "Karyawan aktif & kontrak" },
   { href: "/blacklist", icon: "block", label: "Blacklist", description: "Daftar hitam & catatan penolakan" },
+  { href: "/candidates/pending-review", icon: "history", label: "Log Upload", description: "Riwayat & status ekstraksi upload CV" },
 ];
 
 const SIDEBAR_MANAGER_ADMIN_ITEMS: NavItem[] = [

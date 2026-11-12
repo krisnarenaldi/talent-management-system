@@ -100,6 +100,24 @@ def list_candidate_cities(
     return cities
 
 
+@router.get("/positions", response_model=list[str])
+def list_candidate_positions(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Ambil daftar judul posisi unik dari master lowongan yang pernah dilamar atau aktif."""
+    from sqlalchemy import distinct
+    from app.models.position import Position
+
+    rows = (
+        db.query(distinct(Position.title))
+        .filter(Position.title.isnot(None), Position.title != "")
+        .all()
+    )
+    positions = sorted({r[0].strip() for r in rows if r[0]})
+    return positions
+
+
 @router.get("", response_model=list[CandidateResponse])
 def list_candidates(
     skip: int = Query(0, ge=0),
@@ -108,6 +126,7 @@ def list_candidates(
     source_channel: str | None = Query(None),
     completeness_status: str | None = Query(None),
     city: str | None = Query(None),
+    position_id: str | None = Query(None),
     experience_level: str | None = Query(None),
     education: str | None = Query(None),
     min_current_salary: Decimal | None = Query(None),
@@ -179,6 +198,22 @@ def list_candidates(
             query = query.filter(~or_(*conditions))
         else:
             query = query.filter(Candidate.domicile.ilike(f"%{city}%"))
+
+    if position_id:
+        # Filter berdasarkan judul posisi/lamaran (bisa UUID atau nama posisi)
+        import uuid as py_uuid
+        from app.models.position import Position
+        try:
+            val_uuid = py_uuid.UUID(position_id)
+            query = query.filter(
+                Candidate.applications.any(Application.position_id == val_uuid)
+            )
+        except (ValueError, AttributeError):
+            query = query.filter(
+                Candidate.applications.any(
+                    Application.position.has(Position.title.ilike(f"%{position_id}%"))
+                )
+            )
             
     if experience_level:
         exp_stmt = select(
