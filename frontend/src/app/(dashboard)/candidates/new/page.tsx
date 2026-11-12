@@ -151,16 +151,16 @@ export default function BulkCVUploadPage() {
       setUploadProgress(0);
       // Mark all as done (API is async — actual per-file status comes from screening IDs)
       setFileStatuses((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
-      showToast("success", data.message || "CV berhasil diupload. Mengarahkan ke database kandidat...");
+      showToast("success", data.message || "CV berhasil diupload dan sedang diekstrak AI.");
 
       // Segera refetch notifikasi supaya bell tidak tertinggal 30 detik polling.
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      queryClient.invalidateQueries({ queryKey: ["candidates"] });
-
-      // Redirect otomatis ke /candidates terurut kandidat paling baru
-      setTimeout(() => {
-        router.push("/candidates?sort_by=created_at&sort_order=desc");
-      }, 1500);
+      let attempts = 0;
+      const pollId = setInterval(() => {
+        attempts++;
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        if (attempts >= 20) clearInterval(pollId);
+      }, 15_000);
     },
     onError: (error) => {
       setUploadProgress(0);
@@ -301,19 +301,24 @@ export default function BulkCVUploadPage() {
                 <p className="font-semibold text-blue-950">File berhasil diupload dan sedang diproses!</p>
                 <p className="text-blue-800">
                   AI sedang mengekstrak data teks dan identitas kandidat di latar belakang.
-                  Kandidat yang berhasil diekstrak akan otomatis muncul di{" "}
-                  <Link href="/candidates" className="font-semibold underline hover:text-blue-950">
-                    Database Kandidat
-                  </Link>
-                  . Anda juga akan menerima notifikasi lonceng ketika seluruh file selesai diproses.
+                  Begitu selesai, Anda akan menerima <strong>notifikasi lonceng</strong> di pojok kanan atas.
+                  Klik notifikasi tersebut untuk langsung melihat kandidat terbaru yang berhasil masuk.
                 </p>
-                <p className="text-xs text-blue-700 pt-1">
-                  Jika terdapat CV yang format teksnya tidak terbaca / gagal diproses, Anda dapat melihatnya di{" "}
-                  <Link href="/candidates/pending-review" className="font-medium underline hover:text-blue-900">
-                    Pending Review Kandidat
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <Link
+                    href="/candidates?sort_by=created_at&sort_order=desc"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
+                  >
+                    Buka Database Kandidat
+                    <span className="material-symbols-outlined text-xs">arrow_forward</span>
                   </Link>
-                  .
-                </p>
+                  <Link
+                    href="/candidates/pending-review"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-50"
+                  >
+                    Cek Log Upload
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
