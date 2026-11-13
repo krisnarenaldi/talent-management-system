@@ -242,8 +242,22 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
             >
               ← Kembali ke {isFromTalentPool ? "Talent Pool" : "kandidat"}
             </Link>
-            <div className="mt-2 flex items-center gap-2">
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold text-gray-900">{candidate.full_name}</h1>
+              {candidate.is_cv_altek_updated && (
+                <span
+                  title="Data telah diperbarui via CV Altek"
+                  className="inline-flex items-center text-[#1D9BF0] flex-shrink-0 cursor-help"
+                >
+                  <svg
+                    className="h-5 w-5 fill-current"
+                    viewBox="0 0 24 24"
+                    aria-label="Verified via CV Altek"
+                  >
+                    <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.97-.81-3.98s-2.59-1.27-3.98-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.98-.2-3.99.81s-1.27 2.59-.81 3.98C2.49 9.33 1.61 10.57 1.61 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.97.81 3.98s2.59 1.27 3.98.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.97.2 3.98-.81s1.27-2.59.81-3.98c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.3 11.96l1.41-1.41 2.83 2.83 6.36-6.36 1.41 1.41-7.77 7.77z" />
+                  </svg>
+                </span>
+              )}
               {(candidate.pool_status === "talent_pool" ||
                 (candidate as any).talent_pool === 1 ||
                 (candidate as any).talent_pool === true ||

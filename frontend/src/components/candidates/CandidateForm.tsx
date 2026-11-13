@@ -126,6 +126,7 @@ export default function CandidateForm({
   const [initialExperience, setInitialExperience] = useState<CandidateExperience[]>([]);
   const [skillInput, setSkillInput] = useState("");
   const [pendingSourceChannel, setPendingSourceChannel] = useState<string | null>(null);
+  const [isCvAltekUpdated, setIsCvAltekUpdated] = useState(false);
   // ── Upload Latest Data modal state ──
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -202,6 +203,7 @@ export default function CandidateForm({
 
         setInitialEducation(educations);
         setInitialExperience(experiences);
+        setIsCvAltekUpdated(Boolean(candidate.is_cv_altek_updated));
         // Simpan source_channel kandidat — akan di-sync ke form setelah sourceChannels tersedia
         setPendingSourceChannel(candidate.source_channel || "");
         form.reset({
@@ -427,6 +429,9 @@ export default function CandidateForm({
       ]);
       setInitialExperience(updatedExperiences);
       setInitialEducation(updatedEducations);
+      setIsCvAltekUpdated(Boolean(updatedCandidate.is_cv_altek_updated));
+      queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
 
       // Sinkronisasi data pribadi yang mungkin baru terisi
       if (updatedCandidate.full_name) form.setValue("full_name", updatedCandidate.full_name);
@@ -505,14 +510,24 @@ export default function CandidateForm({
         </div>
         {/* Tombol Upload Data Terakhir — hanya di mode edit */}
         {mode === "edit" && candidateId && (
-          <button
-            type="button"
-            onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition-colors"
-          >
-            <span className="material-symbols-outlined text-base">upload_file</span>
-            Upload Data Terakhir untuk Edit
-          </button>
+          <div className="flex items-center gap-3">
+            {isCvAltekUpdated && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-[#1D9BF0] border border-blue-200">
+                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24" aria-label="Verified">
+                  <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.97-.81-3.98s-2.59-1.27-3.98-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.98-.2-3.99.81s-1.27 2.59-.81 3.98C2.49 9.33 1.61 10.57 1.61 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.97.81 3.98s2.59 1.27 3.98.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.97.2 3.98-.81s1.27-2.59.81-3.98c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.3 11.96l1.41-1.41 2.83 2.83 6.36-6.36 1.41 1.41-7.77 7.77z" />
+                </svg>
+                Terverifikasi CV Altek
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowUploadModal(true)}
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition-colors"
+            >
+              <span className="material-symbols-outlined text-base">upload_file</span>
+              Upload Data Terakhir untuk Edit
+            </button>
+          </div>
         )}
       </div>
 

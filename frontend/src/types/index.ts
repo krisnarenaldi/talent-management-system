@@ -157,6 +157,8 @@ export interface Candidate {
   is_talent_pool?: boolean;
   talent_pool_reason?: string | null;
   talent_pool_notes?: string | null;
+  is_cv_altek_updated?: boolean;
+  cv_altek_updated_at?: string | null;
   notes?: string;
   skills?: string[];
   is_blacklisted?: boolean;

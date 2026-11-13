@@ -180,6 +180,8 @@ class CandidateResponse(BaseModel):
     talent_pool_notes: str | None = None
     talent_pool_updated_at: datetime | None = None
     talent_pool_updated_by: AutoStrUUID | None = None
+    is_cv_altek_updated: bool = False
+    cv_altek_updated_at: datetime | None = None
     notes: str | None
     skills: List[str] | None
     is_blacklisted: bool = False

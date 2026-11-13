@@ -61,6 +61,8 @@ class Candidate(Base):
     talent_pool_notes = Column(Text, nullable=True)
     talent_pool_updated_at = Column(DateTime(timezone=True), nullable=True)
     talent_pool_updated_by = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True)
+    is_cv_altek_updated = Column(Boolean, default=False, nullable=False, server_default="false")
+    cv_altek_updated_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text)                                 # Catatan bebas recruiter
     skills = Column(JSONB, default=list, nullable=True)  # e.g. ["PHP", "Next.js", "Python"]
     created_at = Column(DateTime(timezone=True), server_default=func.now())

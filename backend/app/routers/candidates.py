@@ -1440,7 +1440,13 @@ Teks dokumen kandidat:
 
             updated_fields.append(f"pengalaman kerja ({len(valid_experiences)} entri terbaru disimpan)")
 
+    # Tandai bahwa data kandidat telah diperbarui via formulir CV Altek
+    candidate.is_cv_altek_updated = True
+    candidate.cv_altek_updated_at = datetime.now(timezone.utc)
+    updated_fields.append("status verifikasi CV Altek")
+
     db.commit()
+    db.refresh(candidate)
 
     return {
         "success": True,
