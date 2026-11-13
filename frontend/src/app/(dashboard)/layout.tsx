@@ -39,6 +39,145 @@ function isPMAllowedRoute(pathname: string): boolean {
   return PM_ALLOWED_PREFIXES.some((r) => pathname.startsWith(r));
 }
 
+interface PageHeaderInfo {
+  title: string;
+  description: string;
+}
+
+function getHeaderInfo(pathname: string): PageHeaderInfo {
+  if (pathname === "/candidates/pending-review") {
+    return {
+      title: "Log Upload & Ekstraksi CV",
+      description: "Riwayat dokumen CV yang diunggah serta status hasil ekstraksi AI.",
+    };
+  }
+  if (pathname === "/candidates/new") {
+    return {
+      title: "Upload CV Baru",
+      description: "Unggah dokumen CV untuk diekstrak otomatis oleh AI ke dalam database.",
+    };
+  }
+  if (pathname === "/candidates/manual/new") {
+    return {
+      title: "Input Manual Kandidat",
+      description: "Pendaftaran data profil kandidat secara manual ke dalam database.",
+    };
+  }
+  if (pathname.startsWith("/candidates/") && pathname.endsWith("/edit")) {
+    return {
+      title: "Edit Profil Kandidat",
+      description: "Perbarui data pribadi, riwayat pengalaman, dan informasi profil kandidat.",
+    };
+  }
+  if (pathname.startsWith("/candidates/") && pathname !== "/candidates") {
+    return {
+      title: "Detail Profil Kandidat",
+      description: "Informasi lengkap, resume, kualifikasi, dan riwayat lamaran kandidat.",
+    };
+  }
+  if (pathname === "/candidates") {
+    return {
+      title: "Database Kandidat",
+      description: "Bank data seluruh profil kandidat dan riwayat CV yang tersimpan.",
+    };
+  }
+  if (pathname.startsWith("/talent-pool")) {
+    return {
+      title: "Talent Pool",
+      description: "Kumpulan talenta terkurasi dan kandidat siap pakai untuk kebutuhan posisi.",
+    };
+  }
+  if (pathname.startsWith("/applications/pending-review")) {
+    return {
+      title: "Review Ekstraksi Lamaran",
+      description: "Verifikasi hasil ekstraksi AI dan evaluasi kelengkapan lamaran per posisi.",
+    };
+  }
+  if (pathname.startsWith("/applications/") && pathname !== "/applications") {
+    return {
+      title: "Detail Lamaran",
+      description: "Proses evaluasi, tahapan pipeline, dan catatan penempatan kandidat.",
+    };
+  }
+  if (pathname === "/applications") {
+    return {
+      title: "Applications",
+      description: "Pelacakan proses seleksi dan pipeline tahapan lamaran kerja kandidat.",
+    };
+  }
+  if (pathname.startsWith("/employees")) {
+    return {
+      title: "Data Karyawan",
+      description: "Pengelolaan data karyawan aktif, riwayat penempatan, dan kontrak kerja.",
+    };
+  }
+  if (pathname.startsWith("/blacklist")) {
+    return {
+      title: "Blacklist",
+      description: "Daftar kandidat yang diblokir beserta riwayat dan catatan penolakan.",
+    };
+  }
+  if (pathname.startsWith("/analytics")) {
+    return {
+      title: "Analytics & Reports",
+      description: "Laporan analitik rekrutmen, performa tim, dan metrik konversi kandidat.",
+    };
+  }
+  if (pathname.startsWith("/search")) {
+    return {
+      title: "AI Talent Search",
+      description: "Pencarian pintar berbasis AI untuk mencocokkan profil dan keahlian talenta.",
+    };
+  }
+  if (pathname.startsWith("/admin/clients")) {
+    return {
+      title: "Manajemen Klien",
+      description: "Master data perusahaan rekanan, PIC, dan kebutuhan rekrutmen klien.",
+    };
+  }
+  if (pathname.startsWith("/admin/positions")) {
+    return {
+      title: "Lowongan Posisi",
+      description: "Manajemen lowongan pekerjaan yang dibuka untuk masing-masing klien.",
+    };
+  }
+  if (pathname.startsWith("/admin/blacklist-status-types")) {
+    return {
+      title: "Master Status Blacklist",
+      description: "Pengaturan master kategori dan alasan penetapan status blacklist.",
+    };
+  }
+  if (pathname.startsWith("/admin/agreement-types")) {
+    return {
+      title: "Master Tipe Perjanjian",
+      description: "Pengaturan jenis kontrak kerja dan perjanjian penempatan karyawan.",
+    };
+  }
+  if (pathname.startsWith("/admin/users")) {
+    return {
+      title: "Manajemen Pengguna",
+      description: "Pengelolaan akun tim, peran akses (Admin, HR, Manager, PM), dan hak sistem.",
+    };
+  }
+  if (pathname.startsWith("/settings")) {
+    return {
+      title: "Pengaturan",
+      description: "Konfigurasi preferensi sistem dan profil pengguna.",
+    };
+  }
+  if (pathname === "/dashboard" || pathname === "/") {
+    return {
+      title: "Dashboard",
+      description: "Ringkasan metrik rekrutmen, aktivitas tim, dan statistik kandidat.",
+    };
+  }
+
+  return {
+    title: "TalentFlow",
+    description: "Sistem Manajemen Talenta & Rekrutmen Terpadu.",
+  };
+}
+
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -53,6 +192,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const isAdmin = normalizeRole(user?.role) === "admin";
   const isPM = normalizeRole(user?.role) === "pm";
   const { collapsed } = useSidebar();
+  const headerInfo = getHeaderInfo(pathname);
 
   useKeyboardShortcuts(shortcutModalOpen, setShortcutModalOpen);
 
@@ -118,9 +258,14 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               collapsed ? "w-[calc(100%-4rem)]" : "w-[calc(100%-16rem)]"
             }`}
           >
-            <h2 className="text-headline-md text-on-surface font-semibold hidden md:block">
-              Candidate Database
-            </h2>
+            <div className="hidden md:flex flex-col justify-center min-w-0 pr-4">
+              <h2 className="text-base lg:text-lg font-bold text-on-surface leading-tight truncate">
+                {headerInfo.title}
+              </h2>
+              <p className="text-xs text-on-surface-variant leading-tight truncate mt-0.5">
+                {headerInfo.description}
+              </p>
+            </div>
             <div className="flex items-center gap-2 ml-auto">
               <NotificationBell />
               <button
