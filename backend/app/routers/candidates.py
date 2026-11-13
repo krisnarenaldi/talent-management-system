@@ -553,17 +553,24 @@ def list_candidate_pending_reviews(
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
     """
-    Daftar CV kandidat yang gagal diproses (error) atau menunggu ekstraksi pada alur ingestion talent pool.
+    Daftar seluruh riwayat/log upload CV kandidat pada alur ingestion talent pool.
+    - HR: Hanya melihat file yang diupload sendiri dan belum di-soft delete.
+    - Admin/Manager: Melihat semua log upload (termasuk yang di-soft delete oleh HR).
     """
+    from sqlalchemy.orm import joinedload
     from app.models.application import AIScreeningResult
     from app.routers.applications import _normalize_extracted_json
 
     query = (
         db.query(AIScreeningResult)
+        .options(
+            joinedload(AIScreeningResult.candidate),
+            joinedload(AIScreeningResult.uploader),
+        )
         .filter(
             AIScreeningResult.position_id.is_(None),
             AIScreeningResult.status.in_([
-                "error", "menunggu_ekstraksi", "sedang_diproses",
+                "selesai", "error", "menunggu_ekstraksi", "sedang_diproses",
                 "duplikat", "blacklisted",
             ]),
         )
@@ -581,6 +588,7 @@ def list_candidate_pending_reviews(
         {
             "id": str(r.id),
             "candidate_id": str(r.candidate_id) if r.candidate_id else None,
+            "candidate_name": r.candidate.full_name if r.candidate else None,
             "cv_file_url": r.cv_file_url,
             "cv_drive_item_id": r.cv_drive_item_id,
             "source_channel": r.source_channel,
