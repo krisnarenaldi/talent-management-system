@@ -54,7 +54,12 @@ function StatusBadge({ status }: { status: FileUploadStatus["status"] }) {
 function BulkCVUploadPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isTalentPoolMode = searchParams.get("talent_pool") === "true";
+  const targetParam = (searchParams.get("target") || searchParams.get("pool") || "").toLowerCase();
+  const isTalentPoolMode =
+    targetParam === "talent-pool" ||
+    targetParam === "talent_pool" ||
+    searchParams.get("talent_pool") === "true" ||
+    searchParams.get("talent-pool") === "true";
   const showToast = useToastStore((s) => s.showToast);
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -132,12 +137,16 @@ function BulkCVUploadPageInner() {
       const formData = new FormData();
       fileStatuses.forEach(({ file }) => formData.append("files", file));
       if (selectedChannel) formData.append("source_channel", selectedChannel);
+      if (isTalentPoolMode) {
+        formData.append("target", "talent-pool");
+        formData.append("talent_pool", "true");
+      }
 
       // Mark all as uploading
       setFileStatuses((prev) => prev.map((s) => ({ ...s, status: "uploading" as const })));
 
       const uploadUrl = isTalentPoolMode
-        ? "/api/v1/candidates/bulk-upload?talent_pool=true"
+        ? "/api/v1/candidates/bulk-upload?target=talent-pool"
         : "/api/v1/candidates/bulk-upload";
 
       const response = await api.post(uploadUrl, formData, {

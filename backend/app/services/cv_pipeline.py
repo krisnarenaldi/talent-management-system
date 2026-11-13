@@ -752,6 +752,18 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                     db.add(cv_doc)
                     db.commit()
 
+                    # Jika diupload via alur Talent Pool, update status kandidat menjadi talent_pool
+                    if getattr(result, "is_talent_pool_upload", False):
+                        existing_candidate.pool_status = "talent_pool"
+                        existing_candidate.talent_pool_reason = "lainnya"
+                        existing_candidate.talent_pool_notes = "Upload via Talent Pool"
+                        existing_candidate.talent_pool_updated_at = datetime.now(timezone.utc)
+                        existing_candidate.talent_pool_updated_by = result.uploaded_by
+                        logger.info(
+                            "CV ingestion: kandidat %s dipindahkan ke talent_pool (upload via talent pool)",
+                            existing_candidate.id,
+                        )
+
                     result.candidate_id = existing_candidate.id
                     result.status = "duplikat"
                     result.ai_notes = (
@@ -798,6 +810,8 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
             # Step 7 — Simpan ke tabel Candidate dan relasinya
             from datetime import datetime as dt
 
+            is_tp = bool(getattr(result, "is_talent_pool_upload", False))
+
             # Buat candidate record
             candidate = Candidate(
                 full_name=extracted.get("nama") or "Unknown",
@@ -805,21 +819,17 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                 phone=extracted.get("telepon"),
                 source_channel=result.source_channel,
                 skills=extracted.get("skills") or [],
-                pool_status="database",
+                pool_status="talent_pool" if is_tp else "database",
+                talent_pool_reason="lainnya" if is_tp else None,
+                talent_pool_notes="Upload via Talent Pool" if is_tp else None,
+                talent_pool_updated_at=datetime.now(timezone.utc) if is_tp else None,
+                talent_pool_updated_by=result.uploaded_by if is_tp else None,
                 completeness_status="belum_lengkap",
                 contact_status="aktif",
             )
             db.add(candidate)
             db.commit()
             db.refresh(candidate)
-
-            # Jika diupload dari halaman Talent Pool, langsung set status talent_pool
-            if getattr(result, "is_talent_pool_upload", False):
-                candidate.pool_status = "talent_pool"
-                candidate.talent_pool_reason = "lainnya"
-                candidate.talent_pool_notes = "Upload via Talent Pool"
-                candidate.talent_pool_updated_at = datetime.now(timezone.utc)
-                db.commit()
 
             # Simpan pendidikan
             for edu in extracted.get("pendidikan", []) or []:

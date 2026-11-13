@@ -5,7 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -412,8 +412,10 @@ def create_candidate(
 
 @router.post("/bulk-upload", response_model=BulkUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def bulk_upload_candidates(
+    request: Request,
     files: list[UploadFile] = File(...),
     source_channel: str | None = Query(None),
+    target: str | None = Query(None, description="Target tujuan: 'talent-pool' / 'talent_pool' atau 'database'"),
     talent_pool: bool = Query(False, description="Jika True, kandidat yang diekstrak langsung mendapat status talent_pool"),
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
@@ -437,6 +439,33 @@ async def bulk_upload_candidates(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Maksimal {MAX_FILES} file per request",
         )
+
+    # Deteksi target / talent_pool dari Query param maupun Form data secara menyeluruh
+    try:
+        form_data = await request.form()
+    except Exception:
+        form_data = {}
+
+    raw_target = (
+        target
+        or request.query_params.get("target")
+        or request.query_params.get("pool")
+        or form_data.get("target")
+        or form_data.get("pool")
+    )
+    is_target_tp = str(raw_target or "").strip().lower() in ("talent-pool", "talent_pool")
+
+    form_tp_val = str(form_data.get("talent_pool") or form_data.get("talent-pool") or "").strip().lower()
+    query_tp_val = str(request.query_params.get("talent_pool") or request.query_params.get("talent-pool") or "").strip().lower()
+    is_tp_upload = (
+        is_target_tp
+        or talent_pool
+        or query_tp_val in ("true", "1", "yes")
+        or form_tp_val in ("true", "1", "yes")
+    )
+
+    resolved_channel = source_channel or form_data.get("source_channel")
+    channel_str = str(resolved_channel).strip() if resolved_channel else None
 
     storage = get_storage_service()
     screening_ids: list[str] = []
@@ -479,9 +508,9 @@ async def bulk_upload_candidates(
                 batch_id=batch_id,
                 cv_file_url=result.get("file_url"),
                 cv_drive_item_id=result.get("drive_item_id"),
-                source_channel=source_channel,
+                source_channel=channel_str,
                 status="menunggu_ekstraksi",
-                is_talent_pool_upload=talent_pool,
+                is_talent_pool_upload=is_tp_upload,
             )
             db.add(screening)
             db.commit()
