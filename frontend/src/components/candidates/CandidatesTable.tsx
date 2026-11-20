@@ -89,7 +89,7 @@ export interface CandidatesTableProps {
 
 export default function CandidatesTable({
   poolStatus,
-  eyebrow = "Talent pool",
+  eyebrow = "Database",
   title = "Kandidat",
   showExport = true,
 }: CandidatesTableProps) {
