@@ -48,7 +48,7 @@ function getHeaderInfo(pathname: string): PageHeaderInfo {
   if (pathname === "/candidates/pending-review") {
     return {
       title: "Log Upload & Ekstraksi CV",
-      description: "Riwayat dokumen CV yang diunggah serta status hasil ekstraksi AI.",
+      description: "Monitoring riwayat dan status setiap proses pengunggahan CV.",
     };
   }
   if (pathname === "/candidates/new") {
@@ -78,13 +78,13 @@ function getHeaderInfo(pathname: string): PageHeaderInfo {
   if (pathname === "/candidates") {
     return {
       title: "Database Kandidat",
-      description: "Bank data seluruh profil kandidat dan riwayat CV yang tersimpan.",
+      description: "Kumpulan pelamar dan data kadidat yang masuk melalui proses job-posting.",
     };
   }
   if (pathname.startsWith("/talent-pool")) {
     return {
       title: "Talent Pool",
-      description: "Kumpulan talenta terkurasi dan kandidat siap pakai untuk kebutuhan posisi.",
+      description: "Kandidat potensial yang telah diidentifikasi dan diwawancarai.",
     };
   }
   if (pathname.startsWith("/applications/pending-review")) {
@@ -96,7 +96,7 @@ function getHeaderInfo(pathname: string): PageHeaderInfo {
   if (pathname.startsWith("/applications/") && pathname !== "/applications") {
     return {
       title: "Detail Lamaran",
-      description: "Proses evaluasi, tahapan pipeline, dan catatan penempatan kandidat.",
+      description: "Monitoring lamaran dan progress setiap kandidat dalam proses rekrutmen.",
     };
   }
   if (pathname === "/applications") {
@@ -108,13 +108,13 @@ function getHeaderInfo(pathname: string): PageHeaderInfo {
   if (pathname.startsWith("/employees")) {
     return {
       title: "Data Karyawan",
-      description: "Pengelolaan data karyawan aktif, riwayat penempatan, dan kontrak kerja.",
+      description: "Database karyawan Altek Citra Cemerlang.",
     };
   }
   if (pathname.startsWith("/blacklist")) {
     return {
       title: "Blacklist",
-      description: "Daftar kandidat yang diblokir beserta riwayat dan catatan penolakan.",
+      description: "Daftar kandidat dan karyawan yang memiliki catatan negatif.",
     };
   }
   if (pathname.startsWith("/analytics")) {
@@ -168,7 +168,7 @@ function getHeaderInfo(pathname: string): PageHeaderInfo {
   if (pathname === "/dashboard" || pathname === "/") {
     return {
       title: "Dashboard",
-      description: "Ringkasan metrik rekrutmen, aktivitas tim, dan statistik kandidat.",
+      description: "Ringkasan aktivitas dan informasi utama terkait proses rekrutmen.",
     };
   }
 
