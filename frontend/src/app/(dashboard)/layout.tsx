@@ -102,7 +102,7 @@ function getHeaderInfo(pathname: string): PageHeaderInfo {
   if (pathname === "/applications") {
     return {
       title: "Applications",
-      description: "Pelacakan proses seleksi dan pipeline tahapan lamaran kerja kandidat.",
+      description: "Monitoring lamaran dan progress setiap kandidat dalam proses rekrutmen.",
     };
   }
   if (pathname.startsWith("/employees")) {
