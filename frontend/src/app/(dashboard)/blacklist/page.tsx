@@ -10,6 +10,7 @@ import { blacklistApi } from "@/lib/api/blacklist";
 import { getErrorMessage } from "@/lib/errors";
 import type { Blacklist, BlacklistStatusType } from "@/types";
 import { useModalEscape } from "@/hooks/useModalEscape";
+import Pagination from "@/components/ui/Pagination";
 
 export default function BlacklistPage() {
   const queryClient = useQueryClient();
@@ -248,23 +249,12 @@ export default function BlacklistPage() {
           <div className="text-sm text-gray-500">
             Menampilkan {blacklistItems.length} entri
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
-            >
-              Sebelumnya
-            </button>
-            <span className="text-sm font-medium text-gray-700">Halaman {currentPage}</span>
-            <button
-              onClick={() => setCurrentPage((prev) => prev + 1)}
-              disabled={blacklistItems.length < itemsPerPage}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
-            >
-              Selanjutnya
-            </button>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={null}
+            hasNextPage={blacklistItems.length === itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 

@@ -127,6 +127,8 @@ def list_candidates(
     completeness_status: str | None = Query(None),
     city: str | None = Query(None),
     position_id: str | None = Query(None),
+    positions: list[str] | None = Query(None),
+    positions_bracket: list[str] | None = Query(None, alias="positions[]"),
     experience_level: str | None = Query(None),
     education: str | None = Query(None),
     min_current_salary: Decimal | None = Query(None),
@@ -199,21 +201,56 @@ def list_candidates(
         else:
             query = query.filter(Candidate.domicile.ilike(f"%{city}%"))
 
+    # Filter posisi (mendukung multiple positions via list/comma-separated, atau single position_id)
+    raw_positions: list[str] = []
+    if positions:
+        raw_positions.extend(positions)
+    if positions_bracket:
+        raw_positions.extend(positions_bracket)
     if position_id:
-        # Filter berdasarkan judul posisi/lamaran (bisa UUID atau nama posisi)
+        raw_positions.append(position_id)
+
+    parsed_positions: list[str] = []
+    for item in raw_positions:
+        if not item:
+            continue
+        if "," in item:
+            parsed_positions.extend([x.strip() for x in item.split(",") if x.strip()])
+        elif item.strip():
+            parsed_positions.append(item.strip())
+
+    seen_pos = set()
+    unique_positions = []
+    for p in parsed_positions:
+        p_lower = p.lower()
+        if p_lower not in seen_pos and p != "Semua":
+            seen_pos.add(p_lower)
+            unique_positions.append(p)
+
+    if unique_positions:
         import uuid as py_uuid
         from app.models.position import Position
-        try:
-            val_uuid = py_uuid.UUID(position_id)
-            query = query.filter(
-                Candidate.applications.any(Application.position_id == val_uuid)
-            )
-        except (ValueError, AttributeError):
-            query = query.filter(
-                Candidate.applications.any(
-                    Application.position.has(Position.title.ilike(f"%{position_id}%"))
+
+        pos_uuids = []
+        pos_titles = []
+        for p in unique_positions:
+            try:
+                pos_uuids.append(py_uuid.UUID(p))
+            except (ValueError, AttributeError):
+                pos_titles.append(p)
+
+        conds = []
+        if pos_uuids:
+            conds.append(Application.position_id.in_(pos_uuids))
+        if pos_titles:
+            conds.append(
+                Application.position.has(
+                    or_(*[Position.title.ilike(f"%{t}%") for t in pos_titles])
                 )
             )
+
+        if conds:
+            query = query.filter(Candidate.applications.any(or_(*conds)))
             
     if experience_level:
         exp_stmt = select(

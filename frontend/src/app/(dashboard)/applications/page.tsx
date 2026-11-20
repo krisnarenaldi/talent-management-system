@@ -13,6 +13,7 @@ import { useExport } from "@/hooks/useExport";
 import ExportButton from "@/components/ExportButton";
 import { fetchActivePositions } from "@/lib/api/analytics";
 import type { ActivePositionSummary } from "@/types";
+import Pagination from "@/components/ui/Pagination";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared types
@@ -776,25 +777,12 @@ function ApplicationsPipeline() {
               ? "Tidak ada lamaran"
               : `Menampilkan ${firstItem}–${lastItem} dari ${total} lamaran`}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1 || isLoading}
-              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Sebelumnya
-            </button>
-            <span className="text-sm font-medium text-gray-700">
-              {currentPage} / {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((prev) => prev + 1)}
-              disabled={currentPage >= totalPages || isLoading}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Selanjutnya
-            </button>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            disabled={isLoading}
+          />
         </div>
       </div>
     </div>

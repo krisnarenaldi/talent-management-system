@@ -15,6 +15,8 @@ import { useToastStore } from "@/stores/toast.store";
 import { useModalEscape } from "@/hooks/useModalEscape";
 import TalentPoolModal from "@/components/candidates/TalentPoolModal";
 import BulkAssignModal from "@/components/candidates/BulkAssignModal";
+import Pagination from "@/components/ui/Pagination";
+import MultiSelectDropdown from "@/components/ui/MultiSelectDropdown";
 
 function normalizeRole(role: string | undefined): string {
   if (!role) return "";
@@ -74,7 +76,7 @@ function getSalaryRange(value: string): SalaryRange {
   return SALARY_RANGES.find((r) => r.value === value)?.range ?? { min: null, max: null };
 }
 
-async function fetchCandidates(params?: Record<string, string | undefined>) {
+async function fetchCandidates(params?: Record<string, any>) {
   const response = await api.get("/api/v1/candidates", { params });
   return response.data as Candidate[];
 }
@@ -100,7 +102,7 @@ export default function CandidatesTable({
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [positionFilter, setPositionFilter] = useState("");
+  const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [cityFilter, setCityFilter] = useState("");
@@ -311,7 +313,7 @@ export default function CandidatesTable({
         searchTerm,
         sourceFilter,
         statusFilter,
-        positionFilter,
+        selectedPositions,
         startDate,
         endDate,
         cityFilter,
@@ -332,7 +334,7 @@ export default function CandidatesTable({
         search: searchTerm || undefined,
         source_channel: sourceFilter || undefined,
         completeness_status: statusFilter || undefined,
-        position_id: positionFilter || undefined,
+        positions: selectedPositions.length > 0 ? selectedPositions.join(",") : undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
         city: cityFilter || undefined,
@@ -360,7 +362,7 @@ export default function CandidatesTable({
         search: searchTerm || undefined,
         source_channel: sourceFilter || undefined,
         completeness_status: statusFilter || undefined,
-        position_id: positionFilter || undefined,
+        positions: selectedPositions.length > 0 ? selectedPositions.join(",") : undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
         city: cityFilter || undefined,
@@ -575,19 +577,12 @@ export default function CandidatesTable({
       {showFilters && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm space-y-3">
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Posisi</label>
-              <select
-                value={positionFilter}
-                onChange={(e) => setPositionFilter(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-              >
-                <option value="">Semua</option>
-                {positionsList.map((pos) => (
-                  <option key={pos} value={pos}>{pos}</option>
-                ))}
-              </select>
-            </div>
+            <MultiSelectDropdown
+              label="Posisi"
+              options={positionsList}
+              selected={selectedPositions}
+              onChange={setSelectedPositions}
+            />
 
             <div>
               <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Tanggal mulai</label>
@@ -675,7 +670,7 @@ export default function CandidatesTable({
             <div className="flex items-end">
               <button
                 onClick={() => {
-                  setPositionFilter("");
+                  setSelectedPositions([]);
                   setStartDate("");
                   setEndDate("");
                   setCityFilter("");
@@ -813,21 +808,12 @@ export default function CandidatesTable({
             </select>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              Posisi
-            </label>
-            <select
-              value={positionFilter}
-              onChange={(e) => setPositionFilter(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
-            >
-              <option value="">Semua</option>
-              {positionsList.map((pos) => (
-                <option key={pos} value={pos}>{pos}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectDropdown
+            label="Posisi"
+            options={positionsList}
+            selected={selectedPositions}
+            onChange={setSelectedPositions}
+          />
         </div>
       </div>
 
@@ -1165,23 +1151,12 @@ export default function CandidatesTable({
           <div className="text-sm text-gray-500">
             Menampilkan {candidates.length} kandidat
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50"
-            >
-              Sebelumnya
-            </button>
-            <span className="text-sm font-medium text-gray-700">Halaman {currentPage}</span>
-            <button
-              onClick={() => setCurrentPage((prev) => prev + 1)}
-              disabled={candidates.length < itemsPerPage}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              Selanjutnya
-            </button>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={null}
+            hasNextPage={candidates.length === itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 

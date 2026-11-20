@@ -37,6 +37,8 @@ def _parse_uuid(value: str | None, field_name: str = "position_id") -> str | Non
 @router.get("/candidates")
 def export_candidates(
     position_id: str | None = Query(None),
+    positions: list[str] | None = Query(None),
+    positions_bracket: list[str] | None = Query(None, alias="positions[]"),
     completeness_status: str | None = Query(None),
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
@@ -54,9 +56,29 @@ def export_candidates(
 ):
     """Export candidates to Excel with optional filters."""
     try:
+        raw_positions = []
+        if positions:
+            raw_positions.extend(positions)
+        if positions_bracket:
+            raw_positions.extend(positions_bracket)
+        if position_id:
+            raw_positions.append(position_id)
+
+        parsed_positions = []
+        for item in raw_positions:
+            if not item:
+                continue
+            if "," in item:
+                parsed_positions.extend([x.strip() for x in item.split(",") if x.strip()])
+            elif item.strip():
+                parsed_positions.append(item.strip())
+
+        unique_positions = [p for p in parsed_positions if p and p != "Semua"]
+
         excel_bytes = _get_excel_response_for_candidates(
             db,
             position_id=position_id,
+            positions=unique_positions if unique_positions else None,
             completeness_status=completeness_status,
             start_date=_parse_date(start_date),
             end_date=_parse_date(end_date),

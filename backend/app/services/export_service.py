@@ -24,6 +24,7 @@ class ExportError(Exception):
 def _get_excel_response_for_candidates(
     db: Session,
     position_id: Optional[str] = None,
+    positions: Optional[list[str]] = None,
     completeness_status: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -64,19 +65,33 @@ def _get_excel_response_for_candidates(
     )
 
     # Apply filters
-    if position_id:
-        # Candidates yang punya application ke posisi tertentu
-        try:
-            val_uuid = uuid.UUID(position_id)
-            query = query.join(Application, Candidate.id == Application.candidate_id).filter(
-                Application.position_id == str(val_uuid)
+    target_positions = list(positions or [])
+    if position_id and position_id not in target_positions:
+        target_positions.append(position_id)
+
+    if target_positions:
+        pos_uuids = []
+        pos_titles = []
+        for p in target_positions:
+            try:
+                pos_uuids.append(uuid.UUID(p))
+            except (ValueError, AttributeError):
+                pos_titles.append(p)
+
+        conds = []
+        if pos_uuids:
+            conds.append(Application.position_id.in_([str(u) for u in pos_uuids]))
+        if pos_titles:
+            conds.append(
+                or_(*[Position.title.ilike(f"%{t}%") for t in pos_titles])
             )
-        except (ValueError, AttributeError):
-            query = (
-                query.join(Application, Candidate.id == Application.candidate_id)
-                .join(Position, Application.position_id == Position.id)
-                .filter(Position.title.ilike(f"%{position_id}%"))
-            )
+
+        query = (
+            query.join(Application, Candidate.id == Application.candidate_id)
+            .outerjoin(Position, Application.position_id == Position.id)
+            .filter(or_(*conds))
+            .distinct()
+        )
 
     if completeness_status:
         query = query.filter(Candidate.completeness_status == completeness_status)

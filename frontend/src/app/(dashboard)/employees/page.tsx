@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { fetchEmployees } from "@/lib/api/employees";
 import type { Employee } from "@/types";
+import Pagination from "@/components/ui/Pagination";
 
 const STATUS_OPTIONS = [
   { value: "", label: "Semua" },
@@ -331,23 +332,12 @@ export default function EmployeesPage() {
           <div className="text-sm text-gray-500">
             Menampilkan {employees.length} karyawan
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
-            >
-              Sebelumnya
-            </button>
-            <span className="text-sm font-medium text-gray-700">Halaman {currentPage}</span>
-            <button
-              onClick={() => setCurrentPage((prev) => prev + 1)}
-              disabled={employees.length < itemsPerPage}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
-            >
-              Selanjutnya
-            </button>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={null}
+            hasNextPage={employees.length === itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
     </div>
