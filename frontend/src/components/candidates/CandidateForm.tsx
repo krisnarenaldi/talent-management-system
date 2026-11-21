@@ -227,12 +227,12 @@ export default function CandidateForm({
           skills: candidate.skills ?? [],
           education:
             educations.length > 0
-              ? educations.map((item, idx) => ({
+              ? educations.map((item) => ({
                   id: item.id,
                   institution: item.institution || "",
                   major: item.major || "",
                   graduation_year: item.graduation_year != null ? String(item.graduation_year) : "",
-                  gpa: idx === 0 && item.gpa != null ? String(item.gpa) : "",
+                  gpa: item.gpa != null ? String(item.gpa) : "",
                 }))
               : [defaultEducation],
           experience:
@@ -326,6 +326,7 @@ export default function CandidateForm({
           institution: item.institution?.trim() || null,
           major: item.major?.trim() || null,
           graduation_year: item.graduation_year ? Number(item.graduation_year) : null,
+          gpa: item.gpa ? Number(item.gpa) : null,
         }));
 
       const normalizedExperience = values.experience
@@ -446,12 +447,12 @@ export default function CandidateForm({
       if (updatedEducations.length > 0) {
         form.setValue(
           "education",
-          updatedEducations.map((item, idx) => ({
+          updatedEducations.map((item) => ({
             id: item.id,
             institution: item.institution || "",
             major: item.major || "",
             graduation_year: item.graduation_year != null ? String(item.graduation_year) : "",
-            gpa: idx === 0 && item.gpa != null ? String(item.gpa) : "",
+            gpa: item.gpa != null ? String(item.gpa) : "",
           })),
         );
       }
