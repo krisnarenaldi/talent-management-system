@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_role
@@ -216,31 +216,51 @@ def update_client(
 
         # Validasi penghapusan PIC:
         # Jika ada PIC lama yang tidak ada di daftar baru dan tidak direname,
-        # pastikan tidak sedang digunakan oleh lamaran aktif.
+        # pastikan tidak sedang digunakan oleh lamaran aktif (baik tercatat langsung
+        # pada Application.client_user_name maupun melalui Position.client_user_names).
         deleted_pics = [
             name for name in old_names
             if name.strip().lower() not in new_names_lower and name.strip().lower() not in rename_map
         ]
-        for deleted_name in deleted_pics:
-            active_app_count = (
-                db.query(Application)
-                .join(Position, Application.position_id == Position.id)
-                .filter(
-                    Position.client_id == client_id,
-                    Application.status == "active",
-                    func.lower(Application.client_user_name) == deleted_name.strip().lower(),
-                )
-                .count()
+        if deleted_pics:
+            positions_for_client = (
+                db.query(Position)
+                .filter(Position.client_id == client_id)
+                .all()
             )
-            if active_app_count > 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"PIC '{deleted_name}' tidak bisa dihapus karena ada {active_app_count} "
-                        f"lamaran aktif dengan PIC ini. Silakan buat PIC baru, alihkan posisi & "
-                        f"lamaran ke PIC baru terlebih dahulu."
-                    ),
+            for deleted_name in deleted_pics:
+                del_norm = deleted_name.strip().lower()
+                # Posisi milik klien ini yang menugaskan deleted_name sebagai PIC-nya
+                matching_pos_ids = [
+                    pos.id for pos in positions_for_client
+                    if any(str(n).strip().lower() == del_norm for n in (pos.client_user_names or []))
+                ]
+
+                # Cari lamaran aktif: tercatat langsung sebagai client_user_name ATAU
+                # berada di posisi yang menugaskan PIC ini
+                app_filter = [func.lower(Application.client_user_name) == del_norm]
+                if matching_pos_ids:
+                    app_filter.append(Application.position_id.in_(matching_pos_ids))
+
+                active_app_count = (
+                    db.query(Application)
+                    .join(Position, Application.position_id == Position.id)
+                    .filter(
+                        Position.client_id == client_id,
+                        Application.status == "active",
+                        or_(*app_filter),
+                    )
+                    .count()
                 )
+                if active_app_count > 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"PIC '{deleted_name}' tidak bisa dihapus karena masih bertanggung jawab "
+                            f"atas {active_app_count} lamaran aktif. Silakan buat PIC baru, alihkan "
+                            f"posisi & lamaran ke PIC baru terlebih dahulu."
+                        ),
+                    )
 
         pic_name, pic_contact = client_service.pics_to_legacy(pics)
         client.pics = pics
