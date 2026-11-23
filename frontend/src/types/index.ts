@@ -85,6 +85,7 @@ export interface RecommendCandidate {
   skills: string[];
   experience_years: number;
   expected_salary: number | null;
+  expected_salary_max?: number | null;
   domicile: string | null;
   pool_status: string;
   ai_score: number | null;
@@ -147,7 +148,8 @@ export interface Candidate {
   photo_url?: string;
   source_channel?: string;
   current_salary?: number;
-  expected_salary?: number;
+  expected_salary?: number | null;
+  expected_salary_max?: number | null;
   notice_period_days?: number;
   completeness_status: CompletenessStatus;
   contact_status: ContactStatus;
@@ -247,7 +249,8 @@ export interface StageHistory {
   actual_date?: string;
   result?: string;
   salary_current_input?: number;
-  salary_expected_input?: number;
+  salary_expected_input?: number | string | null;
+  salary_expected_max_input?: number | string | null;
   notes?: string;
   updated_by?: string;
   handler_id?: string | null;

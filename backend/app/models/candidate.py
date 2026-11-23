@@ -41,6 +41,7 @@ class Candidate(Base):
     source_channel = Column(String(100))                 # LinkedIn/Glints/Email/dll
     current_salary = Column(Numeric(15, 2))
     expected_salary = Column(Numeric(15, 2))
+    expected_salary_max = Column(Numeric(15, 2))
     notice_period_days = Column(Integer)
     completeness_status = Column(
         Enum(*COMPLETENESS_STATUS, name="completeness_status_enum"),

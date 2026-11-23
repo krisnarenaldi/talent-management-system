@@ -83,7 +83,8 @@ class CandidateCreate(BaseModel):
     photo_url: str | None = None
     source_channel: str | None = None
     current_salary: Decimal | None = None
-    expected_salary: Decimal | None = None
+    expected_salary: Decimal | str | None = None
+    expected_salary_max: Decimal | None = None
     notice_period_days: int | None = None
     pool_status: str = "database"
     talent_pool_reason: str | None = None
@@ -106,7 +107,8 @@ class CandidateUpdate(BaseModel):
     photo_url: str | None = None
     source_channel: str | None = None
     current_salary: Decimal | None = None
-    expected_salary: Decimal | None = None
+    expected_salary: Decimal | str | None = None
+    expected_salary_max: Decimal | None = None
     notice_period_days: int | None = None
     pool_status: str | None = None
     talent_pool_reason: str | None = None
@@ -172,6 +174,7 @@ class CandidateResponse(BaseModel):
     source_channel: str | None
     current_salary: Decimal | None
     expected_salary: Decimal | None
+    expected_salary_max: Decimal | None = None
     notice_period_days: int | None
     completeness_status: str
     contact_status: str

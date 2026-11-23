@@ -17,6 +17,7 @@ import TalentPoolModal from "@/components/candidates/TalentPoolModal";
 import BulkAssignModal from "@/components/candidates/BulkAssignModal";
 import Pagination from "@/components/ui/Pagination";
 import MultiSelectDropdown from "@/components/ui/MultiSelectDropdown";
+import { formatSalaryRange } from "@/lib/currency";
 
 function normalizeRole(role: string | undefined): string {
   if (!role) return "";
@@ -1075,7 +1076,7 @@ export default function CandidatesTable({
                       <td className="px-4 py-3">
                         {candidate.expected_salary ? (
                           <span className="text-sm font-medium text-gray-900">
-                            Rp {Number(candidate.expected_salary).toLocaleString("id-ID")}
+                            {formatSalaryRange(candidate.expected_salary, candidate.expected_salary_max)}
                           </span>
                         ) : (
                           <span className="text-gray-400">-</span>

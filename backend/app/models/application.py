@@ -161,6 +161,7 @@ class StageHistory(Base):
     result = Column(String(50))
     salary_current_input = Column(Numeric(15, 2))
     salary_expected_input = Column(Numeric(15, 2))
+    salary_expected_max_input = Column(Numeric(15, 2))
     notes = Column(Text)
     updated_by = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True)
     # handler_id: user HR/Manager yang menangani tahapan ini (bisa beda dari recruiter utama)

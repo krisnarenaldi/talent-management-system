@@ -6,8 +6,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
-import { useAuthStore } from "@/stores/auth.store";
+import { formatSalaryRange } from "@/lib/currency";
 import { useToastStore } from "@/stores/toast.store";
+import { useAuthStore } from "@/stores/auth.store";
 import { getErrorMessage } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import type { Application, StageHistory, User } from "@/types";
@@ -205,7 +206,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     };
     if (selectedStage === "Interview_HR" || selectedStage === "Offering") {
       payload.salary_current_input = salaryCurrent ? Number(salaryCurrent) : null;
-      payload.salary_expected_input = salaryExpected ? Number(salaryExpected) : null;
+      payload.salary_expected_input = salaryExpected ? salaryExpected.trim() : null;
     }
     // Jika kandidat blacklist, selalu sertakan flag override — lamaran sudah dibuat dengan persetujuan HR
     if (application?.is_blacklisted) {
@@ -484,7 +485,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                       )}
                       {history.salary_expected_input != null && (
                         <span className="rounded-full bg-gray-100 px-2 py-1">
-                          Gaji diharapkan: Rp {Number(history.salary_expected_input).toLocaleString("id-ID")}
+                          Gaji diharapkan: {formatSalaryRange(history.salary_expected_input, history.salary_expected_max_input)}
                         </span>
                       )}
                     </div>
@@ -625,12 +626,12 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">Gaji yang diharapkan</label>
                       <input
-                        type="number"
+                        type="text"
                         value={salaryExpected}
                         onChange={(e) => setSalaryExpected(e.target.value)}
                         disabled={isStageFailed}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="0"
+                        placeholder="Contoh: 10000000 atau 9400000 - 10000000"
                       />
                     </div>
                   </div>

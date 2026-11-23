@@ -12,7 +12,8 @@ class StageHistoryCreate(BaseModel):
     scheduled_date: date | None = None
     result: str | None = None                    # pass/fail/lolos/negosiasi/reschedule/lanjut
     salary_current_input: Decimal | None = None
-    salary_expected_input: Decimal | None = None
+    salary_expected_input: Decimal | str | None = None
+    salary_expected_max_input: Decimal | None = None
     notes: str | None = None
     force_blacklisted: bool = False
 
@@ -39,6 +40,7 @@ class StageHistoryResponse(BaseModel):
     result: str | None
     salary_current_input: Decimal | None
     salary_expected_input: Decimal | None
+    salary_expected_max_input: Decimal | None = None
     notes: str | None
     updated_by: AutoStrUUID | None
     handler_id: AutoStrUUID | None = None

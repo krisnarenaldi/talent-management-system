@@ -258,6 +258,7 @@ async def recommend_candidates(
                 skills=c.get("skills", []),
                 experience_years=c.get("experience_years", 0),
                 expected_salary=c.get("expected_salary"),
+                expected_salary_max=c.get("expected_salary_max"),
                 domicile=c.get("domicile"),
                 pool_status=c.get("pool_status", "database"),
                 ai_score=c.get("ai_score"),

@@ -39,6 +39,7 @@ from app.schemas.candidate import (
 )
 from app.services import candidate_service
 from app.core.phone_utils import normalize_phone as _normalize_phone
+from app.core.salary_parser import parse_salary_range
 from app.services.ai_service import generate_project_drafts
 from app.services.storage_service import get_storage_service
 from app.services.usage_logger import log_openai_usage
@@ -431,7 +432,14 @@ def create_candidate(
     # Blacklist check
     bl = candidate_service.check_blacklist(db, payload.email, payload.phone, payload.identity_no)
 
-    candidate = Candidate(**payload.model_dump())
+    c_data = payload.model_dump()
+    if "expected_salary" in c_data and c_data["expected_salary"] is not None:
+        min_sal, max_sal = parse_salary_range(c_data["expected_salary"])
+        c_data["expected_salary"] = min_sal
+        if max_sal is not None:
+            c_data["expected_salary_max"] = max_sal
+
+    candidate = Candidate(**c_data)
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
@@ -967,11 +975,21 @@ def update_candidate(
                 detail=f"Email/phone/NIK sudah digunakan kandidat lain (ID: {dup['existing_id']})",
             )
 
-    # Normalise phone if included in update
-    if "phone" in payload.model_dump(exclude_unset=True):
-        payload.phone = _normalize_phone(payload.phone) or None
+    update_data = payload.model_dump(exclude_unset=True)
+    if "phone" in update_data:
+        update_data["phone"] = _normalize_phone(update_data["phone"]) or None
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    if "expected_salary" in update_data:
+        val = update_data["expected_salary"]
+        if val is not None:
+            min_sal, max_sal = parse_salary_range(val)
+            update_data["expected_salary"] = min_sal
+            update_data["expected_salary_max"] = max_sal
+        else:
+            update_data["expected_salary"] = None
+            update_data["expected_salary_max"] = None
+
+    for key, value in update_data.items():
         setattr(candidate, key, value)
     db.commit()
     db.refresh(candidate)

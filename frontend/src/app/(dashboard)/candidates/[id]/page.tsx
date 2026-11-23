@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { FileText, Users, UserMinus } from "lucide-react";
 import api from "@/lib/api";
+import { formatSalaryRange } from "@/lib/currency";
 import DocumentUploader from "@/components/candidates/DocumentUploader";
 import TalentPoolModal from "@/components/candidates/TalentPoolModal";
 import { useAuthStore } from "@/stores/auth.store";
@@ -430,7 +431,7 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                 <InfoRow label="Sumber" value={candidate.source_channel || "-"} />
                 <InfoRow label="Notice period" value={candidate.notice_period_days ? `${candidate.notice_period_days} hari` : "-"} />
                 <InfoRow label="Current salary" value={candidate.current_salary ? `Rp ${Number(candidate.current_salary).toLocaleString("id-ID")}` : "-"} />
-                <InfoRow label="Expected salary" value={candidate.expected_salary ? `Rp ${Number(candidate.expected_salary).toLocaleString("id-ID")}` : "-"} />
+                <InfoRow label="Expected salary" value={formatSalaryRange(candidate.expected_salary, candidate.expected_salary_max)} />
               </div>
               {candidate.skills && candidate.skills.length > 0 && (
                 <div className="mt-4 border-t border-gray-100 pt-4">

@@ -40,6 +40,7 @@ from app.services import employee_service
 from app.core.phone_utils import phone_variants
 from app.services.storage_service import get_storage_service
 from app.core.arq_pool import get_redis_pool
+from app.core.salary_parser import parse_salary_range
 
 storage_service = get_storage_service()
 
@@ -852,6 +853,7 @@ def get_application(
                 "result": h.result,
                 "salary_current_input": str(h.salary_current_input) if h.salary_current_input else None,
                 "salary_expected_input": str(h.salary_expected_input) if h.salary_expected_input else None,
+                "salary_expected_max_input": str(h.salary_expected_max_input) if h.salary_expected_max_input else None,
                 "notes": h.notes,
                 "updated_by": str(h.updated_by) if h.updated_by else None,
                 "handler_id": str(h.handler_id) if h.handler_id else None,
@@ -949,6 +951,10 @@ def update_stage(
                        f"Pilih 'Rejected' atau 'Withdrawn' untuk menutup lamaran ini.",
             )
 
+    min_exp_sal, max_exp_sal = parse_salary_range(payload.salary_expected_input)
+    if payload.salary_expected_max_input is not None:
+        max_exp_sal = payload.salary_expected_max_input
+
     # Simpan history (handler_id = user yang sedang melakukan update tahapan ini)
     history = StageHistory(
         application_id=application_id,
@@ -957,7 +963,8 @@ def update_stage(
         actual_date=payload.scheduled_date,  # same day by default
         result=payload.result,
         salary_current_input=payload.salary_current_input,
-        salary_expected_input=payload.salary_expected_input,
+        salary_expected_input=min_exp_sal,
+        salary_expected_max_input=max_exp_sal,
         notes=payload.notes,
         updated_by=current_user.id,
         handler_id=current_user.id,
@@ -968,8 +975,9 @@ def update_stage(
     # Jika user mengisi salary di form tahapan, update langsung ke candidate
     if payload.salary_current_input is not None:
         application.candidate.current_salary = payload.salary_current_input
-    if payload.salary_expected_input is not None:
-        application.candidate.expected_salary = payload.salary_expected_input
+    if min_exp_sal is not None:
+        application.candidate.expected_salary = min_exp_sal
+        application.candidate.expected_salary_max = max_exp_sal
 
     # Update application (hanya jika berbeda stage)
     if not is_same_stage:

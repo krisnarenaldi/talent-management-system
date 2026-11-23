@@ -125,3 +125,7 @@ CREATE TABLE IF NOT EXISTS candidate_project (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_candidate_project_candidate_id ON candidate_project (candidate_id);
+
+-- i9j0k1l2m3n4: expected_salary_max on candidate and salary_expected_max_input on stage_history
+ALTER TABLE candidate ADD COLUMN IF NOT EXISTS expected_salary_max NUMERIC(15, 2);
+ALTER TABLE stage_history ADD COLUMN IF NOT EXISTS salary_expected_max_input NUMERIC(15, 2);

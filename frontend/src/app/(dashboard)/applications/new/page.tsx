@@ -13,6 +13,7 @@ import { positionsApi } from "@/lib/api/positions";
 import { useToastStore } from "@/stores/toast.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { getErrorMessage } from "@/lib/errors";
+import { formatSalaryRange } from "@/lib/currency";
 import type {
   Candidate,
   CandidateSource,
@@ -671,6 +672,7 @@ export default function NewApplicationPage() {
                             <p className="text-xs text-gray-500">
                               {rec.domicile ?? "Domisili belum diisi"} • {rec.experience_years ?? 0} tahun
                               • {rec.skills?.length ? rec.skills.slice(0, 4).join(", ") : "Skill belum diisi"}
+                              {rec.expected_salary ? ` • ${formatSalaryRange(rec.expected_salary, rec.expected_salary_max)}` : ""}
                             </p>
                           </td>
                           <td className="px-3 py-3">

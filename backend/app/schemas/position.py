@@ -91,6 +91,7 @@ class RecommendCandidateItem(BaseModel):
     skills: list[str] = Field(default_factory=list)
     experience_years: float
     expected_salary: Optional[Decimal] = None
+    expected_salary_max: Optional[Decimal] = None
     domicile: Optional[str] = None
     pool_status: str
     ai_score: Optional[int] = None

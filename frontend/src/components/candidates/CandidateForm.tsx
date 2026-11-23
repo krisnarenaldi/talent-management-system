@@ -219,7 +219,12 @@ export default function CandidateForm({
           domicile: candidate.domicile || "",
           source_channel: candidate.source_channel || "",
           current_salary: candidate.current_salary != null ? String(candidate.current_salary) : "",
-          expected_salary: candidate.expected_salary != null ? String(candidate.expected_salary) : "",
+          expected_salary:
+            candidate.expected_salary != null
+              ? candidate.expected_salary_max && candidate.expected_salary_max !== candidate.expected_salary
+                ? `${candidate.expected_salary} - ${candidate.expected_salary_max}`
+                : String(candidate.expected_salary)
+              : "",
           notice_period_days:
             candidate.notice_period_days != null ? String(candidate.notice_period_days) : "",
           notes: candidate.notes || "",
@@ -284,7 +289,7 @@ export default function CandidateForm({
         domicile: values.domicile?.trim() || null,
         source_channel: values.source_channel?.trim() || null,
         current_salary: toNumber(values.current_salary),
-        expected_salary: toNumber(values.expected_salary),
+        expected_salary: values.expected_salary?.trim() || null,
         notice_period_days: toNumber(values.notice_period_days),
         notes: values.notes?.trim() || null,
         skills: values.skills.length > 0 ? values.skills : null,
@@ -654,7 +659,12 @@ export default function CandidateForm({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Gaji yang diharapkan</label>
-              <input {...form.register("expected_salary")} type="number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary" />
+              <input
+                {...form.register("expected_salary")}
+                type="text"
+                placeholder="Contoh: 10000000 atau 9400000 - 10000000"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              />
             </div>
 
             <div>

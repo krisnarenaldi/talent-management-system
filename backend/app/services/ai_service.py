@@ -738,6 +738,7 @@ async def recommend_candidates_for_position(
             "skills": c.skills or [],
             "experience_years": round(exp_years, 1),
             "expected_salary": float(c.expected_salary) if c.expected_salary else None,
+            "expected_salary_max": float(c.expected_salary_max) if c.expected_salary_max else None,
             "current_salary": float(c.current_salary) if c.current_salary else None,
             "domicile": c.domicile,
             "pool_status": c.pool_status,
@@ -771,6 +772,7 @@ async def recommend_candidates_for_position(
                     "skills": c.skills or [],
                     "experience_years": 0,
                     "expected_salary": float(c.expected_salary) if c.expected_salary else None,
+                    "expected_salary_max": float(c.expected_salary_max) if c.expected_salary_max else None,
                     "domicile": c.domicile,
                     "pool_status": c.pool_status,
                     "ai_score": None,
@@ -793,6 +795,7 @@ async def recommend_candidates_for_position(
                 "skills": c.skills or [],
                 "experience_years": sc.get("experience_years", 0),
                 "expected_salary": float(c.expected_salary) if c.expected_salary else None,
+                "expected_salary_max": float(c.expected_salary_max) if c.expected_salary_max else None,
                 "domicile": c.domicile,
                 "pool_status": c.pool_status,
                 "ai_score": sc.get("ai_score"),
@@ -828,7 +831,12 @@ def _build_matching_prompt(
     for c in candidate_summaries:
         skills_str = ", ".join(c["skills"]) if c["skills"] else "Tidak ada"
         exp_str = f"{c['experience_years']} tahun"
-        salary_str = f"Rp {c['expected_salary']:,.0f}" if c['expected_salary'] else "Belum diisi"
+        if c.get("expected_salary") and c.get("expected_salary_max"):
+            salary_str = f"Rp {c['expected_salary']:,.0f} - {c['expected_salary_max']:,.0f}"
+        elif c.get("expected_salary"):
+            salary_str = f"Rp {c['expected_salary']:,.0f}"
+        else:
+            salary_str = "Belum diisi"
         cand_lines.append(
             f"{c['index']+1}. ID: {c['candidate_id']}\n"
             f"   Nama: {c['full_name']}\n"
