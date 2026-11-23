@@ -438,6 +438,7 @@ export default function CandidateForm({
       setIsCvAltekUpdated(Boolean(updatedCandidate.is_cv_altek_updated));
       queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
       queryClient.invalidateQueries({ queryKey: ["candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["candidate-documents", candidateId] });
 
       // Sinkronisasi data pribadi yang mungkin baru terisi
       if (updatedCandidate.full_name) form.setValue("full_name", updatedCandidate.full_name);

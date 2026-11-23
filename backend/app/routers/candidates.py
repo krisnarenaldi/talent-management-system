@@ -1485,6 +1485,32 @@ Teks dokumen kandidat:
             detail="AI mengembalikan data tidak valid.",
         )
 
+    # ── Validasi nama: pastikan file milik kandidat yang benar ──
+    def _name_tokens(name: str) -> set[str]:
+        """Pecah nama menjadi set kata (lowercase, min 2 huruf)."""
+        return {w.lower() for w in name.split() if len(w) >= 2}
+
+    ai_personal = extracted.get("personal") or {}
+    ai_name = (ai_personal.get("full_name") or "").strip() if isinstance(ai_personal, dict) else ""
+    candidate_name = (candidate.full_name or "").strip()
+
+    if ai_name and candidate_name and candidate_name.lower() != "unknown":
+        ai_tokens = _name_tokens(ai_name)
+        candidate_tokens = _name_tokens(candidate_name)
+        # Hitung berapa token nama kandidat yang ada di nama dari file
+        if candidate_tokens:
+            overlap = len(ai_tokens & candidate_tokens)
+            match_ratio = overlap / len(candidate_tokens)
+            if match_ratio < 0.4:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"File yang diupload tampaknya bukan milik kandidat ini. "
+                        f"Nama di file: \"{ai_name}\", nama kandidat: \"{candidate_name}\". "
+                        f"Pastikan Anda mengupload file CV yang benar."
+                    ),
+                )
+
     updated_fields: list[str] = []
 
     # ── Update data pribadi kandidat ──
@@ -1654,6 +1680,34 @@ Teks dokumen kandidat:
     candidate.is_cv_altek_updated = True
     candidate.cv_altek_updated_at = datetime.now(timezone.utc)
     updated_fields.append("status verifikasi CV Altek")
+
+    # ── Simpan file CV Template sebagai dokumen ──
+    try:
+        folder = f"Candidates/{candidate_id}"
+        storage = get_storage_service()
+        # Soft-delete dokumen CV_altek lama jika ada
+        db.query(CandidateDocument).filter(
+            CandidateDocument.candidate_id == candidate_id,
+            CandidateDocument.doc_type == "CV_altek",
+            CandidateDocument.is_deleted == False,
+        ).update({"is_deleted": True})
+        # Upload file ke storage
+        upload_result = await storage.upload(
+            file_content=content,
+            filename=file.filename or "CV_altek.pdf",
+            folder=folder,
+        )
+        cv_altek_doc = CandidateDocument(
+            candidate_id=candidate_id,
+            doc_type="CV_altek",
+            label=file.filename or "CV_altek.pdf",
+            file_url=upload_result["file_url"],
+            drive_item_id=None,
+            is_verified=True,
+        )
+        db.add(cv_altek_doc)
+    except Exception as exc:
+        logger.warning("Gagal menyimpan file CV Template sebagai dokumen: %s", exc)
 
     db.commit()
     db.refresh(candidate)

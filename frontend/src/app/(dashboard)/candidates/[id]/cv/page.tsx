@@ -134,6 +134,7 @@ export default function CandidateCVPage({
       closeUploadCVModal();
       queryClient.invalidateQueries({ queryKey: ["candidate", trimmedId] });
       queryClient.invalidateQueries({ queryKey: ["candidate-cv-list", trimmedId] });
+      queryClient.invalidateQueries({ queryKey: ["candidate-documents", trimmedId] });
     } catch (err) {
       showToast("error", getErrorMessage(err));
     } finally {
@@ -165,6 +166,11 @@ export default function CandidateCVPage({
   const originalCV =
     documents
       .filter((doc) => doc.doc_type === "CV_asli")
+      .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0] ?? null;
+
+  const cvAltekDoc =
+    documents
+      .filter((doc) => doc.doc_type === "CV_altek")
       .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0] ?? null;
 
   const canEdit =
@@ -494,18 +500,54 @@ export default function CandidateCVPage({
             </div>
 
             {candidate.is_cv_altek_updated ? (
-              <div className="space-y-2 text-xs text-slate-600">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Diupload</span>
-                  <span>{formatSafeDate(candidate.cv_altek_updated_at)}</span>
+              <>
+                <div className="space-y-2 text-xs text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Diupload</span>
+                    <span>{formatSafeDate(candidate.cv_altek_updated_at)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Status</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                      <CheckCircle className="h-3 w-3" /> Terverifikasi
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Status</span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                    <CheckCircle className="h-3 w-3" /> Terverifikasi
-                  </span>
-                </div>
-              </div>
+
+                {cvAltekDoc?.file_url ? (
+                  <div className="flex gap-2 pt-1">
+                    <a
+                      href={cvAltekDoc.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Buka
+                    </a>
+                    <a
+                      href={cvAltekDoc.file_url}
+                      download
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-600 hover:bg-blue-100 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  </div>
+                ) : canEdit ? (
+                  <p className="text-xs text-slate-400 pt-1">
+                    File tidak tersimpan.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowUploadCVModal(true)}
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      Upload ulang
+                    </button>{" "}
+                    untuk menyimpan file.
+                  </p>
+                ) : null}
+              </>
             ) : (
               <div className="space-y-2 py-2 text-xs text-slate-500">
                 <p>Belum ada CV template yang diupload untuk kandidat ini.</p>
