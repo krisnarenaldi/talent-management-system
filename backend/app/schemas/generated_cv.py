@@ -74,3 +74,19 @@ class CVGenerateResponse(CVResponse):
         description="True jika CV dikembalikan dari cache (tidak di-regenerate).",
     )
     message: str = Field(default="CV berhasil digenerate.")
+
+
+class CVBatchDownloadRequest(BaseModel):
+    """Body untuk POST /api/v1/applications/batch-cv-zip"""
+
+    application_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Daftar application_id yang ingin diunduh CV standarnya (maksimal 50)",
+    )
+    language: Literal["ID", "EN"] = Field(
+        default="ID",
+        description="Bahasa summary CV Altek: 'ID' (Indonesia) atau 'EN' (English)",
+    )
+

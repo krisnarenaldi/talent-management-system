@@ -211,8 +211,15 @@ def _find_cooldown_blocking_application(
 def list_applications(
     candidate_id: str | None = Query(None),
     position_id: str | None = Query(None),
+    position_ids: list[str] | None = Query(None, alias="position_ids[]"),
+    positions: list[str] | None = Query(None),
+    client_id: str | None = Query(None),
+    client_ids: list[str] | None = Query(None, alias="client_ids[]"),
+    clients: list[str] | None = Query(None),
     status_filter: str | None = Query(None),
+    statuses: list[str] | None = Query(None, alias="statuses[]"),
     current_stage: str | None = Query(None),
+    stages: list[str] | None = Query(None, alias="stages[]"),
     recruiter_id: str | None = Query(None),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
@@ -255,12 +262,109 @@ def list_applications(
             query = query.filter(Application.candidate_id.in_(list(candidate_ids)))
         else:
             query = query.filter(Application.candidate_id == candidate_id)
+
+    # Position filters: single position_id OR list of position titles / IDs
+    active_position_titles = set()
+    active_position_ids = set()
+    for raw in [positions, position_ids]:
+        if not raw:
+            continue
+        for item in raw:
+            if not item:
+                continue
+            for val in item.split(","):
+                v = val.strip()
+                if not v or v.lower() == "semua":
+                    continue
+                # If looks like uuid
+                if len(v) == 36 and "-" in v:
+                    active_position_ids.add(v)
+                else:
+                    active_position_titles.add(v)
+
     if position_id:
-        query = query.filter(Application.position_id == position_id)
+        v = position_id.strip()
+        if len(v) == 36 and "-" in v:
+            active_position_ids.add(v)
+        elif v and v.lower() != "semua":
+            active_position_titles.add(v)
+
+    if active_position_ids and active_position_titles:
+        query = query.filter(or_(Application.position_id.in_(active_position_ids), Position.title.in_(active_position_titles)))
+    elif active_position_ids:
+        query = query.filter(Application.position_id.in_(active_position_ids))
+    elif active_position_titles:
+        query = query.filter(Position.title.in_(active_position_titles))
+
+    # Client filters: single client_id OR list of client names / IDs
+    active_client_names = set()
+    active_client_ids = set()
+    for raw in [clients, client_ids]:
+        if not raw:
+            continue
+        for item in raw:
+            if not item:
+                continue
+            for val in item.split(","):
+                v = val.strip()
+                if not v or v.lower() == "semua":
+                    continue
+                if len(v) == 36 and "-" in v:
+                    active_client_ids.add(v)
+                else:
+                    active_client_names.add(v)
+
+    if client_id:
+        v = client_id.strip()
+        if len(v) == 36 and "-" in v:
+            active_client_ids.add(v)
+        elif v and v.lower() != "semua":
+            active_client_names.add(v)
+
+    if active_client_ids and active_client_names:
+        query = query.filter(or_(Position.client_id.in_(active_client_ids), Client.name.in_(active_client_names)))
+    elif active_client_ids:
+        query = query.filter(Position.client_id.in_(active_client_ids))
+    elif active_client_names:
+        query = query.filter(Client.name.in_(active_client_names))
+
+    # Status filters: single status_filter OR list of statuses
+    active_statuses = set()
+    if statuses:
+        for item in statuses:
+            if not item:
+                continue
+            for val in item.split(","):
+                v = val.strip()
+                if v and v.lower() != "semua":
+                    active_statuses.add(v)
     if status_filter:
-        query = query.filter(Application.status == status_filter)
+        for val in status_filter.split(","):
+            v = val.strip()
+            if v and v.lower() != "semua":
+                active_statuses.add(v)
+
+    if active_statuses:
+        query = query.filter(Application.status.in_(active_statuses))
+
+    # Stage filters: single current_stage OR list of stages
+    active_stages = set()
+    if stages:
+        for item in stages:
+            if not item:
+                continue
+            for val in item.split(","):
+                v = val.strip()
+                if v and v.lower() != "semua":
+                    active_stages.add(v)
     if current_stage:
-        query = query.filter(Application.current_stage == current_stage)
+        for val in current_stage.split(","):
+            v = val.strip()
+            if v and v.lower() != "semua":
+                active_stages.add(v)
+
+    if active_stages:
+        query = query.filter(Application.current_stage.in_(active_stages))
     if recruiter_id:
         query = query.filter(Application.recruiter_id == recruiter_id)
     if start_date:

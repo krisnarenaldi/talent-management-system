@@ -17,19 +17,32 @@ Endpoints:
 """
 from __future__ import annotations
 
+import io
 import logging
+import re
+import zipfile
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.application import Application
 from app.models.candidate import Candidate
 from app.models.generated_cv import GeneratedCV
 from app.models.position import Position
-from app.schemas.generated_cv import CVGenerateRequest, CVGenerateResponse, CVResponse
+from app.schemas.generated_cv import (
+    CVBatchDownloadRequest,
+    CVGenerateRequest,
+    CVGenerateResponse,
+    CVResponse,
+)
 from app.services import cv_generator_service
 from app.services.cv_generator_service import _is_stale
+from app.services.onedrive_service import onedrive_service
+from app.services.storage_service import UPLOAD_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -183,10 +196,11 @@ def list_cvs_for_application(
         .all()
     )
 
+    return [_cv_to_response(cv, candidate) for cv in cvs]
+
     return [_cv_to_response(cv, candidate) for cv in cvs] if candidate else []
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Candidate-scoped endpoints (standalone — tanpa application context)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -293,3 +307,136 @@ def list_cvs_for_candidate(
     )
 
     return [_cv_to_response(cv, candidate) for cv in cvs]
+
+
+@router.post(
+    "/applications/batch-cv-zip",
+    summary="Download batch CV Standar Altek dalam bentuk ZIP",
+    tags=["CV"],
+)
+async def batch_download_cv_zip(
+    payload: CVBatchDownloadRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Download ZIP berisi CV standar Altek untuk daftar aplikasi yang dipilih.
+    Jika kandidat belum memiliki CV standar atau sudah stale:
+    sistem akan men-generate CV standar on-the-fly dengan data seadanya.
+    Maksimal 50 aplikasi per batch request.
+    """
+    app_ids = [aid.strip() for aid in payload.application_ids if aid.strip()]
+    if not app_ids:
+        raise HTTPException(status_code=400, detail="Daftar application_ids tidak boleh kosong")
+
+    if len(app_ids) > 50:
+        raise HTTPException(status_code=400, detail="Maksimal 50 CV per batch download")
+
+    applications = (
+        db.query(Application)
+        .filter(Application.id.in_(app_ids))
+        .all()
+    )
+
+    if not applications:
+        raise HTTPException(status_code=404, detail="Tidak ada lamaran yang ditemukan")
+
+    # Map by id to preserve order or lookup easily
+    app_map = {str(app.id): app for app in applications}
+
+    zip_buffer = io.BytesIO()
+    failed_items = []
+    used_filenames = set()
+
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for app_id in app_ids:
+            app = app_map.get(app_id)
+            if not app:
+                failed_items.append(f"Aplikasi ID {app_id}: Data tidak ditemukan di database.")
+                continue
+
+            candidate = db.query(Candidate).filter(Candidate.id == app.candidate_id).first()
+            if not candidate:
+                failed_items.append(f"Aplikasi ID {app_id}: Kandidat tidak ditemukan.")
+                continue
+
+            position = db.query(Position).filter(Position.id == app.position_id).first()
+            pos_title = position.title if position else "Posisi"
+            cand_name = candidate.full_name or "Kandidat"
+
+            try:
+                # 1. Pastikan CV Standar ada dan up-to-date
+                # generate_cv otomatis mengembalikan cache jika fresh, atau generate baru jika belum ada/stale
+                cv = await cv_generator_service.generate_cv(
+                    db=db,
+                    candidate_id=str(candidate.id),
+                    application_id=str(app.id),
+                    language=payload.language,
+                    position_title=pos_title,
+                    force_regenerate=False,
+                )
+                db.commit()
+                db.refresh(cv)
+
+                # 2. Ambil bytes file PDF
+                pdf_bytes: bytes | None = None
+                if settings.STORAGE_BACKEND == "onedrive" and cv.drive_item_id:
+                    pdf_bytes = await onedrive_service.download_file(cv.drive_item_id)
+                elif cv.drive_item_id:
+                    local_path = UPLOAD_ROOT / cv.drive_item_id
+                    if local_path.exists():
+                        pdf_bytes = local_path.read_bytes()
+                elif cv.file_url:
+                    # Fallback jika drive_item_id kosong tapi ada file_url lokal
+                    rel_path = cv.file_url.replace("/api/v1/files/", "").replace("/api/v1/candidates/files/", "").lstrip("/")
+                    local_path = UPLOAD_ROOT / rel_path
+                    if local_path.exists():
+                        pdf_bytes = local_path.read_bytes()
+
+                if not pdf_bytes:
+                    failed_items.append(f"{cand_name} ({pos_title}): Gagal mengambil file PDF yang tersimpan.")
+                    continue
+
+                # 3. Buat nama file rapi di dalam ZIP
+                clean_pos = re.sub(r'[\\/*?:"<>|]', "", pos_title).strip()
+                clean_name = re.sub(r'[\\/*?:"<>|]', "", cand_name).strip()
+                base_zip_filename = f"CV Altek - {clean_name} - {clean_pos}.pdf"
+                
+                # Cegah nama file duplikat dalam 1 zip
+                zip_filename = base_zip_filename
+                counter = 1
+                while zip_filename in used_filenames:
+                    zip_filename = f"CV Altek - {clean_name} - {clean_pos} ({counter}).pdf"
+                    counter += 1
+                used_filenames.add(zip_filename)
+
+                # 4. Tulis ke ZIP
+                zf.writestr(zip_filename, pdf_bytes)
+
+            except Exception as exc:
+                db.rollback()
+                logger.exception("Gagal memproses CV untuk aplikasi %s (%s): %s", app_id, cand_name, exc)
+                failed_items.append(f"{cand_name} ({pos_title}): {str(exc)}")
+
+        # Jika ada yang gagal, sertakan log file di dalam ZIP
+        if failed_items:
+            readme_text = "CATATAN DOWNLOAD BATCH CV ALTEK:\n"
+            readme_text += "=" * 40 + "\n\n"
+            readme_text += "Beberapa CV tidak berhasil digenerate/diunduh:\n"
+            for item in failed_items:
+                readme_text += f"- {item}\n"
+            zf.writestr("_CATATAN_PROSES_CV.txt", readme_text.encode("utf-8"))
+
+    zip_buffer.seek(0)
+    zip_bytes = zip_buffer.getvalue()
+
+    filename = f"CV_Altek_Batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return StreamingResponse(
+        iter([zip_bytes]),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+

@@ -5,11 +5,12 @@ import { ChevronDown, Check, X, Search } from "lucide-react";
 
 export interface MultiSelectDropdownProps {
   label?: string;
-  options: string[];
+  options: (string | { value: string; label: string })[];
   selected: string[];
   onChange: (selected: string[]) => void;
   placeholder?: string;
   allLabel?: string;
+  itemTypeLabel?: string;
   className?: string;
   maxHeight?: string;
 }
@@ -21,12 +22,18 @@ export default function MultiSelectDropdown({
   onChange,
   placeholder = "Semua",
   allLabel = "Semua",
+  itemTypeLabel,
   className = "",
   maxHeight = "max-h-64",
 }: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Normalize options to { value: string, label: string }
+  const normalizedOptions = options.map((opt) =>
+    typeof opt === "string" ? { value: opt, label: opt } : opt
+  );
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -58,11 +65,11 @@ export default function MultiSelectDropdown({
     };
   }, [isOpen]);
 
-  const toggleOption = (option: string) => {
-    if (selected.includes(option)) {
-      onChange(selected.filter((item) => item !== option));
+  const toggleOption = (val: string) => {
+    if (selected.includes(val)) {
+      onChange(selected.filter((item) => item !== val));
     } else {
-      onChange([...selected, option]);
+      onChange([...selected, val]);
     }
   };
 
@@ -75,8 +82,8 @@ export default function MultiSelectDropdown({
     onChange([]);
   };
 
-  const filteredOptions = options.filter((option) =>
-    option.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredOptions = normalizedOptions.filter((opt) =>
+    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const isAllSelected = selected.length === 0;
@@ -84,8 +91,12 @@ export default function MultiSelectDropdown({
   // Determine trigger label
   const getTriggerText = () => {
     if (isAllSelected) return allLabel;
-    if (selected.length === 1) return selected[0];
-    return `${selected.length} posisi dipilih`;
+    if (selected.length === 1) {
+      const match = normalizedOptions.find((o) => o.value === selected[0]);
+      return match ? match.label : selected[0];
+    }
+    const suffix = itemTypeLabel || (label ? label.toLowerCase() : "item");
+    return `${selected.length} ${suffix} dipilih`;
   };
 
   return (
@@ -137,14 +148,14 @@ export default function MultiSelectDropdown({
       {isOpen && (
         <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[220px] rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-1">
           {/* Quick Search if more than 5 options */}
-          {options.length > 5 && (
+          {normalizedOptions.length > 5 && (
             <div className="relative mb-1.5 px-1 pt-1">
               <Search className="absolute left-3 top-3.5 h-3.5 w-3.5 text-gray-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Cari posisi..."
+                placeholder={`Cari ${label ? label.toLowerCase() : "pilihan"}...`}
                 className="w-full rounded-md border border-gray-200 py-1.5 pl-8 pr-2 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 autoFocus
               />
@@ -176,19 +187,19 @@ export default function MultiSelectDropdown({
               </span>
             </button>
 
-            {/* List of positions */}
+            {/* List of options */}
             {filteredOptions.length === 0 ? (
               <div className="py-2 text-center text-xs text-gray-400">
-                Tidak ada posisi yang cocok
+                Tidak ada pilihan yang cocok
               </div>
             ) : (
-              filteredOptions.map((option) => {
-                const isChecked = selected.includes(option);
+              filteredOptions.map((opt) => {
+                const isChecked = selected.includes(opt.value);
                 return (
                   <button
-                    key={option}
+                    key={opt.value}
                     type="button"
-                    onClick={() => toggleOption(option)}
+                    onClick={() => toggleOption(opt.value)}
                     className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-left transition-colors ${
                       isChecked
                         ? "bg-blue-50 font-semibold text-blue-700"
@@ -205,7 +216,7 @@ export default function MultiSelectDropdown({
                       >
                         {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
                       </span>
-                      <span className="truncate">{option}</span>
+                      <span className="truncate">{opt.label}</span>
                     </span>
                   </button>
                 );
