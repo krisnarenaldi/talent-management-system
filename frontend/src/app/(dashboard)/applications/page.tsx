@@ -11,6 +11,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import type { Application, Position, Client } from "@/types";
 import { useExport } from "@/hooks/useExport";
+import { useModalEscape } from "@/hooks/useModalEscape";
 import ExportButton from "@/components/ExportButton";
 import { fetchActivePositions } from "@/lib/api/analytics";
 import type { ActivePositionSummary } from "@/types";
@@ -359,6 +360,7 @@ function ApplicationsPipeline() {
 
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  useModalEscape(() => setDeleteConfirm(null), !!deleteConfirm && !deleting);
   const queryClient = useQueryClient();
 
   const handleDeleteClick = (id: string, name: string) => {
