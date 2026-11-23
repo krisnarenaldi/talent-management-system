@@ -347,6 +347,7 @@ async def batch_download_cv_zip(
     zip_buffer = io.BytesIO()
     failed_items = []
     used_filenames = set()
+    processed_candidate_ids = set()
 
     with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for app_id in app_ids:
@@ -354,6 +355,13 @@ async def batch_download_cv_zip(
             if not app:
                 failed_items.append(f"Aplikasi ID {app_id}: Data tidak ditemukan di database.")
                 continue
+
+            cand_id_str = str(app.candidate_id)
+            # Distinct candidate: Jika kandidat yang sama sudah dimasukkan ke ZIP
+            # (misal karena melamar ke 2 posisi berbeda), lewati agar tidak ada file duplikat.
+            if cand_id_str in processed_candidate_ids:
+                continue
+            processed_candidate_ids.add(cand_id_str)
 
             candidate = db.query(Candidate).filter(Candidate.id == app.candidate_id).first()
             if not candidate:
