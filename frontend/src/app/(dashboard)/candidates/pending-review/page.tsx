@@ -51,6 +51,15 @@ export default function CandidatePendingReviewPage() {
     onError: () => showToast("error", "Gagal melakukan proses ulang."),
   });
 
+  const singleRetryMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/api/v1/candidates/pending-review/${id}/retry`),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["candidate-pending-reviews"] });
+      showToast("success", res.data?.message || "File CV berhasil di-enqueue ulang.");
+    },
+    onError: () => showToast("error", "Gagal melakukan proses ulang file CV."),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/api/v1/candidates/pending-review/${id}`),
     onSuccess: () => {
@@ -402,13 +411,24 @@ export default function CandidatePendingReviewPage() {
                     </Link>
                   )}
                   {isErrorStatus && (
-                    <Link
-                      href={`/candidates/manual/new`}
-                      className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                    >
-                      <span className="material-symbols-outlined text-sm">edit_note</span>
-                      Input Manual
-                    </Link>
+                    <>
+                      <button
+                        onClick={() => singleRetryMutation.mutate(item.id)}
+                        disabled={singleRetryMutation.isPending}
+                        className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition disabled:opacity-50"
+                        title="Proses ulang ekstraksi AI untuk file CV ini"
+                      >
+                        <span className="material-symbols-outlined text-sm">refresh</span>
+                        {singleRetryMutation.isPending ? "Memproses..." : "Proses Ulang"}
+                      </button>
+                      <Link
+                        href={`/candidates/manual/new`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                      >
+                        <span className="material-symbols-outlined text-sm">edit_note</span>
+                        Input Manual
+                      </Link>
+                    </>
                   )}
                   <button
                     onClick={() => {

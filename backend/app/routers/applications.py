@@ -507,6 +507,26 @@ def list_pending_reviews(
     Daftar AI screening result yang siap direview maupun sedang antri.
     HR hanya melihat miliknya sendiri; Manager/Admin melihat semua.
     """
+    from datetime import datetime, timezone, timedelta
+
+    # Auto-recovery: bila ada screening yang berstatus sedang_diproses atau menunggu_screening_ai
+    # lebih dari 15 menit, ubah menjadi 'error' agar tidak menggantung selamanya.
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    stuck_app_items = (
+        db.query(AIScreeningResult)
+        .filter(
+            AIScreeningResult.position_id.is_not(None),
+            AIScreeningResult.status.in_(["sedang_diproses", "menunggu_screening_ai"]),
+            func.coalesce(AIScreeningResult.updated_at, AIScreeningResult.created_at) < cutoff,
+        )
+        .all()
+    )
+    if stuck_app_items:
+        for item in stuck_app_items:
+            item.status = "error"
+            item.ai_notes = "Waktu screening AI melebihi batas (timeout > 15 menit). Silakan coba upload atau review kembali."
+        db.commit()
+
     query = (
         db.query(AIScreeningResult)
         .options(
@@ -559,6 +579,26 @@ def get_screening_result(
     import uuid as _uuid
     screening_id = screening_id.strip()
     
+    from datetime import datetime, timezone, timedelta
+
+    # Auto-recovery: bila ada screening yang berstatus sedang_diproses atau menunggu_screening_ai
+    # lebih dari 15 menit, ubah menjadi 'error' agar tidak menggantung selamanya.
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    stuck_app_items = (
+        db.query(AIScreeningResult)
+        .filter(
+            AIScreeningResult.position_id.is_not(None),
+            AIScreeningResult.status.in_(["sedang_diproses", "menunggu_screening_ai"]),
+            func.coalesce(AIScreeningResult.updated_at, AIScreeningResult.created_at) < cutoff,
+        )
+        .all()
+    )
+    if stuck_app_items:
+        for item in stuck_app_items:
+            item.status = "error"
+            item.ai_notes = "Waktu screening AI melebihi batas (timeout > 15 menit). Silakan coba upload atau review kembali."
+        db.commit()
+
     query = (
         db.query(AIScreeningResult)
         .options(

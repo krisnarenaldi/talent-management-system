@@ -475,7 +475,7 @@ async def bulk_upload_candidates(
     - Membuat record ai_screening_result dengan status 'menunggu_ekstraksi'
     - Enqueue arq job 'process_cv_ingestion' untuk ekstraksi data asinkron
     """
-    MAX_FILES = 20
+    MAX_FILES = 50
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
     ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
@@ -602,9 +602,28 @@ def list_candidate_pending_reviews(
     - HR: Hanya melihat file yang diupload sendiri dan belum di-soft delete.
     - Admin/Manager: Melihat semua log upload (termasuk yang di-soft delete oleh HR).
     """
+    from datetime import datetime, timezone, timedelta
     from sqlalchemy.orm import joinedload
     from app.models.application import AIScreeningResult
     from app.routers.applications import _normalize_extracted_json
+
+    # Auto-recovery: bila ada item yang berstatus sedang_diproses atau menunggu_ekstraksi
+    # lebih dari 15 menit tanpa perubahan, ubah menjadi 'error' agar tidak menggantung selamanya.
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    stuck_items = (
+        db.query(AIScreeningResult)
+        .filter(
+            AIScreeningResult.position_id.is_(None),
+            AIScreeningResult.status.in_(["sedang_diproses", "menunggu_ekstraksi"]),
+            func.coalesce(AIScreeningResult.updated_at, AIScreeningResult.created_at) < cutoff,
+        )
+        .all()
+    )
+    if stuck_items:
+        for item in stuck_items:
+            item.status = "error"
+            item.ai_notes = "Waktu pemrosesan melebihi batas (timeout > 15 menit). Silakan klik 'Proses Ulang' untuk mencoba kembali."
+        db.commit()
 
     query = (
         db.query(AIScreeningResult)
@@ -681,13 +700,45 @@ def delete_candidate_screening(
         db.commit()
 
 
+@router.post("/pending-review/{screening_id}/retry", response_model=dict)
+async def retry_single_candidate_error(
+    screening_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Re-enqueue satu file CV kandidat yang gagal / timeout untuk diproses ulang.
+    """
+    from app.models.application import AIScreeningResult
+
+    screening = db.query(AIScreeningResult).filter(
+        AIScreeningResult.id == screening_id.strip(),
+        AIScreeningResult.position_id.is_(None),
+    ).first()
+
+    if not screening:
+        raise HTTPException(status_code=404, detail="Data screening tidak ditemukan")
+
+    if current_user.role == "hr" and str(screening.uploaded_by) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Anda tidak memiliki izin untuk memproses ulang data ini")
+
+    redis = await get_redis_pool()
+    screening.status = "menunggu_ekstraksi"
+    screening.ai_notes = None
+    screening.extracted_json = None
+    await redis.enqueue_job("process_cv_ingestion", str(screening.id))
+    db.commit()
+
+    return {"message": "File CV berhasil di-enqueue ulang untuk diproses"}
+
+
 @router.post("/pending-review/retry-all-errors", response_model=dict)
 async def retry_all_candidate_errors(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
     """
-    Re-enqueue semua CV kandidat berstatus 'error'.
+    Re-enqueue semua CV kandidat berstatus 'error' atau yang macet.
     """
     from app.models.application import AIScreeningResult
 
@@ -711,6 +762,101 @@ async def retry_all_candidate_errors(
 
     db.commit()
     return {"retried": len(screenings), "message": f"{len(screenings)} file CV di-enqueue ulang untuk diproses"}
+
+
+# ── Admin: Repair orphan CandidateDocument ────────────────────────────────
+
+@router.post("/admin/repair-missing-cv-documents", response_model=dict)
+def repair_missing_cv_documents(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("admin")),
+):
+    """
+    Admin-only: Perbaiki kandidat yang sudah ada di DB tetapi tidak memiliki
+    CandidateDocument dengan doc_type='CV_asli'.
+
+    Situasi ini terjadi karena bug non-atomic transaction di cv_pipeline.py
+    (sebelum fix): candidate record di-commit duluan, tapi jika terjadi error
+    setelahnya, CandidateDocument tidak pernah tersimpan.
+
+    Endpoint ini mencari semua AIScreeningResult dengan:
+    - status = 'selesai' (atau 'siap_review' / 'sudah_direview')
+    - candidate_id IS NOT NULL
+    - cv_drive_item_id IS NOT NULL (file tersimpan di OneDrive)
+    - CandidateDocument 'CV_asli' untuk candidate tersebut TIDAK ADA
+
+    Lalu membuat CandidateDocument yang hilang dari data cv_drive_item_id.
+    """
+    from app.models.application import AIScreeningResult
+
+    # Ambil semua screening talent-pool yang sudah selesai dan punya candidate + file
+    screenings = (
+        db.query(AIScreeningResult)
+        .filter(
+            AIScreeningResult.position_id.is_(None),          # talent-pool upload only
+            AIScreeningResult.candidate_id.isnot(None),
+            AIScreeningResult.cv_drive_item_id.isnot(None),
+            AIScreeningResult.status.in_(["selesai", "siap_review", "sudah_direview"]),
+        )
+        .all()
+    )
+
+    repaired = 0
+    skipped = 0
+    details = []
+
+    for s in screenings:
+        # Cek apakah CandidateDocument CV_asli sudah ada
+        existing = (
+            db.query(CandidateDocument)
+            .filter(
+                CandidateDocument.candidate_id == s.candidate_id,
+                CandidateDocument.doc_type == "CV_asli",
+                CandidateDocument.is_deleted == False,
+            )
+            .first()
+        )
+
+        if existing:
+            skipped += 1
+            continue
+
+        # Buat CandidateDocument yang hilang
+        cv_doc = CandidateDocument(
+            candidate_id=s.candidate_id,
+            doc_type="CV_asli",
+            file_url=s.cv_file_url,
+            drive_item_id=s.cv_drive_item_id,
+        )
+        db.add(cv_doc)
+        repaired += 1
+
+        # Ambil nama kandidat untuk logging
+        candidate = db.query(Candidate).filter(Candidate.id == s.candidate_id).first()
+        name = candidate.full_name if candidate else str(s.candidate_id)
+        details.append({
+            "candidate_id": str(s.candidate_id),
+            "name": name,
+            "screening_id": str(s.id),
+            "drive_item_id": s.cv_drive_item_id,
+        })
+        logger.info(
+            "repair_missing_cv_documents: created CV_asli doc for candidate %s (screening %s)",
+            s.candidate_id,
+            s.id,
+        )
+
+    db.commit()
+
+    return {
+        "repaired": repaired,
+        "skipped": skipped,
+        "message": (
+            f"{repaired} CandidateDocument 'CV_asli' berhasil dibuat, "
+            f"{skipped} kandidat sudah memiliki dokumen CV."
+        ),
+        "details": details,
+    }
 
 
 # ── Talent Pool ────────────────────────────────────────────────────────────

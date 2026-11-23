@@ -10,7 +10,7 @@ import { useToastStore } from "@/stores/toast.store";
 import { getErrorMessage } from "@/lib/errors";
 import type { BulkUploadResult, FileUploadStatus, SourceChannel } from "@/types";
 
-const MAX_FILES = 20;
+const MAX_FILES = 50;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 const ACCEPTED_TYPES = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
 const ACCEPTED_EXT = ".pdf,.docx";
@@ -97,7 +97,11 @@ function BulkCVUploadPageInner() {
       const fresh = valid.filter((f) => !existing.has(f.name));
       const combined = [...prev, ...fresh.map<FileUploadStatus>((file) => ({ file, status: "pending" }))];
       if (combined.length > MAX_FILES) {
-        showToast("warning", `Maksimal ${MAX_FILES} file. File ke-${MAX_FILES + 1} dst diabaikan.`);
+        const ignoredCount = combined.length - MAX_FILES;
+        showToast(
+          "warning",
+          `Batas maksimal ${MAX_FILES} file per upload. Hanya ${MAX_FILES} file pertama yang diterima (${ignoredCount} file diabaikan).`
+        );
         return combined.slice(0, MAX_FILES);
       }
       return combined;
@@ -262,7 +266,18 @@ function BulkCVUploadPageInner() {
 
         {/* ── File list ── */}
         {fileStatuses.length > 0 && (
-          <ul className="mt-4 space-y-2">
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-700">
+                File Dipilih: {fileStatuses.length} / {MAX_FILES}
+              </span>
+              {fileStatuses.length >= MAX_FILES && (
+                <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                  Maksimal {MAX_FILES} file tercapai
+                </span>
+              )}
+            </div>
+            <ul className="space-y-2">
             {fileStatuses.map((item, idx) => (
               <li
                 key={`${item.file.name}-${idx}`}
@@ -299,7 +314,8 @@ function BulkCVUploadPageInner() {
               </li>
             ))}
           </ul>
-        )}
+        </div>
+      )}
 
         {/* ── Upload progress bar ── */}
         {uploadMutation.isPending && uploadProgress > 0 && (

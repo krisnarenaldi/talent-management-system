@@ -274,16 +274,29 @@ export default function CandidateCVPage({
       </div>
 
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800">CV Standar Altek</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {candidate.full_name}
-            {candidate.domicile ? ` · ${candidate.domicile}` : ""}
-            {candidate.skills && candidate.skills.length > 0
-              ? ` · ${candidate.skills.slice(0, 3).join(", ")}`
-              : ""}
-          </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Link
+            href={
+              isFromTalentPool
+                ? `/candidates/${trimmedId}?from=talent-pool`
+                : `/candidates/${trimmedId}`
+            }
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Kembali
+          </Link>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-800">CV Standar Altek</h1>
+            <p className="mt-0.5 text-sm text-slate-500">
+              {candidate.full_name}
+              {candidate.domicile ? ` · ${candidate.domicile}` : ""}
+              {candidate.skills && candidate.skills.length > 0
+                ? ` · ${candidate.skills.slice(0, 3).join(", ")}`
+                : ""}
+            </p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && (
@@ -319,13 +332,6 @@ export default function CandidateCVPage({
               </a>
             </>
           )}
-          <Link
-            href={`/candidates/${trimmedId}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Kembali
-          </Link>
         </div>
       </div>
 

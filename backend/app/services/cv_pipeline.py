@@ -736,9 +736,6 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                                     tools=tools if tools else None,
                                 ))
 
-                    db.commit()
-                    db.refresh(existing_candidate)
-
                     # ── Attach CV baru ke dokumen kandidat lama ──
                     cv_doc = CandidateDocument(
                         candidate_id=existing_candidate.id,
@@ -750,7 +747,6 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                         is_deleted=False,
                     )
                     db.add(cv_doc)
-                    db.commit()
 
                     # Jika diupload via alur Talent Pool, update status kandidat menjadi talent_pool
                     if getattr(result, "is_talent_pool_upload", False):
@@ -828,8 +824,7 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
                 contact_status="aktif",
             )
             db.add(candidate)
-            db.commit()
-            db.refresh(candidate)
+            db.flush()
 
             # Simpan pendidikan
             for edu in extracted.get("pendidikan", []) or []:
@@ -896,8 +891,6 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
             )
             db.add(cv_doc)
 
-            db.commit()
-
             # Update screening_result untuk menautkan dengan candidate
             result.candidate_id = candidate.id
             result.status = "selesai"
@@ -912,9 +905,18 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
 
         except Exception as exc:
             logger.exception("CV ingestion gagal: screening_id=%s", screening_result_id)
-            result.status = "error"
-            result.ai_notes = str(exc)
-            db.commit()
+            db.rollback()
+            try:
+                # Reload result setelah rollback agar session bersih dari state yang gagal
+                result = db.query(AIScreeningResult).filter(
+                    AIScreeningResult.id == screening_result_id
+                ).first()
+                if result:
+                    result.status = "error"
+                    result.ai_notes = str(exc)[:1000]
+                    db.commit()
+            except Exception as inner_exc:
+                logger.error("Gagal menyimpan error status screening %s: %s", screening_result_id, inner_exc)
 
         finally:
             # Step 8 — Notifikasi batch ingestion selalu dijalankan, termasuk untuk
