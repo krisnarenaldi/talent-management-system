@@ -1037,18 +1037,15 @@ export default function CandidatesTable({
                       </td>
                       <td className="px-4 py-3">
                         {candidate.applied_positions && candidate.applied_positions.length > 0 ? (
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="text-sm text-gray-900">
-                              {candidate.applied_positions[0]}
-                            </span>
-                            {candidate.applied_positions.length > 1 && (
+                          <div className="flex flex-wrap gap-1.5 max-w-[280px]">
+                            {Array.from(new Set(candidate.applied_positions)).map((pos, idx) => (
                               <span
-                                className="inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700"
-                                title={candidate.applied_positions.slice(1).join(", ")}
+                                key={idx}
+                                className="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 border border-purple-200/60"
                               >
-                                +{candidate.applied_positions.length - 1}
+                                {pos}
                               </span>
-                            )}
+                            ))}
                           </div>
                         ) : (
                           <span className="text-gray-400">-</span>
