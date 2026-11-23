@@ -810,6 +810,32 @@ def delete_screening(
     db.commit()
 
 
+# ── Delete Application ───────────────────────────────────────────────────────
+
+@router.delete("/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_application(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("hr", "manager", "admin")),
+):
+    """
+    Hard-delete sebuah lamaran beserta stage_histories-nya.
+    AI screening result di-nullify application_id-nya (tidak dihapus, bisa jadi talent pool).
+    Hanya HR/Manager/Admin yang bisa menghapus.
+    """
+    application_id = application_id.strip()
+    application = db.query(Application).filter(Application.id == application_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Lamaran tidak ditemukan")
+
+    # Nullify application_id on ai_screening_result to avoid FK constraint error
+    if application.ai_screening_result:
+        application.ai_screening_result.application_id = None
+
+    db.delete(application)
+    db.commit()
+
+
 # ── Detail ───────────────────────────────────────────────────────────────────
 
 @router.get("/{application_id}", response_model=ApplicationStageDetail)

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
@@ -335,6 +335,29 @@ function ApplicationsPipeline() {
   const user = useAuthStore((state) => state.user);
   const canCreateApplication = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
   const canExport = user ? ["admin", "manager"].includes(normalizeRole(user.role)) : false;
+  const canDelete = user ? ["admin", "hr", "manager"].includes(normalizeRole(user.role)) : false;
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeleteConfirm({ id, name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/v1/applications/${deleteConfirm.id}`);
+      setDeleteConfirm(null);
+      await queryClient.invalidateQueries({ queryKey: ["applications"] });
+    } catch (error) {
+      console.error("Gagal menghapus lamaran:", error);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
@@ -698,18 +721,19 @@ function ApplicationsPipeline() {
                     </span>
                   </button>
                 </th>
+                {canDelete && <th className="px-4 py-3 text-right">Aksi</th>}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
                     Memuat data lamaran...
                   </td>
                 </tr>
               ) : applications.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
                     Belum ada lamaran.
                   </td>
                 </tr>
@@ -765,6 +789,19 @@ function ApplicationsPipeline() {
                       {application.updated_at ? format(new Date(application.updated_at), "dd MMM yyyy", { locale: idLocale }) : "-"}
                     </td>
                     <td className="px-4 py-3 text-gray-700">{application.recruiter_name || "-"}</td>
+                    {canDelete && (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClick(application.id, application.candidate_name || "-")}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 hover:border-red-300"
+                          title="Hapus lamaran"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">delete</span>
+                          Hapus
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -785,12 +822,46 @@ function ApplicationsPipeline() {
           />
         </div>
       </div>
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+                <span className="material-symbols-outlined text-red-600 text-[20px]">delete_forever</span>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Hapus Lamaran?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Lamaran <span className="font-medium text-gray-800">{deleteConfirm.name}</span> akan dihapus secara permanen dan tidak dapat dipulihkan.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleting}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting && <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>}
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ROUTER — decides which view to show based on URL params
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ApplicationsContent() {
