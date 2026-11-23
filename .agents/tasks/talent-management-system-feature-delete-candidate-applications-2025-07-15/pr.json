@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/krisnarenaldi/talent-management-system/pull/1",
+  "number": 1,
+  "title": "feat: add hard delete for candidate applications in view=all pipeline",
+  "branch": "feature/delete-candidate-applications",
+  "base": "main",
+  "state": "open",
+  "repository": "krisnarenaldi/talent-management-system"
+}
