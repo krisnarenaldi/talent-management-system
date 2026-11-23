@@ -24,6 +24,7 @@ const clientPicSchema = z.object({
   contact: z
     .string()
     .trim()
+    .nullable()
     .optional()
     .refine((val) => !val || /^0\d{8,14}$/.test(val), {
       message: "Nomor HP harus diawali 0 dan 9-15 digit",
@@ -604,68 +605,70 @@ function ClientFormModal({
 
   const onSubmit = async (data: Record<string, unknown>) => {
     setFormError(null);
-    // Validate per-row PIC errors
-    if (picErrors.some((e) => e.contact || e.name)) return;
 
-    // Check for duplicate contacts within this client
-    const contacts = pics.map((p) => p.contact.trim().toLowerCase()).filter(Boolean);
-    const hasDuplicate = contacts.some((c, i) => contacts.indexOf(c) !== i);
-    if (hasDuplicate) {
-      const seen = new Map<string, number>();
-      const newPicErrors = picErrors.map((e) => ({ ...e }));
-      contacts.forEach((c, i) => {
-        if (!c) return;
-        if (seen.has(c)) {
-          newPicErrors[i].contact = "Nomor kontak sudah digunakan oleh PIC lain di klien ini";
-          const firstIdx = seen.get(c)!;
-          newPicErrors[firstIdx].contact = "Nomor kontak sudah digunakan oleh PIC lain di klien ini";
-        } else {
-          seen.set(c, i);
-        }
-      });
-      setPicErrors(newPicErrors);
-      return;
-    }
+    // Hitung validasi baris PIC secara fresh dari state pics
+    const newPicErrors: { name?: string; contact?: string }[] = pics.map((p) => {
+      const err: { name?: string; contact?: string } = {};
+      const trimmedName = p.name.trim();
+      const trimmedContact = p.contact.trim();
 
-    // Check for duplicate PIC names within this client
-    const names = pics.map((p) => p.name.trim().toLowerCase()).filter(Boolean);
-    const hasDuplicateName = names.some((c, i) => names.indexOf(c) !== i);
-    if (hasDuplicateName) {
-      const seenNames = new Map<string, number>();
-      const newPicErrors = picErrors.map((e) => ({ ...e }));
-      names.forEach((c, i) => {
-        if (!c) return;
-        if (seenNames.has(c)) {
-          newPicErrors[i].name = "Nama PIC sudah digunakan pada baris lain";
-          const firstIdx = seenNames.get(c)!;
-          newPicErrors[firstIdx].name = "Nama PIC sudah digunakan pada baris lain";
-        } else {
-          seenNames.set(c, i);
-        }
-      });
-      setPicErrors(newPicErrors);
-      return;
-    }
-
-    // Nama PIC wajib diisi bila kontaknya diisi.
-    const newPicErrors = pics.map((p, i) => {
-      const err = { ...picErrors[i] };
-      if (!p.name.trim() && p.contact.trim()) {
+      // Nama wajib diisi jika kontak diisi
+      if (!trimmedName && trimmedContact) {
         err.name = "Nama PIC wajib diisi";
       }
+
+      // Validasi format nomor HP jika kontak diisi
+      if (trimmedContact) {
+        const normalized = normalizePhone(trimmedContact);
+        if (!/^0\d{8,14}$/.test(normalized)) {
+          err.contact = "Nomor HP harus diawali 0 dan 9-15 digit";
+        }
+      }
+
       return err;
     });
+
+    // Cek duplikasi nomor kontak (hanya untuk kontak yang tidak kosong)
+    const contactsWithIdx = pics
+      .map((p, i) => ({ contact: p.contact.trim().toLowerCase(), index: i }))
+      .filter((x) => x.contact);
+    const seenContacts = new Map<string, number>();
+    for (const item of contactsWithIdx) {
+      if (seenContacts.has(item.contact)) {
+        newPicErrors[item.index].contact = "Nomor kontak sudah digunakan oleh PIC lain di klien ini";
+        const firstIdx = seenContacts.get(item.contact)!;
+        newPicErrors[firstIdx].contact = "Nomor kontak sudah digunakan oleh PIC lain di klien ini";
+      } else {
+        seenContacts.set(item.contact, item.index);
+      }
+    }
+
+    // Cek duplikasi nama PIC (hanya untuk nama yang tidak kosong)
+    const namesWithIdx = pics
+      .map((p, i) => ({ name: p.name.trim().toLowerCase(), index: i }))
+      .filter((x) => x.name);
+    const seenNames = new Map<string, number>();
+    for (const item of namesWithIdx) {
+      if (seenNames.has(item.name)) {
+        newPicErrors[item.index].name = "Nama PIC sudah digunakan pada baris lain";
+        const firstIdx = seenNames.get(item.name)!;
+        newPicErrors[firstIdx].name = "Nama PIC sudah digunakan pada baris lain";
+      } else {
+        seenNames.set(item.name, item.index);
+      }
+    }
+
+    setPicErrors(newPicErrors);
     if (newPicErrors.some((e) => e.contact || e.name)) {
-      setPicErrors(newPicErrors);
       return;
     }
 
-    // Baris PIC tanpa nama diabaikan (kontaknya tidak boleh menggantung).
+    // Baris PIC tanpa nama diabaikan
     const validPics = pics
       .filter((p) => p.name.trim())
       .map((p) => ({
         name: p.name.trim(),
-        contact: p.contact.trim() ? normalizePhone(p.contact) : undefined,
+        contact: p.contact.trim() ? normalizePhone(p.contact) : null,
       }));
 
     const fullData = { ...data, pics: validPics };

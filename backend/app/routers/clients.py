@@ -31,17 +31,12 @@ def _resolve_pics(
 
 
 def _validate_pics(pics: list[dict]) -> None:
-    """Pastikan setiap PIC punya nama dan kontak yang konsisten serta valid."""
+    """Pastikan setiap PIC punya nama dan nomor kontak valid (bila diisi)."""
     for pic in pics:
         if not pic.get("name"):
             raise HTTPException(status_code=400, detail="Nama PIC tidak boleh kosong")
         contact = pic.get("contact")
-        if not contact:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Kontak PIC '{pic['name']}' wajib diisi.",
-            )
-        if not PIC_CONTACT_PATTERN.match(contact):
+        if contact and not PIC_CONTACT_PATTERN.match(contact):
             raise HTTPException(
                 status_code=400,
                 detail=f"Format nomor kontak PIC '{pic['name']}' tidak valid: {contact}",
