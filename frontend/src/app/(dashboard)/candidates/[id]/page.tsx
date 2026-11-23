@@ -461,6 +461,7 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                       <p className="text-sm text-gray-600">{education.major || "-"}</p>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500">
                         {education.graduation_year && <span>Tahun: {education.graduation_year}</span>}
+                        {education.gpa != null && <span>IPK: {education.gpa}</span>}
                       </div>
                     </div>
                   ))}
