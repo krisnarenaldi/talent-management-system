@@ -8,6 +8,7 @@
   :root {
     --background: #faf9ff;
     --foreground: #051a3e;
+    --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
   }
 
   html {
