@@ -253,8 +253,9 @@ def update_client(
         client.pic_contact = pic_contact
 
         # Cascade: perbarui client_user_names pada semua posisi klien ini
-        # bila ada nama PIC yang berubah.
-        if rename_map:
+        # bila ada nama PIC yang berubah atau dihapus.
+        if rename_map or deleted_pics:
+            deleted_set = {d.strip().lower() for d in deleted_pics}
             positions = (
                 db.query(Position)
                 .filter(Position.client_id == client_id)
@@ -263,7 +264,9 @@ def update_client(
             for position in positions:
                 old_names = position.client_user_names or []
                 updated_names = [
-                    rename_map.get(n.lower(), n) for n in old_names
+                    rename_map.get(n.lower(), n)
+                    for n in old_names
+                    if n.strip().lower() not in deleted_set
                 ]
                 if updated_names != old_names:
                     position.client_user_names = updated_names

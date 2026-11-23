@@ -21,7 +21,13 @@ import DeactivateClientButton from "@/components/clients/DeactivateClientButton"
 
 const clientPicSchema = z.object({
   name: z.string().trim().min(1, "Nama PIC wajib diisi").max(255, "Nama PIC maksimal 255 karakter"),
-  contact: z.string().trim().min(1, "Kontak PIC wajib diisi").regex(/^0\d{8,14}$/, "Nomor HP harus diawali 0 dan 9-15 digit"),
+  contact: z
+    .string()
+    .trim()
+    .optional()
+    .refine((val) => !val || /^0\d{8,14}$/.test(val), {
+      message: "Nomor HP harus diawali 0 dan 9-15 digit",
+    }),
 });
 
 const clientCreateSchema = z.object({
@@ -641,12 +647,9 @@ function ClientFormModal({
       return;
     }
 
-    // Nama PIC wajib diisi bila kontaknya diisi, dan sebaliknya.
+    // Nama PIC wajib diisi bila kontaknya diisi.
     const newPicErrors = pics.map((p, i) => {
       const err = { ...picErrors[i] };
-      if (p.name.trim() && !p.contact.trim()) {
-        err.contact = "Kontak PIC tidak boleh kosong";
-      }
       if (!p.name.trim() && p.contact.trim()) {
         err.name = "Nama PIC wajib diisi";
       }
@@ -660,7 +663,10 @@ function ClientFormModal({
     // Baris PIC tanpa nama diabaikan (kontaknya tidak boleh menggantung).
     const validPics = pics
       .filter((p) => p.name.trim())
-      .map((p) => ({ name: p.name.trim(), contact: normalizePhone(p.contact) }));
+      .map((p) => ({
+        name: p.name.trim(),
+        contact: p.contact.trim() ? normalizePhone(p.contact) : undefined,
+      }));
 
     const fullData = { ...data, pics: validPics };
 
@@ -754,7 +760,7 @@ function ClientFormModal({
                 <div className="flex-1 space-y-1">
                   <input
                     type="text"
-                    placeholder="Kontak PIC"
+                    placeholder="Kontak PIC (opsional)"
                     maxLength={15}
                     value={pic.contact}
                     onChange={(e) => updatePic(index, "contact", e.target.value)}

@@ -6,7 +6,6 @@ Create Date: 2026-11-13 10:50:00.000000
 
 """
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "h8i9j0k1l2m3"
@@ -16,23 +15,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "candidate",
-        sa.Column(
-            "is_cv_altek_updated",
-            sa.Boolean(),
-            nullable=False,
-            server_default="false",
-        ),
-    )
-    op.add_column(
-        "candidate",
-        sa.Column(
-            "cv_altek_updated_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
-    )
+    op.execute("""
+    ALTER TABLE candidate
+        ADD COLUMN IF NOT EXISTS is_cv_altek_updated BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS cv_altek_updated_at TIMESTAMPTZ;
+    """)
 
 
 def downgrade() -> None:
