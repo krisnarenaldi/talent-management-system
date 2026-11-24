@@ -34,6 +34,7 @@ from app.services.cv_parser import extract_pdf_text, extract_docx_text
 from app.services.onedrive_service import onedrive_service
 from app.services.usage_logger import log_openai_usage
 from app.core.phone_utils import normalize_phone as _normalize_phone
+from app.core.text_utils import normalize_name as _normalize_name
 
 logger = logging.getLogger("cv_pipeline")
 
@@ -531,6 +532,12 @@ async def process_cv_screening(ctx: dict, screening_result_id: str) -> None:
             extracted, extract_tokens = await _call_llm_extract(cv_text_stripped, was_truncated)
             log_openai_usage(db, call_type="cv_extract", **extract_tokens)
 
+            # Normalisasi nama & nomor HP agar format seragam
+            if extracted.get("nama"):
+                extracted["nama"] = _normalize_name(extracted["nama"]) or extracted["nama"]
+            if extracted.get("telepon"):
+                extracted["telepon"] = _normalize_phone(extracted["telepon"]) or None
+
             # Step 5b — Call LLM: screening/penilaian (OPENAI_MODEL)
             ai_score, ai_notes, screen_tokens = await _call_llm_screen(
                 extracted,
@@ -637,7 +644,9 @@ async def process_cv_ingestion(ctx: dict, screening_result_id: str) -> None:
             extracted, extract_tokens = await _call_llm_extract(cv_text_stripped, was_truncated)
             log_openai_usage(db, call_type="cv_extract", **extract_tokens)
 
-            # Normalisasi nomor HP agar format seragam (08xxx, digit-only)
+            # Normalisasi nama & nomor HP agar format seragam
+            if extracted.get("nama"):
+                extracted["nama"] = _normalize_name(extracted["nama"]) or extracted["nama"]
             if extracted.get("telepon"):
                 extracted["telepon"] = _normalize_phone(extracted["telepon"]) or None
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.application import Application
 from app.models.candidate import Candidate
 from app.models.employee import Employee, EmployeeContract
+from app.core.text_utils import normalize_name
 
 
 def create_from_application(db: Session, application_id: str) -> Employee:
@@ -32,7 +33,7 @@ def create_from_application(db: Session, application_id: str) -> Employee:
     employee = Employee(
         candidate_id=candidate.id,
         application_id=application_id,
-        full_name=candidate.full_name,
+        full_name=normalize_name(candidate.full_name) or candidate.full_name,
         identity_no=candidate.identity_no,
         personal_email=candidate.email,
         phone_number=candidate.phone,

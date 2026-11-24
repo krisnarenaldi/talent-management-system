@@ -24,6 +24,7 @@ from app.schemas.employee import (
 from app.models.employee_leave import EmployeeLeave
 from app.services import employee_service
 from app.services.storage_service import get_storage_service
+from app.core.text_utils import normalize_name
 
 router = APIRouter()
 
@@ -156,7 +157,11 @@ def update_employee(
     if not employee:
         _raise_404("Karyawan tidak ditemukan")
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+    if "full_name" in update_data and update_data["full_name"]:
+        update_data["full_name"] = normalize_name(update_data["full_name"]) or update_data["full_name"]
+
+    for key, value in update_data.items():
         setattr(employee, key, value)
 
     db.commit()

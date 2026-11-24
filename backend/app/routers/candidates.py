@@ -40,6 +40,7 @@ from app.schemas.candidate import (
 )
 from app.services import candidate_service
 from app.core.phone_utils import normalize_phone as _normalize_phone
+from app.core.text_utils import normalize_name as _normalize_name
 from app.core.salary_parser import parse_salary_range
 from app.services.ai_service import generate_project_drafts
 from app.services.storage_service import get_storage_service
@@ -490,7 +491,9 @@ def create_candidate(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("hr", "manager", "admin")),
 ):
-    # Normalise phone number before duplicate check and save
+    # Normalise name & phone number before duplicate check and save
+    if payload.full_name:
+        payload.full_name = _normalize_name(payload.full_name) or payload.full_name
     payload.phone = _normalize_phone(payload.phone) or None
 
     # Duplikat check
@@ -1194,6 +1197,8 @@ def update_candidate(
             )
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "full_name" in update_data and update_data["full_name"]:
+        update_data["full_name"] = _normalize_name(update_data["full_name"]) or update_data["full_name"]
     if "phone" in update_data:
         update_data["phone"] = _normalize_phone(update_data["phone"]) or None
 
@@ -1588,7 +1593,7 @@ Teks dokumen kandidat:
     ai_personal = extracted.get("personal") or {}
     if isinstance(ai_personal, dict):
         if ai_personal.get("full_name") and (not candidate.full_name or candidate.full_name == "Unknown"):
-            candidate.full_name = ai_personal["full_name"].strip()
+            candidate.full_name = _normalize_name(ai_personal["full_name"]) or ai_personal["full_name"].strip()
             updated_fields.append("nama")
         if ai_personal.get("email") and not candidate.email:
             candidate.email = ai_personal["email"].strip()
