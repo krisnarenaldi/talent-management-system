@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -21,7 +21,7 @@ export default function EmployeesPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expiryDays, setExpiryDays] = useState("");
-  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -42,7 +42,7 @@ export default function EmployeesPage() {
       if (sortOrder === "asc") {
         setSortOrder("desc");
       } else {
-        setSortBy(null);
+        setSortBy("name");
         setSortOrder("asc");
       }
     } else {
@@ -52,7 +52,7 @@ export default function EmployeesPage() {
     setCurrentPage(1);
   };
 
-  const { data: employees = [], isLoading } = useQuery({
+  const { data: rawEmployees = [], isLoading } = useQuery({
     queryKey: ["employees", { statusFilter, placementFilter, searchQuery, expiryDays, sortBy, sortOrder, currentPage, itemsPerPage }],
     queryFn: () =>
       fetchEmployees({
@@ -66,6 +66,16 @@ export default function EmployeesPage() {
         limit: itemsPerPage,
       }),
   });
+
+  // Client-side case-insensitive sort to fix DB collation issues
+  const employees = useMemo(() => {
+    if (sortBy === "name") {
+      return [...rawEmployees].sort((a, b) =>
+        (a.full_name ?? "").toLowerCase().localeCompare((b.full_name ?? "").toLowerCase(), "id")
+      );
+    }
+    return rawEmployees;
+  }, [rawEmployees, sortBy]);
 
   const expiryWithin = Number(expiryDays) || 0;
 

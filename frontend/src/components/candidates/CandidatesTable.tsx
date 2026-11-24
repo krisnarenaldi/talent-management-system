@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileText, Filter, Pencil, X, Users, Briefcase, UserMinus } from "lucide-react";
@@ -97,7 +97,7 @@ export default function CandidatesTable({
   showExport = true,
 }: CandidatesTableProps) {
   const searchParams = useSearchParams();
-  const initialSortBy = searchParams.get("sort_by") || null;
+  const initialSortBy = searchParams.get("sort_by") || "full_name";
   const initialSortOrder = (searchParams.get("sort_order") as "asc" | "desc") || "asc";
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -133,7 +133,7 @@ export default function CandidatesTable({
       if (sortOrder === "asc") {
         setSortOrder("desc");
       } else {
-        setSortBy(null);
+        setSortBy("full_name");
         setSortOrder("asc");
       }
     } else {
@@ -364,6 +364,16 @@ export default function CandidatesTable({
       }),
   });
 
+  // Client-side case-insensitive sort to fix DB collation issues (e.g. uppercase before lowercase)
+  const sortedCandidates = useMemo(() => {
+    if (sortBy === "full_name") {
+      return [...candidates].sort((a, b) =>
+        a.full_name.toLowerCase().localeCompare(b.full_name.toLowerCase(), "id")
+      );
+    }
+    return candidates;
+  }, [candidates, sortBy]);
+
   // Derived: names of selected candidates for modal
   const selectedCandidateNames = Array.from(selectedCandidateIds)
     .map((id) => candidates.find((c) => c.id === id)?.full_name)
@@ -392,16 +402,16 @@ export default function CandidatesTable({
     }
   };
 
-  const isAllSelected = candidates.length > 0 && selectedCandidateIds.size === candidates.length;
-  const isIndeterminate = selectedCandidateIds.size > 0 && selectedCandidateIds.size < candidates.length;
+  const isAllSelected = sortedCandidates.length > 0 && selectedCandidateIds.size === sortedCandidates.length;
+  const isIndeterminate = selectedCandidateIds.size > 0 && selectedCandidateIds.size < sortedCandidates.length;
 
   const hasSelectedInTalentPool = Array.from(selectedCandidateIds).some((id) => {
-    const c = candidates.find((cand) => cand.id === id);
+    const c = sortedCandidates.find((cand) => cand.id === id);
     return c ? isCandidateInTalentPool(c) : false;
   });
 
   const selectedBlacklistedCount = Array.from(selectedCandidateIds).filter((id) => {
-    const c = candidates.find((cand) => cand.id === id);
+    const c = sortedCandidates.find((cand) => cand.id === id);
     return c ? Boolean(c.is_blacklisted) : false;
   }).length;
   const canMoveSelectedToTalentPool = selectedBlacklistedCount === 0;
@@ -553,7 +563,7 @@ export default function CandidatesTable({
                 Urutan: Terbaru Masuk
                 <button
                   onClick={() => {
-                    setSortBy(null);
+                    setSortBy("full_name");
                     setSortOrder("asc");
                   }}
                   className="ml-1 hover:text-blue-900"
@@ -864,7 +874,7 @@ export default function CandidatesTable({
                     ref={(el) => {
                       if (el) el.indeterminate = isIndeterminate;
                     }}
-                    onChange={() => handleSelectAll(candidates)}
+                    onChange={() => handleSelectAll(sortedCandidates)}
                     aria-label="Pilih semua kandidat di halaman ini"
                     className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 accent-blue-600"
                   />
@@ -872,12 +882,12 @@ export default function CandidatesTable({
                 <th className="px-4 py-3">
                   <button
                     type="button"
-                    onClick={() => handleSort("name")}
+                    onClick={() => handleSort("full_name")}
                     className="inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-gray-600 hover:text-blue-600 transition-colors"
                   >
                     <span>Nama</span>
                     <span className="material-symbols-outlined text-[16px]">
-                      {sortBy === "name"
+                      {sortBy === "full_name"
                         ? sortOrder === "asc"
                           ? "arrow_upward"
                           : "arrow_downward"
@@ -931,14 +941,14 @@ export default function CandidatesTable({
                     Memuat data kandidat...
                   </td>
                 </tr>
-              ) : candidates.length === 0 ? (
+              ) : sortedCandidates.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
                     Belum ada kandidat.
                   </td>
                 </tr>
               ) : (
-                candidates.map((candidate) => {
+                sortedCandidates.map((candidate) => {
                   const isSelected = selectedCandidateIds.has(candidate.id);
                   return (
                     <tr
@@ -1180,7 +1190,7 @@ export default function CandidatesTable({
         </div>
         <div className="flex items-center justify-between py-4 px-4 border-t border-gray-200">
           <div className="text-sm text-gray-500">
-            Menampilkan {candidates.length} kandidat
+            Menampilkan {sortedCandidates.length} kandidat
           </div>
           <Pagination
             currentPage={currentPage}

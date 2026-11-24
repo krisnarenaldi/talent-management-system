@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -350,7 +350,7 @@ function ApplicationsPipeline() {
   const [positionIdFilter, setPositionIdFilter] = useState(initialPositionId);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [sortBy, setSortBy] = useState<string | null>(initialPositionId ? "candidate" : null);
+  const [sortBy, setSortBy] = useState<string | null>("candidate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
@@ -393,7 +393,7 @@ function ApplicationsPipeline() {
       if (sortOrder === "asc") {
         setSortOrder("desc");
       } else {
-        setSortBy(null);
+        setSortBy("candidate");
         setSortOrder("asc");
       }
     } else {
@@ -530,7 +530,18 @@ function ApplicationsPipeline() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const applications = data?.items ?? [];
+  const rawApplications = data?.items ?? [];
+  // Client-side case-insensitive sort to fix DB collation issues
+  const applications = useMemo(() => {
+    if (sortBy === "candidate") {
+      return [...rawApplications].sort((a, b) =>
+        (a.candidate_name ?? "").toLowerCase().localeCompare(
+          (b.candidate_name ?? "").toLowerCase(), "id"
+        )
+      );
+    }
+    return rawApplications;
+  }, [rawApplications, sortBy]);
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / itemsPerPage));
   const firstItem = total === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;

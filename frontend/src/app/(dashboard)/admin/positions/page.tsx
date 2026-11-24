@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -46,7 +46,7 @@ export default function AdminPositionsPage() {
   const authorized = !!user && isRole("admin", "hr", "manager");
 
   const {
-    data: rows = [],
+    data: rawRows = [],
     isLoading,
     isError,
     error,
@@ -55,6 +55,15 @@ export default function AdminPositionsPage() {
     queryFn: fetchPositionsByClient,
     enabled: authorized,
   });
+
+  // Sort client names A-Z, case-insensitive
+  const rows = useMemo(
+    () =>
+      [...rawRows].sort((a, b) =>
+        a.client_name.toLowerCase().localeCompare(b.client_name.toLowerCase(), "id")
+      ),
+    [rawRows]
+  );
 
   const { data: clients = [] } = useQuery<Client[]>({
     queryKey: ["clients", "active"],

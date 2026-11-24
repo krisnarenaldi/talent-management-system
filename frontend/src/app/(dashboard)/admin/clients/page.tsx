@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useModalEscape } from "@/hooks/useModalEscape";
@@ -80,7 +80,7 @@ export default function AdminClientsPage() {
   // — semua hooks wajib di atas early return —
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -90,7 +90,7 @@ export default function AdminClientsPage() {
       if (sortOrder === "asc") {
         setSortOrder("desc");
       } else {
-        setSortBy(null);
+        setSortBy("name");
         setSortOrder("asc");
       }
     } else {
@@ -123,7 +123,16 @@ export default function AdminClientsPage() {
     enabled: authorized,
   });
 
-  const clients = clientsData?.data ?? [];
+  const rawClients = clientsData?.data ?? [];
+  // Client-side case-insensitive sort to fix DB collation issues
+  const clients = useMemo(() => {
+    if (sortBy === "name") {
+      return [...rawClients].sort((a, b) =>
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase(), "id")
+      );
+    }
+    return rawClients;
+  }, [rawClients, sortBy]);
   const totalClients = clientsData?.total ?? 0;
 
   const createMutation = useMutation({
