@@ -9,7 +9,7 @@ import { id as idLocale } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
-import type { Application, Position, Client } from "@/types";
+import type { Application, Position, Client, User } from "@/types";
 import { useExport } from "@/hooks/useExport";
 import { useModalEscape } from "@/hooks/useModalEscape";
 import ExportButton from "@/components/ExportButton";
@@ -41,6 +41,12 @@ async function fetchAllPositions(): Promise<Position[]> {
 
 async function fetchAllClients(): Promise<Client[]> {
   const response = await api.get("/api/v1/clients", { params: { is_active: true } });
+  const data = response.data;
+  return Array.isArray(data) ? data : (data?.data ?? []);
+}
+
+async function fetchAllRecruiters(): Promise<User[]> {
+  const response = await api.get("/api/v1/users/recruiters");
   const data = response.data;
   return Array.isArray(data) ? data : (data?.data ?? []);
 }
@@ -340,6 +346,7 @@ function ApplicationsPipeline() {
   );
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
   const [positionIdFilter, setPositionIdFilter] = useState(initialPositionId);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -430,12 +437,22 @@ function ApplicationsPipeline() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: allRecruitersData = [] } = useQuery<User[]>({
+    queryKey: ["all-recruiters-filter"],
+    queryFn: fetchAllRecruiters,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const positionOptions = Array.from(
     new Set(allPositionsData.map((p) => p.title).filter(Boolean))
   ).sort();
 
   const clientOptions = Array.from(
     new Set(allClientsData.map((c) => c.name).filter(Boolean))
+  ).sort();
+
+  const recruiterOptions = Array.from(
+    new Set(allRecruitersData.map((r) => r.name).filter(Boolean))
   ).sort();
 
   const statusOptions = [
@@ -459,6 +476,7 @@ function ApplicationsPipeline() {
         selectedStages,
         selectedPositions,
         selectedClients,
+        selectedRecruiters,
         positionIdFilter,
         startDate,
         endDate,
@@ -491,6 +509,9 @@ function ApplicationsPipeline() {
       }
       if (selectedClients.length > 0) {
         params.clients = selectedClients.join(",");
+      }
+      if (selectedRecruiters.length > 0) {
+        params.recruiters = selectedRecruiters.join(",");
       }
 
       return fetchApplications(params);
@@ -760,7 +781,7 @@ function ApplicationsPipeline() {
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {/* Search */}
-          <div className="xl:col-span-2">
+          <div className="xl:col-span-1">
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Cari</label>
             <div className="relative">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
@@ -815,6 +836,22 @@ function ApplicationsPipeline() {
               placeholder="Semua Client"
               allLabel="Semua Client"
               itemTypeLabel="client"
+            />
+          </div>
+
+          {/* Recruiter (Multiple Choice) */}
+          <div>
+            <MultiSelectDropdown
+              label="Recruiter"
+              options={recruiterOptions}
+              selected={selectedRecruiters}
+              onChange={(vals) => {
+                setSelectedRecruiters(vals);
+                setCurrentPage(1);
+              }}
+              placeholder="Semua Recruiter"
+              allLabel="Semua Recruiter"
+              itemTypeLabel="recruiter"
             />
           </div>
 

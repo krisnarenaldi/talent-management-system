@@ -133,6 +133,10 @@ def list_candidates(
     positions_bracket: list[str] | None = Query(None, alias="positions[]"),
     experience_level: str | None = Query(None),
     education: str | None = Query(None),
+    recruiter_id: str | None = Query(None),
+    recruiter_ids: list[str] | None = Query(None, alias="recruiter_ids[]"),
+    recruiters: list[str] | None = Query(None),
+    recruiters_bracket: list[str] | None = Query(None, alias="recruiters[]"),
     min_current_salary: Decimal | None = Query(None),
     max_current_salary: Decimal | None = Query(None),
     min_expected_salary: Decimal | None = Query(None),
@@ -253,6 +257,59 @@ def list_candidates(
 
         if conds:
             query = query.filter(Candidate.applications.any(or_(*conds)))
+
+    # Filter recruiter (mendukung multiple recruiters via list/comma-separated, atau single recruiter_id)
+    raw_recruiters: list[str] = []
+    if recruiters:
+        raw_recruiters.extend(recruiters)
+    if recruiters_bracket:
+        raw_recruiters.extend(recruiters_bracket)
+    if recruiter_ids:
+        raw_recruiters.extend(recruiter_ids)
+    if recruiter_id:
+        raw_recruiters.append(recruiter_id)
+
+    parsed_recruiters: list[str] = []
+    for item in raw_recruiters:
+        if not item:
+            continue
+        if "," in item:
+            parsed_recruiters.extend([x.strip() for x in item.split(",") if x.strip()])
+        elif item.strip():
+            parsed_recruiters.append(item.strip())
+
+    seen_rec = set()
+    unique_recruiters = []
+    for r in parsed_recruiters:
+        r_lower = r.lower()
+        if r_lower not in seen_rec and r != "Semua":
+            seen_rec.add(r_lower)
+            unique_recruiters.append(r)
+
+    if unique_recruiters:
+        import uuid as py_uuid
+        from app.models.user import User
+
+        rec_uuids = []
+        rec_names = []
+        for r in unique_recruiters:
+            try:
+                rec_uuids.append(py_uuid.UUID(r))
+            except (ValueError, AttributeError):
+                rec_names.append(r)
+
+        rec_conds = []
+        if rec_uuids:
+            rec_conds.append(Application.recruiter_id.in_(rec_uuids))
+        if rec_names:
+            rec_conds.append(
+                Application.recruiter.has(
+                    or_(*[User.name.ilike(f"%{n}%") for n in rec_names])
+                )
+            )
+
+        if rec_conds:
+            query = query.filter(Candidate.applications.any(or_(*rec_conds)))
             
     if experience_level:
         exp_stmt = select(

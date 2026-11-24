@@ -221,6 +221,8 @@ def list_applications(
     current_stage: str | None = Query(None),
     stages: list[str] | None = Query(None, alias="stages[]"),
     recruiter_id: str | None = Query(None),
+    recruiter_ids: list[str] | None = Query(None, alias="recruiter_ids[]"),
+    recruiters: list[str] | None = Query(None),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
     search: str | None = Query(None),
@@ -365,8 +367,39 @@ def list_applications(
 
     if active_stages:
         query = query.filter(Application.current_stage.in_(active_stages))
+
+    # Recruiter filters: single recruiter_id OR list of recruiter names / IDs
+    active_recruiter_names = set()
+    active_recruiter_ids = set()
+    for raw in [recruiters, recruiter_ids]:
+        if not raw:
+            continue
+        for item in raw:
+            if not item:
+                continue
+            for val in item.split(","):
+                v = val.strip()
+                if not v or v.lower() == "semua":
+                    continue
+                if len(v) == 36 and "-" in v:
+                    active_recruiter_ids.add(v)
+                else:
+                    active_recruiter_names.add(v)
+
     if recruiter_id:
-        query = query.filter(Application.recruiter_id == recruiter_id)
+        v = recruiter_id.strip()
+        if len(v) == 36 and "-" in v:
+            active_recruiter_ids.add(v)
+        elif v and v.lower() != "semua":
+            active_recruiter_names.add(v)
+
+    if active_recruiter_ids and active_recruiter_names:
+        query = query.filter(or_(Application.recruiter_id.in_(active_recruiter_ids), User.name.in_(active_recruiter_names)))
+    elif active_recruiter_ids:
+        query = query.filter(Application.recruiter_id.in_(active_recruiter_ids))
+    elif active_recruiter_names:
+        query = query.filter(User.name.in_(active_recruiter_names))
+
     if start_date:
         query = query.filter(Application.created_at >= start_date)
     if end_date:

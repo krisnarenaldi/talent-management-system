@@ -104,6 +104,7 @@ export default function CandidatesTable({
   const [sourceFilter, setSourceFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
+  const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [cityFilter, setCityFilter] = useState("");
@@ -306,6 +307,15 @@ export default function CandidatesTable({
     },
   });
 
+  const { data: recruitersList = [] } = useQuery({
+    queryKey: ["all-recruiters"],
+    queryFn: async () => {
+      const res = await api.get("/api/v1/users/recruiters");
+      const list = res.data || [];
+      return Array.from(new Set(list.map((u: any) => u.name).filter(Boolean))) as string[];
+    },
+  });
+
   const { data: candidates = [], isLoading } = useQuery({
     queryKey: [
       "candidates",
@@ -315,6 +325,7 @@ export default function CandidatesTable({
         sourceFilter,
         statusFilter,
         selectedPositions,
+        selectedRecruiters,
         startDate,
         endDate,
         cityFilter,
@@ -336,6 +347,7 @@ export default function CandidatesTable({
         source_channel: sourceFilter || undefined,
         completeness_status: statusFilter || undefined,
         positions: selectedPositions.length > 0 ? selectedPositions.join(",") : undefined,
+        recruiters: selectedRecruiters.length > 0 ? selectedRecruiters.join(",") : undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
         city: cityFilter || undefined,
@@ -364,6 +376,7 @@ export default function CandidatesTable({
         source_channel: sourceFilter || undefined,
         completeness_status: statusFilter || undefined,
         positions: selectedPositions.length > 0 ? selectedPositions.join(",") : undefined,
+        recruiters: selectedRecruiters.length > 0 ? selectedRecruiters.join(",") : undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
         city: cityFilter || undefined,
@@ -583,6 +596,16 @@ export default function CandidatesTable({
               options={positionsList}
               selected={selectedPositions}
               onChange={setSelectedPositions}
+            />
+
+            <MultiSelectDropdown
+              label="Recruiter"
+              options={recruitersList}
+              selected={selectedRecruiters}
+              onChange={setSelectedRecruiters}
+              placeholder="Semua Recruiter"
+              allLabel="Semua Recruiter"
+              itemTypeLabel="recruiter"
             />
 
             <div>
@@ -814,6 +837,16 @@ export default function CandidatesTable({
             options={positionsList}
             selected={selectedPositions}
             onChange={setSelectedPositions}
+          />
+
+          <MultiSelectDropdown
+            label="Recruiter"
+            options={recruitersList}
+            selected={selectedRecruiters}
+            onChange={setSelectedRecruiters}
+            placeholder="Semua Recruiter"
+            allLabel="Semua Recruiter"
+            itemTypeLabel="recruiter"
           />
         </div>
       </div>
