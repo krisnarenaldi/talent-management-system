@@ -308,8 +308,22 @@ def list_candidates(
                 )
             )
 
+        candidate_rec_conds = []
         if rec_conds:
-            query = query.filter(Candidate.applications.any(or_(*rec_conds)))
+            candidate_rec_conds.append(Candidate.applications.any(or_(*rec_conds)))
+
+        # Juga cocokkan jika kandidat di-upload / dimasukkan ke talent pool oleh recruiter tersebut
+        if rec_uuids:
+            candidate_rec_conds.append(Candidate.talent_pool_updated_by.in_(rec_uuids))
+        if rec_names:
+            candidate_rec_conds.append(
+                Candidate.talent_pool_updater.has(
+                    or_(*[User.name.ilike(f"%{n}%") for n in rec_names])
+                )
+            )
+
+        if candidate_rec_conds:
+            query = query.filter(or_(*candidate_rec_conds))
             
     if experience_level:
         exp_stmt = select(
